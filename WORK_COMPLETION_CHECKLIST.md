@@ -1,5 +1,9 @@
 # Work Completion Checklist
 
+Repository: `StefanoCaruso456/chatbox-audit`
+
+GitHub: `https://github.com/StefanoCaruso456/chatbox-audit`
+
 Use this checklist every time a task is finished.
 
 ## Required steps

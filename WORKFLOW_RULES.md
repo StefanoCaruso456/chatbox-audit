@@ -1,5 +1,9 @@
 # Workflow Rules
 
+Repository: `StefanoCaruso456/chatbox-audit`
+
+GitHub: `https://github.com/StefanoCaruso456/chatbox-audit`
+
 ## Rule 1: Publish completed work immediately
 
 When work is done, do not leave it only on the local machine.
