@@ -16,6 +16,24 @@ function normalizePrompt(prompt: string) {
   return prompt.trim().replaceAll('\r\n', '\n')
 }
 
+const builtInPresetSessions = [...defaultSessionsForEN, ...defaultSessionsForCN].filter(
+  (session, index, sessions) => sessions.findIndex((candidate) => candidate.id === session.id) === index
+)
+
+function getSessionPresetSignature(session: Pick<Session, 'name' | 'type' | 'picUrl' | 'copilotId' | 'starred' | 'messages'>) {
+  return JSON.stringify({
+    copilotId: session.copilotId ?? '',
+    messages: (session.messages ?? []).map((message) => ({
+      role: message.role,
+      text: getMessageText(message).trim(),
+    })),
+    name: session.name,
+    picUrl: session.picUrl ?? '',
+    starred: !!session.starred,
+    type: session.type ?? 'chat',
+  })
+}
+
 export function getSystemPromptFromSession(session: Pick<Session, 'messages'>) {
   const systemMessage = session.messages.find((message) => message.role === 'system')
   return systemMessage ? getMessageText(systemMessage) : ''
@@ -55,4 +73,15 @@ export function findMatchingSessionModeValue(
   }
 
   return presets.find((preset) => normalizePrompt(preset.systemPrompt) === normalizedPrompt)?.value ?? 'custom'
+}
+
+export function isUnmodifiedBuiltInPresetSession(
+  session: Pick<Session, 'id' | 'name' | 'type' | 'picUrl' | 'copilotId' | 'starred' | 'messages'>
+) {
+  const matchingPreset = builtInPresetSessions.find((preset) => preset.id === session.id)
+  if (!matchingPreset) {
+    return false
+  }
+
+  return getSessionPresetSignature(session) === getSessionPresetSignature(matchingPreset)
 }

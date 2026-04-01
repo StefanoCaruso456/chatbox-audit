@@ -148,7 +148,7 @@ const SessionSettingsModal = NiceModal.create(
       return null
     }
 
-    const sessionModeLabel = String(t('AI Model Mode'))
+    const sessionModeLabel = String(t('Conversation Preset'))
     const customModeLabel = String(t('Custom'))
     const sessionModePresets = getSessionModePresets(language, editingData.type ?? 'chat')
     const selectedSessionMode = findMatchingSessionModeValue(editingData, systemPrompt, sessionModePresets)

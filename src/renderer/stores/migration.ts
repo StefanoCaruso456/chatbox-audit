@@ -23,6 +23,7 @@ import {
   mermaidSessionCN,
   mermaidSessionEN,
 } from '@/packages/initial_data'
+import { isUnmodifiedBuiltInPresetSession } from '@/packages/sessionModes'
 import platform from '@/platform'
 import type { Storage } from '@/platform/interfaces'
 import { getOldVersionStorages } from '@/platform/storages'
@@ -36,6 +37,7 @@ import { migrationProcessAtom } from './atoms/utilAtoms'
 import { getSessionMeta } from './sessionHelpers'
 
 const log = getLogger('migration')
+const BuiltInPresetSidebarCleanupKey = '__built-in-preset-sidebar-cleanup-v1'
 
 export async function migrate() {
   await migrateStorage()
@@ -48,6 +50,7 @@ export async function migrate() {
     },
     true
   )
+  await cleanupBuiltInPresetSessions()
 }
 
 type MigrateStore = {
@@ -116,6 +119,40 @@ async function findNewestStorage(oldStorages: Storage[]): Promise<[number, Stora
   return [configVersion, newestStorage]
 }
 export const _migrateStorageForTest = migrateStorage
+
+async function cleanupBuiltInPresetSessions() {
+  const alreadyCleanedUp = await storage.getItem<boolean>(BuiltInPresetSidebarCleanupKey, false)
+  if (alreadyCleanedUp) {
+    return
+  }
+
+  // Older installs may still have untouched preset chats from the original first-run seeding behavior.
+  const sessionList = await storage.getItem<SessionMeta[]>(StorageKey.ChatSessionsList, [])
+  if (sessionList.length === 0) {
+    await storage.setItemNow(BuiltInPresetSidebarCleanupKey, true)
+    return
+  }
+
+  const filteredSessionList: SessionMeta[] = []
+
+  for (const sessionMeta of sessionList) {
+    const session = await storage.getItem<Session | null>(StorageKeyGenerator.session(sessionMeta.id), null)
+    if (session && isUnmodifiedBuiltInPresetSession(session)) {
+      continue
+    }
+
+    filteredSessionList.push(sessionMeta)
+  }
+
+  if (filteredSessionList.length !== sessionList.length) {
+    await storage.setItemNow(StorageKey.ChatSessionsList, filteredSessionList)
+    log.info(
+      `cleanupBuiltInPresetSessions: removed ${sessionList.length - filteredSessionList.length} untouched preset sessions from sidebar`
+    )
+  }
+
+  await storage.setItemNow(BuiltInPresetSidebarCleanupKey, true)
+}
 
 async function migrateStorage() {
   const configVersion = await storage.getItem<number>(StorageKey.ConfigVersion, 0)
