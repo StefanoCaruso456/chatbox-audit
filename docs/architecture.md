@@ -143,18 +143,40 @@ All app communication must go through validated postMessage envelopes with sessi
 4. Assistant explains the failure and offers next actions.
 5. If the user refreshes, the client reloads the conversation and asks the backend for the latest app-session snapshot.
 
-## System Diagram
+## System Architecture Diagram
 
 ```mermaid
 flowchart LR
-  U["User"] --> VC["Vercel Client (Next.js)"]
-  VC -->|SSE chat stream| RB["Railway Backend (Node.js)"]
-  VC -->|iframe render| APP["Embedded App iframe"]
-  APP -->|postMessage| VC
-  VC -->|validated app events| RB
-  RB -->|tool routing, auth, sessions| DB["PostgreSQL"]
-  RB -->|OAuth flows| EXT["External App Providers"]
-  RB -->|tool/app metadata| REG["App Registry"]
+  U["Student or Teacher"]
+
+  subgraph CLIENT["Trusted Client Surface"]
+    VC["Vercel Client<br/>Next.js chat shell, SSE consumer, iframe host"]
+  end
+
+  subgraph PLATFORM["Trusted Platform Backend"]
+    RB["Railway Backend<br/>Auth, orchestration, tool routing, session authority"]
+    DB["PostgreSQL<br/>Conversations, app sessions, OAuth connections, logs"]
+    REG["App Registry<br/>Manifests, review state, allowed origins"]
+  end
+
+  subgraph APPS["Untrusted App Surface"]
+    APP["Sandboxed App iframe<br/>postMessage only"]
+  end
+
+  subgraph EXT["External Systems"]
+    LLM["LLM Provider"]
+    EXTAPI["OAuth / Third-Party APIs"]
+  end
+
+  U --> VC
+  VC -->|"HTTPS request + SSE response"| RB
+  VC -->|"iframe bootstrap + scoped payload"| APP
+  APP -->|"state update, heartbeat, completion"| VC
+  VC -->|"validated app events"| RB
+  RB --> DB
+  RB --> REG
+  RB --> LLM
+  RB --> EXTAPI
 ```
 
 ## Plugin Lifecycle Sequence
