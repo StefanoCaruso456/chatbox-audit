@@ -222,6 +222,10 @@ Any form of contribution is welcome, including but not limited to:
 - Node.js (v20.x – v22.x)
 - npm (required – pnpm is not supported)
 
+## Codex Skills
+
+For Codex-based development setup, install the local skill baseline described in [docs/skills.md](./docs/skills.md).
+
 ## Build Instructions
 
 1. Clone the repository from Github
