@@ -1,5 +1,6 @@
-import { app, type BrowserWindow, Menu, MenuItem, type MenuItemConstructorOptions, shell } from 'electron'
+import { app, type BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import Locale from './locales'
+import { openTrustedExternalUrl } from './security'
 
 interface DarwinMenuItemConstructorOptions extends MenuItemConstructorOptions {
   selector?: string
@@ -198,13 +199,13 @@ export default class MenuBuilder {
         {
           label: 'Learn More',
           click() {
-            shell.openExternal('https://chatboxai.app')
+            void openTrustedExternalUrl('https://chatboxai.app', 'menu:learn-more')
           },
         },
         {
           label: 'Github Repo',
           click() {
-            shell.openExternal('https://github.com/chatboxai/chatbox')
+            void openTrustedExternalUrl('https://github.com/chatboxai/chatbox', 'menu:github-repo')
           },
         },
         // {
@@ -216,7 +217,10 @@ export default class MenuBuilder {
         {
           label: 'Search Issues',
           click() {
-            shell.openExternal('https://github.com/chatboxai/chatbox/issues?q=is%3Aissue')
+            void openTrustedExternalUrl(
+              'https://github.com/chatboxai/chatbox/issues?q=is%3Aissue',
+              'menu:search-issues'
+            )
           },
         },
       ],
@@ -289,13 +293,13 @@ export default class MenuBuilder {
           {
             label: 'Learn More',
             click() {
-              shell.openExternal('https://chatboxai.app')
+              void openTrustedExternalUrl('https://chatboxai.app', 'menu:learn-more')
             },
           },
           {
             label: 'Github Repo',
             click() {
-              shell.openExternal('https://github.com/chatboxai/chatbox')
+              void openTrustedExternalUrl('https://github.com/chatboxai/chatbox', 'menu:github-repo')
             },
           },
           // {
@@ -307,7 +311,10 @@ export default class MenuBuilder {
           {
             label: 'Search Issues',
             click() {
-              shell.openExternal('https://github.com/chatboxai/chatbox/issues?q=is%3Aissue')
+              void openTrustedExternalUrl(
+                'https://github.com/chatboxai/chatbox/issues?q=is%3Aissue',
+                'menu:search-issues'
+              )
             },
           },
         ],

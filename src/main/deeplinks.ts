@@ -2,21 +2,34 @@ import type { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 
 export function handleDeepLink(mainWindow: BrowserWindow, link: string) {
-  const normalizedLink = link.replace(/^chatbox-dev:\/\//, 'chatbox://')
-  const url = new URL(normalizedLink)
+  try {
+    const normalizedLink = link.replace(/^chatbox-dev:\/\//, 'chatbox://')
+    const url = new URL(normalizedLink)
 
-  console.log('🔗 Parsed URL:', { hostname: url.hostname, pathname: url.pathname, params: url.searchParams.toString() })
+    if (url.protocol !== 'chatbox:') {
+      log.warn('Blocked unsupported deep link protocol:', url.protocol)
+      return
+    }
 
-  // handle `chatbox://mcp/install?server=`
-  if (url.hostname === 'mcp' && url.pathname === '/install') {
-    const encodedConfig = url.searchParams.get('server') || ''
-    mainWindow.webContents.send('navigate-to', `/settings/mcp?install=${encodeURIComponent(encodedConfig)}`)
-  }
+    console.log('🔗 Parsed URL:', {
+      hostname: url.hostname,
+      pathname: url.pathname,
+      params: url.searchParams.toString(),
+    })
 
-  // handle `chatbox://provider/import?config=`
-  if (url.hostname === 'provider' && url.pathname === '/import') {
-    const encodedConfig = url.searchParams.get('config') || ''
-    mainWindow.webContents.send('navigate-to', `/settings/provider?import=${encodeURIComponent(encodedConfig)}`)
+    // handle `chatbox://mcp/install?server=`
+    if (url.hostname === 'mcp' && url.pathname === '/install') {
+      const encodedConfig = url.searchParams.get('server') || ''
+      mainWindow.webContents.send('navigate-to', `/settings/mcp?install=${encodeURIComponent(encodedConfig)}`)
+    }
+
+    // handle `chatbox://provider/import?config=`
+    if (url.hostname === 'provider' && url.pathname === '/import') {
+      const encodedConfig = url.searchParams.get('config') || ''
+      mainWindow.webContents.send('navigate-to', `/settings/provider?import=${encodeURIComponent(encodedConfig)}`)
+    }
+  } catch (error) {
+    log.warn('Failed to parse deep link:', link, error)
   }
 
   // handle `chatbox://auth/callback?ticket_id=xxx&status=success`
