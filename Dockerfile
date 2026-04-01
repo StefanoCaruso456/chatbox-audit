@@ -8,6 +8,7 @@ RUN npm install --global "pnpm@${PNPM_VERSION}"
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY .erb ./.erb
+COPY patches ./patches
 COPY release ./release
 
 RUN pnpm install --frozen-lockfile
