@@ -914,7 +914,7 @@ Create the typed schema for third-party app registration so the platform can val
 
 ### Files Allowed
 
-- `/shared/contracts/*`
+- `src/shared/contracts/*`
 - `/backend/registry/*`
 - `/docs/plugin-contract.md`
 
