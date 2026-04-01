@@ -155,3 +155,12 @@ erDiagram
 - Invocation history is its own durable log.
 - Refresh and reconnect behavior are defined.
 - Multi-app history is supported without collapsing everything into a single JSON blob.
+
+## Contract Implementation Status
+
+The shared contract package now includes typed v1 schemas for:
+
+- `AppSessionState`
+- `ConversationAppContext`
+
+Those contracts live in `src/shared/contracts/v1/` and should be used by backend persistence, completion bridging, and chat-context assembly work instead of ad hoc payload shapes.

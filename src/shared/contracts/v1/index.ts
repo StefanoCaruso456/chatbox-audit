@@ -1,5 +1,7 @@
 export * from './app-manifest'
+export * from './app-session-state'
 export * from './completion-signal'
+export * from './conversation-context'
 export * from './permissions'
 export * from './runtime-messages'
 export * from './shared'
