@@ -9,6 +9,10 @@ This is the repository for the Chatbox Community Edition, open-sourced under the
 
 We regularly sync code from the pro repo to this repo, and vice versa.
 
+## Overview
+
+The proposed system uses a web-based chat shell built in React/Next.js, a backend orchestration layer for tool discovery and routing, an app registry for third-party manifests and schemas, and an iframe-based embedded app runtime with secure `postMessage` communication. Platform authentication is handled separately from per-app OAuth flows, while conversation history, app sessions, and tool invocation logs are stored in a relational database. This architecture is optimized for safety, extensibility, completion signaling, and context retention across multi-turn app-aware conversations.
+
 ### Download for Desktop
 
 <table style="width: 100%">
