@@ -3,7 +3,8 @@ FROM node:22.12.0-bookworm-slim AS builder
 WORKDIR /app
 ENV CI=1
 
-RUN corepack enable
+ARG PNPM_VERSION=10.15.1
+RUN npm install --global "pnpm@${PNPM_VERSION}"
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY .erb ./.erb
