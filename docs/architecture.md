@@ -39,6 +39,17 @@ Architectural implication:
 - The Railway backend becomes the system of record for app registry, routing, app sessions, auth, and invocation logs.
 - Shared contracts live in `src/shared/contracts/` until the client and backend are split into separate deployable surfaces.
 
+## Contract Package Status
+
+Phase 0 now has implemented v1 contracts for:
+
+- `AppManifest`
+- `ToolSchema`
+- `EmbeddedAppMessage`
+- `CompletionSignal`
+
+These contracts unblock downstream registry, iframe runtime, and completion-context work. Backend and frontend feature tickets should consume these exports directly rather than defining parallel payload shapes.
+
 ## System Components
 
 ### 1. Vercel Client

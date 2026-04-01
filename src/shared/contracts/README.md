@@ -33,7 +33,7 @@ Backend and frontend agents may consume contracts but should not create parallel
 
 ## Directory Layout
 
-The initial Phase 0 layout is:
+The Phase 0 layout is:
 
 ```text
 src/shared/contracts/
@@ -71,6 +71,17 @@ src/shared/contracts/
 - Ticket 05: `v1/runtime-messages/`
 - Ticket 06: `v1/completion-signal/`
 - Later backend/runtime tickets: session, auth, context, and error contracts
+
+## Implemented In This Repo
+
+The following v1 contracts are now implemented and exported from `src/shared/contracts/index.ts`:
+
+- `app-manifest`: typed manifest schema, validator, and example manifests
+- `tool-schema`: typed tool contract plus JSON-schema-like input/output definitions
+- `runtime-messages`: typed iframe host/app message envelope for bootstrap, invoke, state, heartbeat, completion, and error events
+- `completion-signal`: typed completion payload used by app runtimes and orchestration follow-up flows
+
+These implementations are the source of truth for downstream registry, runtime bridge, and routing work. Do not introduce parallel manifest or message shapes elsewhere.
 
 ## Contract Boundaries
 
