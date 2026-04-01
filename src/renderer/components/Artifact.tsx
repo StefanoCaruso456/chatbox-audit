@@ -4,7 +4,7 @@ import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined'
 import { ButtonGroup, IconButton } from '@mui/material'
 import type { Message } from '@shared/types/session'
 import { debounce } from 'lodash'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
@@ -19,13 +19,16 @@ export type RenderableCodeLanguage = (typeof RENDERABLE_CODE_LANGUAGES)[number]
 const CODE_BLOCK_LANGUAGES = [...RENDERABLE_CODE_LANGUAGES, 'js', 'javascript', 'css'] as const
 export type CodeBlockLanguage = (typeof CODE_BLOCK_LANGUAGES)[number]
 
+const ARTIFACT_PREVIEW_URL = 'https://artifact-preview.chatboxai.app/preview'
+const ARTIFACT_PREVIEW_ORIGIN = new URL(ARTIFACT_PREVIEW_URL).origin
+
 export function isContainRenderableCode(markdown: string): boolean {
   if (!markdown) {
     return false
   }
   return (
-    RENDERABLE_CODE_LANGUAGES.some((l) => markdown.includes('```' + l + '\n')) ||
-    RENDERABLE_CODE_LANGUAGES.some((l) => markdown.includes('```' + l.toUpperCase() + '\n'))
+    RENDERABLE_CODE_LANGUAGES.some((l) => markdown.includes(`\`\`\`${l}\n`)) ||
+    RENDERABLE_CODE_LANGUAGES.some((l) => markdown.includes(`\`\`\`${l.toUpperCase()}\n`))
   )
 }
 
@@ -124,7 +127,7 @@ export function ArtifactWithButtons(props: {
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                onOpenFullscreen()
+                void onOpenFullscreen()
               }}
             />
             <ArrowRightIcon
@@ -171,37 +174,46 @@ export function ArtifactWithButtons(props: {
 export function Artifact(props: { htmlCode: string; reloadSign?: number; className?: string }) {
   const { htmlCode, reloadSign, className } = props
   const ref = useRef<HTMLIFrameElement>(null)
-  const iframeOrigin = 'https://artifact-preview.chatboxai.app/preview'
+  const latestHtmlCodeRef = useRef(htmlCode)
 
-  const sendIframeMsg = (type: 'html', code: string) => {
+  useEffect(() => {
+    latestHtmlCodeRef.current = htmlCode
+  }, [htmlCode])
+
+  const sendIframeMsg = useCallback((type: 'html', code: string) => {
     if (!ref.current) {
       return
     }
-    ref.current.contentWindow?.postMessage({ type, code }, '*')
-  }
+    ref.current.contentWindow?.postMessage({ type, code }, ARTIFACT_PREVIEW_ORIGIN)
+  }, [])
   // 当 reloadSign 改变时，重新加载 iframe 内容
   useEffect(() => {
-    ;(async () => {
-      sendIframeMsg('html', '')
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      sendIframeMsg('html', htmlCode)
-    })()
-  }, [reloadSign])
+    sendIframeMsg('html', '')
+    const timeoutId = window.setTimeout(() => {
+      sendIframeMsg('html', latestHtmlCodeRef.current)
+    }, 1500)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [reloadSign, sendIframeMsg])
 
   // 当 htmlCode 改变时，防抖地刷新 iframe 内容
-  const updateIframe = debounce(() => {
-    sendIframeMsg('html', htmlCode)
-  }, 300)
+  const updateIframe = useMemo(
+    () =>
+      debounce((code: string) => {
+        sendIframeMsg('html', code)
+      }, 300),
+    [sendIframeMsg]
+  )
   useEffect(() => {
-    updateIframe()
+    updateIframe(htmlCode)
     return () => updateIframe.cancel()
-  }, [htmlCode])
+  }, [htmlCode, updateIframe])
 
   return (
     <iframe
       className={cn('w-full', 'border-none', 'h-[400px]', className)}
       sandbox="allow-scripts allow-forms"
-      src={iframeOrigin}
+      src={ARTIFACT_PREVIEW_URL}
       ref={ref}
     />
   )
@@ -220,7 +232,7 @@ function generateHtml(markdowns: string[]): string {
   for (const markdown of markdowns) {
     for (let line of markdown.split('\n')) {
       line = line.trimStart()
-      const lang = languages.find((l) => '```' + l === line)
+      const lang = languages.find((l) => `\`\`\`${l}` === line)
       if (lang) {
         currentType = lang
         continue
@@ -236,7 +248,7 @@ function generateHtml(markdowns: string[]): string {
         }
       }
       if (currentType) {
-        currentContent += line + '\n'
+        currentContent += `${line}\n`
       }
     }
   }

@@ -9,12 +9,12 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron'
+import os from 'node:os'
+import path from 'node:path'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, session, Tray } from 'electron'
 import electronDebug from 'electron-debug'
 import log from 'electron-log/main'
 import { autoUpdater } from 'electron-updater'
-import os from 'os'
-import path from 'path'
 // @ts-expect-error - source-map-support doesn't have type definitions
 import * as sourceMapSupport from 'source-map-support'
 import type { ShortcutSetting } from 'src/shared/types'
@@ -27,6 +27,7 @@ import Locale from './locales'
 import * as mcpIpc from './mcp/ipc-stdio-transport'
 import MenuBuilder from './menu'
 import * as proxy from './proxy'
+import { isTrustedRendererNavigation, openTrustedExternalUrl } from './security'
 import {
   delStoreBlob,
   getConfig,
@@ -266,6 +267,9 @@ async function createWindow() {
       spellcheck: true,
       webSecurity: false, // 其中一个作用是解决跨域问题
       allowRunningInsecureContent: false,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webviewTag: false,
       preload: app.isPackaged
         ? path.join(__dirname, '../preload/index.js')
         : path.join(__dirname, '../../out/preload/index.js'),
@@ -274,8 +278,8 @@ async function createWindow() {
 
   // Load the local URL for development or the local
   // html file for production
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
+    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
@@ -324,9 +328,23 @@ async function createWindow() {
   const menuBuilder = new MenuBuilder(mainWindow)
   menuBuilder.buildMenu()
 
+  mainWindow.webContents.on('will-attach-webview', (event) => {
+    event.preventDefault()
+    log.warn('[security] Blocked unexpected webview attachment')
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    if (isTrustedRendererNavigation(targetUrl, mainWindow?.webContents.getURL())) {
+      return
+    }
+
+    event.preventDefault()
+    void openTrustedExternalUrl(targetUrl, 'window-navigation')
+  })
+
   // Open urls in the user's browser
   mainWindow.webContents.setWindowOpenHandler((edata) => {
-    shell.openExternal(edata.url)
+    void openTrustedExternalUrl(edata.url, 'window-open')
     return { action: 'deny' }
   })
 
@@ -593,7 +611,11 @@ ipcMain.handle('getLocale', () => {
   }
 })
 ipcMain.handle('openLink', (event, link) => {
-  return shell.openExternal(link)
+  return openTrustedExternalUrl(link, 'ipc:openLink').then((opened) => {
+    if (!opened) {
+      throw new Error('Blocked unsafe external URL')
+    }
+  })
 })
 ipcMain.handle('ensureShortcutConfig', (event, json) => {
   const config: ShortcutSetting = JSON.parse(json)

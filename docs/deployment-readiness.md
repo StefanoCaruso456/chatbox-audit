@@ -16,12 +16,14 @@
 - `electron.vite.config.ts` now points to the existing PostCSS config file.
 - The missing `release-*.sh` wrapper scripts now exist and map to the corresponding package workflows.
 - Renderer platform capabilities now come from a shared capability map, and unsupported parser/platform states are normalized before desktop-only flows run.
+- Electron now validates external URLs before opening them, blocks unexpected webviews and cross-origin window navigation, and artifact preview messaging is locked to the preview origin.
 
 ## Current Deployment Constraints
 
 - This repository is still desktop-first. The web build exists, but not every feature has parity with Electron.
 - Some web platform methods are still intentionally unimplemented, especially around local desktop capabilities and knowledge-base behavior.
 - Hosted Chatbox services are still part of several premium or hybrid flows, including auth, license checks, remote config, hosted parsing, and manifest/model helpers.
+- The desktop window still runs with `webSecurity: false` for provider/network compatibility, so the new trust-boundary guards reduce risk but do not finish the deeper Electron security review.
 - The supported runtime in `package.json` is Node `^20.19.0 || >=22.12.0 <23.0.0`. Running outside that range may break install or build behavior.
 
 ## Recommended Use Right Now
