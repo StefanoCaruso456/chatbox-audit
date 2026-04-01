@@ -20,7 +20,9 @@ const builtInPresetSessions = [...defaultSessionsForEN, ...defaultSessionsForCN]
   (session, index, sessions) => sessions.findIndex((candidate) => candidate.id === session.id) === index
 )
 
-function getSessionPresetSignature(session: Pick<Session, 'name' | 'type' | 'picUrl' | 'copilotId' | 'starred' | 'messages'>) {
+function getSessionPresetSignature(
+  session: Pick<Session, 'name' | 'type' | 'picUrl' | 'copilotId' | 'starred' | 'messages'>
+) {
   return JSON.stringify({
     copilotId: session.copilotId ?? '',
     messages: (session.messages ?? []).map((message) => ({
