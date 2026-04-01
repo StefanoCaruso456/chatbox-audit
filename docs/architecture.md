@@ -44,9 +44,11 @@ Architectural implication:
 Phase 0 now has implemented v1 contracts for:
 
 - `AppManifest`
+- `AppSessionState`
 - `ToolSchema`
 - `EmbeddedAppMessage`
 - `CompletionSignal`
+- `ConversationAppContext`
 
 These contracts unblock downstream registry, iframe runtime, and completion-context work. Backend and frontend feature tickets should consume these exports directly rather than defining parallel payload shapes.
 

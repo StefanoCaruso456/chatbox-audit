@@ -77,9 +77,11 @@ src/shared/contracts/
 The following v1 contracts are now implemented and exported from `src/shared/contracts/index.ts`:
 
 - `app-manifest`: typed manifest schema, validator, and example manifests
+- `app-session-state`: typed durable app session records, snapshots, and lifecycle state
 - `tool-schema`: typed tool contract plus JSON-schema-like input/output definitions
 - `runtime-messages`: typed iframe host/app message envelope for bootstrap, invoke, state, heartbeat, completion, and error events
 - `completion-signal`: typed completion payload used by app runtimes and orchestration follow-up flows
+- `conversation-context`: typed active-app and recent-completion context used by orchestration follow-up turns
 
 These implementations are the source of truth for downstream registry, runtime bridge, and routing work. Do not introduce parallel manifest or message shapes elsewhere.
 

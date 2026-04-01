@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   AppManifestSchema,
+  AppSessionStateSchema,
   CompletionSignalSchema,
+  ConversationAppContextSchema,
   EmbeddedAppMessageSchema,
+  exampleActiveChessSessionState,
   exampleAppManifests,
+  exampleConversationAppContext,
   exampleInternalChessManifest,
   examplePublicWeatherManifest,
   validateAppManifest,
+  validateAppSessionState,
   validateCompletionSignal,
+  validateConversationAppContext,
   validateEmbeddedAppMessage,
 } from '.'
 
@@ -148,6 +154,49 @@ describe('CompletionSignalSchema', () => {
     expect(result.success).toBe(false)
     if (!result.success) {
       expect(result.errors.some((error) => error.includes('completedAt'))).toBe(true)
+    }
+  })
+})
+
+describe('AppSessionStateSchema', () => {
+  it('accepts a valid active app session state', () => {
+    expect(() => AppSessionStateSchema.parse(exampleActiveChessSessionState)).not.toThrow()
+  })
+
+  it('rejects a completed session without completion payload', () => {
+    const result = validateAppSessionState({
+      ...exampleActiveChessSessionState,
+      status: 'completed',
+      isActive: false,
+      completedAt: '2026-03-31T15:10:00.000Z',
+      completion: undefined,
+    })
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('completion'))).toBe(true)
+    }
+  })
+})
+
+describe('ConversationAppContextSchema', () => {
+  it('accepts a valid conversation app context', () => {
+    expect(() => ConversationAppContextSchema.parse(exampleConversationAppContext)).not.toThrow()
+  })
+
+  it('rejects an active app that is missing from the session timeline', () => {
+    const invalidContext = {
+      ...exampleConversationAppContext,
+      sessionTimeline: exampleConversationAppContext.sessionTimeline.filter(
+        (session) => session.appSessionId !== exampleConversationAppContext.activeApp?.appSessionId
+      ),
+    }
+
+    const result = validateConversationAppContext(invalidContext)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('activeApp'))).toBe(true)
     }
   })
 })
