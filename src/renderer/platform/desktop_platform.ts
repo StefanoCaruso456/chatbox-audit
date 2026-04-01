@@ -1,17 +1,22 @@
-/** biome-ignore-all lint/suspicious/noExplicitAny: <any> */
-
-import type { ElectronIPC } from '@shared/electron-types'
+import type {
+  DesktopParsedFilePayload,
+  DesktopParsedFileResult,
+  DesktopParsedUrlResult,
+  ElectronIPC,
+  MineruParseFileResult,
+  SimpleSuccessResult,
+} from '@shared/electron-types'
 import type { Config, Settings, ShortcutSetting } from '@shared/types'
 import { cache } from '@shared/utils/cache'
 import localforage from 'localforage'
 import { v4 as uuidv4 } from 'uuid'
 import { parseLocale } from '@/i18n/parser'
+import { getLogger } from '@/lib/utils'
 import { type ImageGenerationStorage, IndexedDBImageGenerationStorage } from '@/storage/ImageGenerationStorage'
 import { getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import DesktopKnowledgeBaseController from './knowledge-base/desktop-controller'
 import WebExporter from './web_exporter'
-import { getLogger } from '@/lib/utils'
 import { parseTextFileLocally } from './web_platform_utils'
 
 const log = getLogger('desktop-platform')
@@ -35,13 +40,13 @@ export default class DesktopPlatform implements Platform {
     return 'INDEXEDDB'
   }
 
-  public async getVersion() {
+  public getVersion(): Promise<string> {
     return cache('ipc:getVersion', () => this.ipc.invoke('getVersion'), { ttl: 5 * 60 * 1000, memoryOnly: true })
   }
-  public async getPlatform() {
+  public getPlatform(): Promise<string> {
     return cache('ipc:getPlatform', () => this.ipc.invoke('getPlatform'), { ttl: 5 * 60 * 1000 })
   }
-  public async getArch() {
+  public getArch(): Promise<string> {
     return cache('ipc:getArch', () => this.ipc.invoke('getArch'), { ttl: 5 * 60 * 1000 })
   }
   public async shouldUseDarkColors(): Promise<boolean> {
@@ -60,9 +65,9 @@ export default class DesktopPlatform implements Platform {
     return this.ipc.onUpdateDownloaded(callback)
   }
   public onNavigate(callback: (path: string) => void): () => void {
-    return window.electronAPI.onNavigate(callback)
+    return this.ipc.onNavigate(callback)
   }
-  public async openLink(url: string): Promise<void> {
+  public openLink(url: string): Promise<void> {
     return this.ipc.invoke('openLink', url)
   }
   public async getDeviceName(): Promise<string> {
@@ -79,20 +84,20 @@ export default class DesktopPlatform implements Platform {
     const locale = await cache('ipc:getLocale', () => this.ipc.invoke('getLocale'), { ttl: 5 * 60 * 1000 })
     return parseLocale(locale)
   }
-  public async ensureShortcutConfig(config: ShortcutSetting): Promise<void> {
+  public ensureShortcutConfig(config: ShortcutSetting): Promise<void> {
     return this.ipc.invoke('ensureShortcutConfig', JSON.stringify(config))
   }
-  public async ensureProxyConfig(config: { proxy?: string }): Promise<void> {
+  public ensureProxyConfig(config: { proxy?: string }): Promise<void> {
     return this.ipc.invoke('ensureProxy', JSON.stringify(config))
   }
-  public async relaunch(): Promise<void> {
+  public relaunch(): Promise<void> {
     return this.ipc.invoke('relaunch')
   }
 
-  public async getConfig(): Promise<Config> {
+  public getConfig(): Promise<Config> {
     return this.ipc.invoke('getConfig')
   }
-  public async getSettings(): Promise<Settings> {
+  public getSettings(): Promise<Settings> {
     return this.ipc.invoke('getSettings')
   }
 
@@ -161,16 +166,16 @@ export default class DesktopPlatform implements Platform {
     }
   }
 
-  public async getStoreBlob(key: string): Promise<string | null> {
+  public getStoreBlob(key: string): Promise<string | null> {
     return this.ipc.invoke('getStoreBlob', key)
   }
-  public async setStoreBlob(key: string, value: string) {
+  public setStoreBlob(key: string, value: string): Promise<void> {
     return this.ipc.invoke('setStoreBlob', key, value)
   }
-  public async delStoreBlob(key: string) {
+  public delStoreBlob(key: string): Promise<void> {
     return this.ipc.invoke('delStoreBlob', key)
   }
-  public async listStoreBlobKeys(): Promise<string[]> {
+  public listStoreBlobKeys(): Promise<string[]> {
     return this.ipc.invoke('listStoreBlobKeys')
   }
 
@@ -184,53 +189,55 @@ export default class DesktopPlatform implements Platform {
     this.ipc.invoke('analysticTrackingEvent', dataJson)
   }
 
-  public async shouldShowAboutDialogWhenStartUp(): Promise<boolean> {
+  public shouldShowAboutDialogWhenStartUp(): Promise<boolean> {
     return cache('ipc:shouldShowAboutDialogWhenStartUp', () => this.ipc.invoke('shouldShowAboutDialogWhenStartUp'), {
       ttl: 30 * 1000,
     })
   }
 
-  public async appLog(level: string, message: string) {
+  public appLog(level: string, message: string): Promise<void> {
     return this.ipc.invoke('appLog', JSON.stringify({ level, message }))
   }
 
-  public async exportLogs(): Promise<string> {
+  public exportLogs(): Promise<string> {
     return this.ipc.invoke('exportLogs')
   }
 
-  public async clearLogs(): Promise<void> {
+  public clearLogs(): Promise<void> {
     return this.ipc.invoke('clearLogs')
   }
 
-  public async ensureAutoLaunch(enable: boolean) {
+  public ensureAutoLaunch(enable: boolean): Promise<void> {
     return this.ipc.invoke('ensureAutoLaunch', enable)
   }
 
   async parseFileLocally(file: File): Promise<{ key?: string; isSupported: boolean }> {
-    let result: { text: string; isSupported: boolean }
+    let result: DesktopParsedFileResult
     if (!file.path) {
       // 复制长文本粘贴的文件是没有 path 的
       result = await parseTextFileLocally(file)
     } else {
-      const resultJSON = await this.ipc.invoke('parseFileLocally', JSON.stringify({ filePath: file.path }))
+      const payload: DesktopParsedFilePayload = { filePath: file.path }
+      const resultJSON = await this.ipc.invoke('parseFileLocally', JSON.stringify(payload))
       result = JSON.parse(resultJSON)
     }
     if (!result.isSupported) {
       log.error(`parseFileLocally: unsupported file "${file.name}" (path=${file.path || 'none'})`)
       return { isSupported: false }
     }
-    const key = `parseFile-` + uuidv4()
+    if (!result.text) {
+      log.error(`parseFileLocally: missing parsed text for "${file.name}"`)
+      return { isSupported: false }
+    }
+    const key = `parseFile-${uuidv4()}`
     await this.setStoreBlob(key, result.text)
     return { key, isSupported: true }
   }
 
-  async parseFileWithMineru(
-    file: File,
-    apiToken: string
-  ): Promise<{ success: boolean; content?: string; error?: string; cancelled?: boolean }> {
+  parseFileWithMineru(file: File, apiToken: string): Promise<MineruParseFileResult> {
     if (!file.path) {
       // Files without path (e.g., pasted files) are not supported for MinerU parsing
-      return { success: false, error: 'File path is required for MinerU parsing' }
+      return Promise.resolve({ success: false, error: 'File path is required for MinerU parsing' })
     }
 
     return this.ipc.invoke('parser:parse-file-with-mineru', {
@@ -241,28 +248,28 @@ export default class DesktopPlatform implements Platform {
     })
   }
 
-  async cancelMineruParse(filePath: string): Promise<{ success: boolean; error?: string }> {
+  cancelMineruParse(filePath: string): Promise<SimpleSuccessResult> {
     return this.ipc.invoke('parser:cancel-mineru-parse', filePath)
   }
 
-  public async parseUrl(url: string): Promise<{ key: string; title: string }> {
+  public async parseUrl(url: string): Promise<DesktopParsedUrlResult> {
     const json = await this.ipc.invoke('parseUrl', url)
     return JSON.parse(json)
   }
 
-  public async isFullscreen() {
+  public isFullscreen(): Promise<boolean> {
     return this.ipc.invoke('isFullscreen')
   }
 
-  public async setFullscreen(enabled: boolean) {
+  public setFullscreen(enabled: boolean): Promise<void> {
     return this.ipc.invoke('setFullscreen', enabled)
   }
 
-  public async installUpdate() {
+  public installUpdate(): Promise<void> {
     return this.ipc.invoke('install-update')
   }
 
-  public async switchTheme(theme: 'dark' | 'light') {
+  public switchTheme(theme: 'dark' | 'light'): Promise<void> {
     return this.ipc.invoke('switch-theme', theme)
   }
 
@@ -301,10 +308,6 @@ export default class DesktopPlatform implements Platform {
   }
 
   public onMaximizedChange(callback: (isMaximized: boolean) => void): () => void {
-    const unsubscribe = this.ipc.onWindowMaximizedChanged((_, isMaximized) => {
-      callback(isMaximized)
-    })
-
-    return unsubscribe
+    return this.ipc.onWindowMaximizedChanged(callback)
   }
 }
