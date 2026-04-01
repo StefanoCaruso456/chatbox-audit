@@ -108,6 +108,44 @@ Use `postMessage` between iframe and host. It is simple, browser-native, and mat
 
 The backend registry returns the list of approved apps and their tools for the current user/session. The orchestration layer filters these by approval status, auth status, app availability, and conversation state, then injects only the relevant tools into the model for that turn.
 
+### 6A. System Architecture Diagram
+
+The MVP should treat the web client and backend as trusted platform surfaces while keeping third-party apps isolated inside sandboxed iframes. This diagram shows the intended control flow and the trust boundary that matters most for the case study.
+
+```mermaid
+flowchart LR
+  U["Student or Teacher"]
+
+  subgraph CLIENT["Trusted Client Surface"]
+    VC["Vercel Client<br/>Next.js chat shell, SSE consumer, iframe host"]
+  end
+
+  subgraph PLATFORM["Trusted Platform Backend"]
+    RB["Railway Backend<br/>Auth, orchestration, tool routing, session authority"]
+    DB["PostgreSQL<br/>Conversations, app sessions, OAuth connections, logs"]
+    REG["App Registry<br/>Manifests, review state, allowed origins"]
+  end
+
+  subgraph APPS["Untrusted App Surface"]
+    APP["Sandboxed App iframe<br/>postMessage only"]
+  end
+
+  subgraph EXT["External Systems"]
+    LLM["LLM Provider"]
+    EXTAPI["OAuth / Third-Party APIs"]
+  end
+
+  U --> VC
+  VC -->|"HTTPS request + SSE response"| RB
+  VC -->|"iframe bootstrap + scoped payload"| APP
+  APP -->|"state update, heartbeat, completion"| VC
+  VC -->|"validated app events"| RB
+  RB --> DB
+  RB --> REG
+  RB --> LLM
+  RB --> EXTAPI
+```
+
 ### 7. LLM & Function Calling
 
 #### Which LLM provider for function calling?
