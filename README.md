@@ -11,7 +11,7 @@ We regularly sync code from the pro repo to this repo, and vice versa.
 
 ## Overview
 
-The proposed system uses a web-based chat shell built in React/Next.js, a backend orchestration layer for tool discovery and routing, an app registry for third-party manifests and schemas, and an iframe-based embedded app runtime with secure `postMessage` communication. Platform authentication is handled separately from per-app OAuth flows, while conversation history, app sessions, and tool invocation logs are stored in a relational database. This architecture is optimized for safety, extensibility, completion signaling, and context retention across multi-turn app-aware conversations.
+The system uses a web-based Next.js client deployed on Vercel and a dedicated Node.js backend deployed on Railway. The Railway backend owns orchestration, app registration, tool routing, OAuth flows, app session management, and invocation logging. Persistent data is stored in PostgreSQL. Embedded third-party apps render inside iframe containers and communicate with the host via `postMessage`. Chat responses stream to the client over SSE.
 
 ### Download for Desktop
 
