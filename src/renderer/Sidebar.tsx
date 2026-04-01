@@ -6,7 +6,6 @@ import {
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
   IconMessageChatbot,
-  IconPhotoPlus,
   IconSettingsFilled,
 } from '@tabler/icons-react'
 import { useNavigate } from '@tanstack/react-router'
@@ -58,14 +57,6 @@ export default function Sidebar() {
     }
     trackingEvent('create_new_conversation', { event_category: 'user' })
   }, [navigate, setShowSidebar, isSmallScreen])
-
-  const handleCreateNewPictureSession = useCallback(() => {
-    navigate({ to: '/image-creator' })
-    if (isSmallScreen) {
-      setShowSidebar(false)
-    }
-    trackingEvent('open_image_creator', { event_category: 'user' })
-  }, [isSmallScreen, setShowSidebar, navigate])
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -166,10 +157,6 @@ export default function Sidebar() {
             <Button variant="light" fullWidth onClick={handleCreateNewSession}>
               <ScalableIcon icon={IconCirclePlus} className="mr-2" />
               {t('New Chat')}
-            </Button>
-            <Button variant="light" fullWidth onClick={handleCreateNewPictureSession}>
-              <ScalableIcon icon={IconPhotoPlus} className="mr-2" />
-              {t('Create Image')}
             </Button>
           </Stack>
           <NavLink

@@ -39,11 +39,14 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { trackingEvent } from '@/packages/event'
 import { findMatchingSessionModeValue, getSessionModePresets } from '@/packages/sessionModes'
+import { router } from '@/router'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { updateSession } from '@/stores/chatStore'
 import { getSessionMeta, mergeSettings } from '@/stores/sessionHelpers'
 import { settingsStore, useLanguage, useSettingsStore } from '@/stores/settingsStore'
 import { getMessageText } from '../../shared/utils/message'
+
+const IMAGE_CREATOR_MODE_VALUE = 'image-creator'
 
 const SessionSettingsModal = NiceModal.create(
   ({ session, disableAutoSave = false }: { session: Session; disableAutoSave?: boolean }) => {
@@ -158,6 +161,7 @@ const SessionSettingsModal = NiceModal.create(
         value: preset.value,
         label: preset.label,
       })),
+      { value: IMAGE_CREATOR_MODE_VALUE, label: String(t('Image Creator')) },
     ]
 
     return (
@@ -224,6 +228,14 @@ const SessionSettingsModal = NiceModal.create(
               value={selectedSessionMode}
               onChange={(value) => {
                 if (!value || value === 'custom') {
+                  return
+                }
+
+                if (value === IMAGE_CREATOR_MODE_VALUE) {
+                  trackingEvent('open_image_creator', { event_category: 'user' })
+                  modal.resolve()
+                  modal.hide()
+                  void router.navigate({ to: '/image-creator' })
                   return
                 }
 
