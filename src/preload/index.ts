@@ -25,18 +25,22 @@ const electronHandler: ElectronIPC = {
   //         ipcRenderer.once(channel, (_event, ...args) => func(...args));
   //     },
   // },
-  invoke: ipcRenderer.invoke,
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
   onSystemThemeChange: (callback: () => void) => {
     ipcRenderer.on('system-theme-updated', callback)
     return () => ipcRenderer.off('system-theme-updated', callback)
   },
-  onWindowMaximizedChanged: (callback: (_: Electron.IpcRendererEvent, windowMaximized: boolean) => void) => {
-    ipcRenderer.on('window:maximized-changed', callback)
-    return () => ipcRenderer.off('window:maximized-changed', callback)
+  onWindowMaximizedChanged: (callback: (windowMaximized: boolean) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, windowMaximized: boolean) => {
+      callback(windowMaximized)
+    }
+    ipcRenderer.on('window:maximized-changed', listener)
+    return () => ipcRenderer.off('window:maximized-changed', listener)
   },
-  onWindowFocused: (callback: (_: Electron.IpcRendererEvent) => void) => {
-    ipcRenderer.on('window:focused', callback)
-    return () => ipcRenderer.off('window:focused', callback)
+  onWindowFocused: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('window:focused', listener)
+    return () => ipcRenderer.off('window:focused', listener)
   },
   onWindowShow: (callback: () => void) => {
     ipcRenderer.on('window-show', callback)
@@ -46,10 +50,13 @@ const electronHandler: ElectronIPC = {
     ipcRenderer.on('update-downloaded', callback)
     return () => ipcRenderer.off('update-downloaded', callback)
   },
-  addMcpStdioTransportEventListener: (transportId: string, event: string, callback?: (...args: any[]) => void) => {
-    ipcRenderer.on(`mcp:stdio-transport:${transportId}:${event}`, (_event, ...args) => {
-      callback?.(...args)
-    })
+  addMcpStdioTransportEventListener: (transportId, event, callback) => {
+    const channel = `mcp:stdio-transport:${transportId}:${event}`
+    const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+      callback?.(...(args as never))
+    }
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.off(channel, listener)
   },
   onNavigate: (callback: (path: string) => void) => {
     const listener = (_event: unknown, path: string) => {

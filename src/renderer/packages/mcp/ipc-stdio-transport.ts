@@ -13,23 +13,26 @@ export class IPCStdioTransport implements Transport {
   onclose?: () => void
   onerror?: (error: Error) => void
   onmessage?: (message: JSONRPCMessage) => void
+  private readonly unsubscribeListeners: Array<() => void> = []
 
   constructor(private readonly ipcTransportId: string) {
-    window.electronAPI.addMcpStdioTransportEventListener(this.ipcTransportId, 'onclose', (stderrMessage: string) => {
-      if (stderrMessage) {
-        this.onerror?.(new Error(stderrMessage))
-      }
-      this.onclose?.()
-    })
-    window.electronAPI.addMcpStdioTransportEventListener(this.ipcTransportId, 'onerror', (error: Error) => {
-      this.onerror?.(error)
-    })
-    window.electronAPI.addMcpStdioTransportEventListener(
-      this.ipcTransportId,
-      'onmessage',
-      (message: JSONRPCMessage) => {
+    this.unsubscribeListeners.push(
+      window.electronAPI.addMcpStdioTransportEventListener(this.ipcTransportId, 'onclose', (stderrMessage) => {
+        if (stderrMessage) {
+          this.onerror?.(new Error(stderrMessage))
+        }
+        this.onclose?.()
+      })
+    )
+    this.unsubscribeListeners.push(
+      window.electronAPI.addMcpStdioTransportEventListener(this.ipcTransportId, 'onerror', (error) => {
+        this.onerror?.(error)
+      })
+    )
+    this.unsubscribeListeners.push(
+      window.electronAPI.addMcpStdioTransportEventListener(this.ipcTransportId, 'onmessage', (message) => {
         this.onmessage?.(message)
-      }
+      })
     )
   }
 
@@ -43,5 +46,6 @@ export class IPCStdioTransport implements Transport {
 
   async close(): Promise<void> {
     await window.electronAPI.invoke('mcp:stdio-transport:close', this.ipcTransportId)
+    this.unsubscribeListeners.forEach((unsubscribe) => unsubscribe())
   }
 }

@@ -1,22 +1,16 @@
 import type {
-  FileMeta,
-  KnowledgeBase,
-  KnowledgeBaseFile,
-  KnowledgeBaseProviderMode,
-  KnowledgeBaseSearchResult,
-} from '@shared/types'
-import type { DocumentParserConfig } from '@shared/types/settings'
+  KnowledgeBaseCreateParams,
+  KnowledgeBaseFileChunk,
+  KnowledgeBaseFileChunkRequest,
+  KnowledgeBaseFileMetaSummary,
+  KnowledgeBaseUpdateParams,
+  SimpleSuccessResult,
+} from '@shared/electron-types'
+import type { FileMeta, KnowledgeBase, KnowledgeBaseFile, KnowledgeBaseSearchResult } from '@shared/types'
 
 export interface KnowledgeBaseController {
   list(): Promise<KnowledgeBase[]>
-  create(createParams: {
-    name: string
-    embeddingModel: string
-    rerankModel: string
-    visionModel?: string
-    documentParser?: DocumentParserConfig
-    providerMode?: KnowledgeBaseProviderMode
-  }): Promise<void>
+  create(createParams: KnowledgeBaseCreateParams): Promise<void>
   delete(id: number): Promise<void>
   listFiles(kbId: number): Promise<KnowledgeBaseFile[]>
   countFiles(kbId: number): Promise<number>
@@ -27,26 +21,8 @@ export interface KnowledgeBaseController {
   pauseFile(fileId: number): Promise<void>
   resumeFile(fileId: number): Promise<void>
   search(kbId: number, query: string): Promise<KnowledgeBaseSearchResult[]>
-  update(updateParams: { id: number; name?: string; rerankModel?: string; visionModel?: string }): Promise<void>
-  getFilesMeta(
-    kbId: number,
-    fileIds: number[]
-  ): Promise<
-    {
-      id: number
-      kbId: number
-      filename: string
-      mimeType: string
-      fileSize: number
-      chunkCount: number
-      totalChunks: number
-      status: string
-      createdAt: number
-    }[]
-  >
-  readFileChunks(
-    kbId: number,
-    chunks: { fileId: number; chunkIndex: number }[]
-  ): Promise<{ fileId: number; filename: string; chunkIndex: number; text: string }[]>
-  testMineruConnection(apiToken: string): Promise<{ success: boolean; error?: string }>
+  update(updateParams: KnowledgeBaseUpdateParams): Promise<void>
+  getFilesMeta(kbId: number, fileIds: number[]): Promise<KnowledgeBaseFileMetaSummary[]>
+  readFileChunks(kbId: number, chunks: KnowledgeBaseFileChunkRequest[]): Promise<KnowledgeBaseFileChunk[]>
+  testMineruConnection(apiToken: string): Promise<SimpleSuccessResult>
 }

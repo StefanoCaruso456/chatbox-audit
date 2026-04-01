@@ -19,6 +19,7 @@ import path from 'path'
 import * as sourceMapSupport from 'source-map-support'
 import type { ShortcutSetting } from 'src/shared/types'
 import * as analystic from './analystic-node'
+import { AppUpdater } from './app-updater'
 import * as autoLauncher from './autoLauncher'
 import { handleDeepLink } from './deeplinks'
 import { parseFile } from './file-parser'
@@ -536,6 +537,9 @@ ipcMain.handle('delStoreValue', (event, key) => {
 ipcMain.handle('getAllStoreValues', (event) => {
   return JSON.stringify(store.store)
 })
+ipcMain.handle('getAllStoreKeys', () => {
+  return Object.keys(store.store)
+})
 ipcMain.handle('setAllStoreValues', (event, dataJson) => {
   const data = JSON.parse(dataJson)
   store.store = { ...store.store, ...data }
@@ -752,5 +756,5 @@ ipcMain.handle('window:close', () => {
 })
 
 ipcMain.handle('window:is-maximized', () => {
-  return mainWindow?.isMaximized()
+  return mainWindow?.isMaximized() || false
 })

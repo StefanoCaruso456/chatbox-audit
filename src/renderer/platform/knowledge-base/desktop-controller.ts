@@ -1,6 +1,13 @@
-import type { ElectronIPC } from '@shared/electron-types'
-import type { FileMeta, KnowledgeBaseProviderMode } from '@shared/types'
-import type { DocumentParserConfig } from '@shared/types/settings'
+import type {
+  ElectronIPC,
+  KnowledgeBaseCreateParams,
+  KnowledgeBaseFileChunk,
+  KnowledgeBaseFileChunkRequest,
+  KnowledgeBaseFileMetaSummary,
+  KnowledgeBaseUpdateParams,
+  SimpleSuccessResult,
+} from '@shared/electron-types'
+import type { FileMeta } from '@shared/types'
 import type { KnowledgeBaseController } from './interface'
 
 class DesktopKnowledgeBaseController implements KnowledgeBaseController {
@@ -11,14 +18,7 @@ class DesktopKnowledgeBaseController implements KnowledgeBaseController {
     return knowledgeBases
   }
 
-  async create(createParams: {
-    name: string
-    embeddingModel: string
-    rerankModel: string
-    visionModel?: string
-    documentParser?: DocumentParserConfig
-    providerMode?: KnowledgeBaseProviderMode
-  }) {
+  async create(createParams: KnowledgeBaseCreateParams) {
     await this.ipc.invoke('kb:create', createParams)
   }
 
@@ -40,23 +40,23 @@ class DesktopKnowledgeBaseController implements KnowledgeBaseController {
   }
 
   async uploadFile(kbId: number, file: FileMeta) {
-    return await this.ipc.invoke('kb:file:upload', kbId, file)
+    await this.ipc.invoke('kb:file:upload', kbId, file)
   }
 
   async deleteFile(fileId: number) {
-    return await this.ipc.invoke('kb:file:delete', fileId)
+    await this.ipc.invoke('kb:file:delete', fileId)
   }
 
   async retryFile(fileId: number, useRemoteParsing = false) {
-    return await this.ipc.invoke('kb:file:retry', fileId, useRemoteParsing)
+    await this.ipc.invoke('kb:file:retry', fileId, useRemoteParsing)
   }
 
   async pauseFile(fileId: number) {
-    return await this.ipc.invoke('kb:file:pause', fileId)
+    await this.ipc.invoke('kb:file:pause', fileId)
   }
 
   async resumeFile(fileId: number) {
-    return await this.ipc.invoke('kb:file:resume', fileId)
+    await this.ipc.invoke('kb:file:resume', fileId)
   }
 
   async search(kbId: number, query: string) {
@@ -64,19 +64,19 @@ class DesktopKnowledgeBaseController implements KnowledgeBaseController {
     return results
   }
 
-  async update(updateParams: { id: number; name?: string; rerankModel?: string; visionModel?: string }) {
+  async update(updateParams: KnowledgeBaseUpdateParams) {
     await this.ipc.invoke('kb:update', updateParams)
   }
 
-  async getFilesMeta(kbId: number, fileIds: number[]) {
+  getFilesMeta(kbId: number, fileIds: number[]): Promise<KnowledgeBaseFileMetaSummary[]> {
     return this.ipc.invoke('kb:file:get-metas', kbId, fileIds)
   }
 
-  async readFileChunks(kbId: number, chunks: { fileId: number; chunkIndex: number }[]) {
+  readFileChunks(kbId: number, chunks: KnowledgeBaseFileChunkRequest[]): Promise<KnowledgeBaseFileChunk[]> {
     return this.ipc.invoke('kb:file:read-chunks', kbId, chunks)
   }
 
-  async testMineruConnection(apiToken: string): Promise<{ success: boolean; error?: string }> {
+  testMineruConnection(apiToken: string): Promise<SimpleSuccessResult> {
     return this.ipc.invoke('parser:test-mineru', apiToken)
   }
 }
