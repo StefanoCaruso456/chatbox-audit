@@ -2,4 +2,17 @@
 
 This directory holds the first versioned TutorMeAI contract domains.
 
-Phase 0 establishes the structure only. Tickets 03-06 populate the initial typed schemas and validators in these folders so downstream backend, orchestration, runtime, and app agents can implement against a stable contract surface.
+Implemented in Phase 0:
+
+- `app-manifest`: validated registration metadata and example manifests
+- `tool-schema`: callable tool contracts with typed input/output schema support
+- `runtime-messages`: typed iframe host/app messages
+- `completion-signal`: canonical app completion payload
+
+Still pending in later tickets:
+
+- `app-session-state`
+- `conversation-context`
+- `auth`
+- `safety-review`
+- `errors`
