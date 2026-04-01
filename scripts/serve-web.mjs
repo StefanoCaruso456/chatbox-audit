@@ -44,6 +44,21 @@ function resolveRequestedPath(urlPath) {
 }
 
 const server = createServer(async (req, res) => {
+  if ((req.url || '/').split('?')[0] === '/health') {
+    const isReady = existsSync(indexFile)
+
+    res.writeHead(isReady ? 200 : 503, {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'application/json; charset=utf-8',
+    })
+    res.end(
+      JSON.stringify({
+        ready: isReady,
+      }),
+    )
+    return
+  }
+
   const filePath = resolveRequestedPath(req.url || '/')
 
   if (!filePath) {
