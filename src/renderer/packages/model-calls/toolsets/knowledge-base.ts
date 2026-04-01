@@ -2,6 +2,8 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import platform from '@/platform'
 
+const isKnowledgeBaseAvailable = () => platform.capabilities.knowledgeBase
+
 export const queryKnowledgeBaseTool = (kbId: number) => {
   return tool({
     description: `Search the knowledge base with a semantic query. Returns relevant document chunks.
@@ -16,6 +18,9 @@ CRITICAL: You MUST call this tool FIRST for every new user question before attem
       query: z.string().describe('The search query - rephrase the user question for better semantic matching'),
     }),
     execute: async (input: { query: string }) => {
+      if (!isKnowledgeBaseAvailable()) {
+        return 'Knowledge base is not available on this platform.'
+      }
       const knowledgeBaseController = platform.getKnowledgeBaseController()
       return await knowledgeBaseController.search(kbId, input.query)
     },
@@ -31,6 +36,9 @@ export function getFilesMetaTool(knowledgeBaseId: number) {
     execute: async (input: { fileIds: number[] }) => {
       if (!input.fileIds || input.fileIds.length === 0) {
         return 'Please provide an array of file IDs.'
+      }
+      if (!isKnowledgeBaseAvailable()) {
+        return 'Knowledge base is not available on this platform.'
       }
       const knowledgeBaseController = platform.getKnowledgeBaseController()
       return await knowledgeBaseController.getFilesMeta(knowledgeBaseId, input.fileIds)
@@ -55,6 +63,9 @@ export function readFileChunksTool(knowledgeBaseId: number) {
       if (!input.chunks || input.chunks.length === 0) {
         return 'Please provide an array of chunks to read.'
       }
+      if (!isKnowledgeBaseAvailable()) {
+        return 'Knowledge base is not available on this platform.'
+      }
       const knowledgeBaseController = platform.getKnowledgeBaseController()
       return await knowledgeBaseController.readFileChunks(knowledgeBaseId, input.chunks)
     },
@@ -69,6 +80,9 @@ export function listFilesTool(knowledgeBaseId: number) {
       pageSize: z.number().describe('The number of files to list per page.'),
     }),
     execute: async (input: { page: number; pageSize: number }) => {
+      if (!isKnowledgeBaseAvailable()) {
+        return 'Knowledge base is not available on this platform.'
+      }
       const knowledgeBaseController = platform.getKnowledgeBaseController()
       const files = await knowledgeBaseController.listFilesPaginated(knowledgeBaseId, input.page, input.pageSize)
       return files
@@ -82,6 +96,9 @@ export function listFilesTool(knowledgeBaseId: number) {
   })
 }
 async function getToolSetDescription(knowledgeBaseId: number, knowledgeBaseName: string) {
+  if (!isKnowledgeBaseAvailable()) {
+    return `Knowledge base "${knowledgeBaseName}" is not available on this platform.`
+  }
   // 预加载文件列表，让模型知道知识库中有什么文件
   const knowledgeBaseController = platform.getKnowledgeBaseController()
   const files = await knowledgeBaseController.listFilesPaginated(knowledgeBaseId, 0, 50)
@@ -111,6 +128,9 @@ ${fileListStr}
 }
 
 export async function getToolSet(knowledgeBaseId: number, knowledgeBaseName: string) {
+  if (!isKnowledgeBaseAvailable()) {
+    return null
+  }
   return {
     description: await getToolSetDescription(knowledgeBaseId, knowledgeBaseName),
     tools: {

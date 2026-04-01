@@ -128,7 +128,7 @@ function Root() {
   }, [])
 
   useEffect(() => {
-    if (platform.onNavigate) {
+    if (platform.capabilities.navigationEvents && platform.onNavigate) {
       // 移动端和其他平台的导航监听器
       return platform.onNavigate((path) => {
         // 如果是 settings 路径，使用 navigateToSettings 以保持与主页面设置按钮一致的行为

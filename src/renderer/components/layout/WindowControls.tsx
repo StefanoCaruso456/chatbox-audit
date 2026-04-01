@@ -13,16 +13,19 @@ export const WindowControls: FC<FlexProps> = ({ className, ...otherProps }) => {
   const { t } = useTranslation()
   const windowMaximized = useWindowMaximized()
   const platformType = useAtomValue(platformTypeAtom)
+  if (!platform.capabilities.windowControls) {
+    return null
+  }
   return platformType === 'win32' || platformType === 'linux' ? (
     <Flex align="center" className={clsx('controls self-start', className)} {...otherProps}>
-      <ControlButton label={t('Minimize')} icon={IconMinus} onClick={() => platform.minimize()} />
+      <ControlButton label={t('Minimize') as string} icon={IconMinus} onClick={() => platform.minimize()} />
       {!windowMaximized ? (
-        <ControlButton label={t('Maximize')} icon={IconSquare} onClick={() => platform.maximize()} />
+        <ControlButton label={t('Maximize') as string} icon={IconSquare} onClick={() => platform.maximize()} />
       ) : (
-        <ControlButton label={t('Restore')} icon={IconSquares} onClick={() => platform.unmaximize()} />
+        <ControlButton label={t('Restore') as string} icon={IconSquares} onClick={() => platform.unmaximize()} />
       )}
       <ControlButton
-        label={t('Close')}
+        label={t('Close') as string}
         icon={IconX}
         className="hover:bg-chatbox-tint-error"
         onClick={() => platform.closeWindow()}
