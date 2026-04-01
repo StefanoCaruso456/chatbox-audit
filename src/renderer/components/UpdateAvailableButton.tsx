@@ -7,6 +7,10 @@ import { ScalableIcon } from './common/ScalableIcon'
 const UpdateAvailableButton = () => {
   const { t } = useTranslation()
 
+  if (!platform.capabilities.appUpdateInstall) {
+    return null
+  }
+
   const handleUpdateInstall = () => {
     platform.installUpdate()
   }

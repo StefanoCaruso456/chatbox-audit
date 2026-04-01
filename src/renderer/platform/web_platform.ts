@@ -5,8 +5,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { parseLocale } from '@/i18n/parser'
 import { type ImageGenerationStorage, IndexedDBImageGenerationStorage } from '@/storage/ImageGenerationStorage'
 import { getBrowser, getOS } from '../packages/navigator'
-import type { Platform, PlatformType } from './interfaces'
+import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
+import { WEB_PLATFORM_CAPABILITIES } from './capabilities'
 import { IndexedDBStorage } from './storages'
 import WebExporter from './web_exporter'
 import webLogger from './web_logger'
@@ -14,6 +15,7 @@ import { parseTextFileLocally } from './web_platform_utils'
 
 export default class WebPlatform extends IndexedDBStorage implements Platform {
   public type: PlatformType = 'web'
+  public readonly capabilities: PlatformCapabilities = WEB_PLATFORM_CAPABILITIES
 
   public exporter = new WebExporter()
 

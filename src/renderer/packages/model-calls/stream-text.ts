@@ -6,6 +6,7 @@ import type { ModelMessage, ToolSet } from 'ai'
 import { t } from 'i18next'
 import { uniqueId } from 'lodash'
 import { createModelDependencies } from '@/adapters'
+import platform from '@/platform'
 import * as settingActions from '@/stores/settingActions'
 import { settingsStore } from '@/stores/settingsStore'
 import type {
@@ -137,6 +138,7 @@ export async function streamText(
 ): Promise<{ result: StreamTextResult; coreMessages: ModelMessage[] }> {
   const { knowledgeBase, webBrowsing, sessionId } = params
   const hasFileOrLink = params.messages.some((m) => m.files?.length || m.links?.length)
+  const knowledgeBaseAvailable = !!knowledgeBase && platform.capabilities.knowledgeBase
 
   const controller = new AbortController()
   const cancel = () => controller.abort()
@@ -151,14 +153,14 @@ export async function streamText(
 
   // for model not support tool use, use prompt engineering to handle knowledge base and web search
   const needFileToolSet = hasFileOrLink && model.isSupportToolUse()
-  const kbNotSupported = knowledgeBase && !model.isSupportToolUse('knowledge-base')
+  const kbNotSupported = knowledgeBaseAvailable && !model.isSupportToolUse('knowledge-base')
   const webNotSupported = webBrowsing && !model.isSupportToolUse('web-browsing')
 
   // 1. inject system prompt for tool use
   let toolSetInstructions = ''
   // 预加载知识库工具集（异步获取文件列表）
   let kbToolSet = null
-  if (knowledgeBase) {
+  if (knowledgeBaseAvailable) {
     try {
       kbToolSet = await getToolSet(knowledgeBase.id, knowledgeBase.name)
     } catch (err) {

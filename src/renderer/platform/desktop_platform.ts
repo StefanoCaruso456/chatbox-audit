@@ -14,7 +14,8 @@ import { parseLocale } from '@/i18n/parser'
 import { getLogger } from '@/lib/utils'
 import { type ImageGenerationStorage, IndexedDBImageGenerationStorage } from '@/storage/ImageGenerationStorage'
 import { getOS } from '../packages/navigator'
-import type { Platform, PlatformType } from './interfaces'
+import { DESKTOP_PLATFORM_CAPABILITIES } from './capabilities'
+import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import DesktopKnowledgeBaseController from './knowledge-base/desktop-controller'
 import WebExporter from './web_exporter'
 import { parseTextFileLocally } from './web_platform_utils'
@@ -25,6 +26,7 @@ const store = localforage.createInstance({ name: 'chatboxstore' })
 
 export default class DesktopPlatform implements Platform {
   public type: PlatformType = 'desktop'
+  public readonly capabilities: PlatformCapabilities = DESKTOP_PLATFORM_CAPABILITIES
 
   public exporter = new WebExporter()
 
