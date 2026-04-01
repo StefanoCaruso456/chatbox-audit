@@ -78,7 +78,7 @@ For this case, I would plan as a solo builder with agent assistance, not as a la
 
 #### Languages/frameworks you know well?
 
-The safest choice is TypeScript end-to-end with React/Next.js on the frontend and Node/Express or Next API routes on the backend. That reduces context switching and keeps shared contracts reusable between frontend, backend, and app SDK. The case explicitly allows this path.
+The safest choice is TypeScript end-to-end with a Next.js client on Vercel and a dedicated Node.js backend on Railway. That reduces context switching while still keeping shared contracts reusable between the client, backend orchestration layer, and app SDK.
 
 #### Experience with iframe/postMessage communication?
 
@@ -390,14 +390,16 @@ Version the app manifest and tool schema. Existing sessions should continue usin
 
 These are the decisions I would defend in the pre-search:
 
-- Frontend: React / Next.js
-- Backend: Node / Express or Next API routes
-- Realtime chat streaming: SSE
-- Embedded apps: iframe-based
-- Host-app communication: `postMessage`
-- Database: PostgreSQL or Supabase Postgres
-- Platform auth: managed auth solution
-- Per-app auth: OAuth2, server-side token storage
+- Frontend / client: Next.js on Vercel
+- Backend / API / orchestration: Node.js service on Railway
+- Realtime streaming: Server-Sent Events (SSE)
+- Embedded app runtime: iframe + postMessage
+- Database: PostgreSQL
+- Authentication: platform authentication plus per-app OAuth handled by the Railway backend
+- Auth/access patterns:
+  1. platform authentication for TutorMeAI users
+  2. external public apps that use server-held credentials or no user-specific auth
+  3. external authenticated apps that require user-level OAuth2 authorization, with tokens stored and refreshed by the Railway backend
 - State model: separate chat state, app session state, auth state, and invocation history
 - Plugin registration: typed App Manifest
 - Tool definitions: typed Tool Schema

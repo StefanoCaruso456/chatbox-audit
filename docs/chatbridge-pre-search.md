@@ -113,16 +113,16 @@ Use Chatbox as the frontend shell and interaction model, but move the orchestrat
 
 | Layer | Decision | Why |
 | --- | --- | --- |
-| Frontend | Keep React + TanStack Router + existing Chatbox renderer patterns | Fastest path with the highest reuse from this repo |
-| Chat orchestration backend | New Node.js + TypeScript service, ideally Fastify or Express | Matches repo language and avoids forcing a framework rewrite |
+| Frontend | Next.js client on Vercel | Keeps the web client deployment simple while aligning the product direction around a dedicated web shell |
+| Chat orchestration backend | Dedicated Node.js + TypeScript service on Railway | Matches repo language, cleanly separates orchestration from the client, and avoids coupling the backend to the frontend deployment |
 | Streaming transport | SSE for AI responses | Simpler than WebSockets for one-way token streams |
 | App runtime | Sandboxed iframes rendered inline in chat messages | Best fit for untrusted third-party UI |
 | Parent/app bridge | Typed `postMessage` envelope with origin checks and request IDs | Clear lifecycle and bidirectional updates |
 | LLM | OpenAI Responses API with `gpt-5-mini` as primary orchestration model | Strong tool calling and lower cost than a heavier model |
 | DB | PostgreSQL | Needed for users, conversations, app registry, app sessions, token vault, audit logs |
-| Platform auth | Supabase Auth or similar managed auth | Faster than building full auth ourselves in one week |
-| Per-app auth | Platform-managed OAuth, never raw iframe-managed long-lived secrets | Safer and easier to audit |
-| Deployment | Static frontend + API service + managed Postgres | Clear separation of concerns and easy rollback |
+| Platform auth | Platform authentication handled by the Railway backend | Keeps product auth under the same backend control plane as orchestration and session management |
+| Per-app auth | Per-app OAuth handled by the Railway backend, never raw iframe-managed long-lived secrets | Safer and easier to audit |
+| Deployment | Vercel client + Railway backend + PostgreSQL | Makes the client/backend/database split explicit and easy to reason about |
 
 ### High-level runtime flow
 
@@ -155,7 +155,7 @@ Why:
 - Initial infra + AI target: keep the feature under a small pilot budget ceiling, roughly low-thousands per month.
 - Pay-per-use is acceptable, but only with tenant-level caps and visibility.
 - Acceptable LLM cost range: low single-digit cents per meaningful orchestrated turn, ideally lower.
-- Trade money for time on managed auth, managed Postgres, and error tracking; do not build custom auth or custom infra this week.
+- Trade money for time on Vercel deployment, Railway deployment, PostgreSQL operations, and error tracking; do not build unnecessary custom infrastructure this week.
 
 Why:
 
@@ -272,7 +272,7 @@ Decision:
 - messages by conversation_id/created_at
 - app_sessions by conversation_id/status
 - tool_invocations by app_session_id/created_at
-- Backup: managed Postgres daily backups plus registry export.
+- Backup: PostgreSQL daily backups plus registry export.
 
 ### 12. Security & Sandboxing Deep Dive
 

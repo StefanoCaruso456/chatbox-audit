@@ -78,13 +78,13 @@ These assumptions should be locked first by the Lead Architect Agent.
 
 ### Suggested Baseline Stack
 
-- Frontend: React / Next.js
-- Backend: Node / Express or Next API routes
-- Realtime: WebSocket or SSE
-- DB: PostgreSQL or Supabase
+- Frontend / client: Next.js on Vercel
+- Backend / API / orchestration: Node.js service on Railway
+- Realtime streaming: Server-Sent Events (SSE)
+- Database: PostgreSQL
 - LLM: OpenAI or Anthropic with function calling
 - App embedding: iframe + postMessage
-- Auth: platform auth + OAuth for external authenticated app
+- Auth: platform authentication plus per-app OAuth handled by the Railway backend
 
 ### Required System Domains
 
