@@ -9,13 +9,11 @@ import { getPlatformDefaultDocumentParser, useSettingsStore } from '@/stores/set
 const ALL_PARSER_OPTIONS: {
   value: DocumentParserType
   label: string
-  desktopOnly?: boolean
-  mobileWebOnly?: boolean
 }[] = [
-  { value: 'none', label: 'Text Only', mobileWebOnly: true }, // Basic text file support only (mobile/web only)
-  { value: 'local', label: 'Local', desktopOnly: true }, // Only available on desktop
+  { value: 'none', label: 'Text Only' }, // Basic text file support only (mobile/web only)
+  { value: 'local', label: 'Local' }, // Only available when advanced local parser is supported
   { value: 'chatbox-ai', label: 'Chatbox AI' },
-  { value: 'mineru', label: 'MinerU', desktopOnly: true }, // Only available on desktop (requires IPC)
+  { value: 'mineru', label: 'MinerU' }, // Only available when MinerU parsing is supported
 ]
 
 const PARSER_DESCRIPTIONS: Record<DocumentParserType, string> = {
@@ -44,10 +42,10 @@ export function DocumentParserSettings({ showTitle = true }: DocumentParserSetti
   const [connectionResult, setConnectionResult] = useState<boolean | undefined>()
 
   const parserOptions = useMemo(() => {
-    const isDesktop = platform.type === 'desktop'
     return ALL_PARSER_OPTIONS.filter((opt) => {
-      if (opt.desktopOnly && !isDesktop) return false
-      if (opt.mobileWebOnly && isDesktop) return false
+      if (opt.value === 'local') return platform.capabilities.advancedLocalDocumentParsing
+      if (opt.value === 'mineru') return platform.capabilities.mineruDocumentParsing
+      if (opt.value === 'none') return !platform.capabilities.advancedLocalDocumentParsing
       return true
     })
   }, [])

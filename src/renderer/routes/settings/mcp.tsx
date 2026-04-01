@@ -4,10 +4,12 @@ import { zodValidator } from '@tanstack/zod-adapter'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { z } from 'zod'
+import FeatureUnavailableNotice from '@/components/common/FeatureUnavailableNotice'
 import { BuiltinServersSection } from '@/components/settings/mcp/BuiltinServersSection'
 import CustomServersSection from '@/components/settings/mcp/CustomServersSection'
 import { parseServerFromJson } from '@/components/settings/mcp/utils'
 import type { MCPServerConfig } from '@/packages/mcp/types'
+import platform from '@/platform'
 import { decodeBase64 } from '@/utils/base64'
 
 const searchSchema = z.object({
@@ -24,9 +26,13 @@ export function RouteComponent() {
   const navigate = useNavigate()
   const searchParams = Route.useSearch()
   const [installConfig, setInstallConfig] = useState<MCPServerConfig | undefined>(undefined)
+  const mcpEnabled = platform.capabilities.mcp
 
   // Handle install parameter from search params
   useEffect(() => {
+    if (!mcpEnabled) {
+      return
+    }
     if (searchParams.install) {
       try {
         const config = parseServerFromJson(decodeBase64(searchParams.install))
@@ -41,7 +47,11 @@ export function RouteComponent() {
         replace: true,
       })
     }
-  }, [searchParams.install, navigate])
+  }, [mcpEnabled, searchParams.install, navigate])
+
+  if (!mcpEnabled) {
+    return <FeatureUnavailableNotice title={t('MCP Settings')} />
+  }
 
   return (
     <Box p="md">

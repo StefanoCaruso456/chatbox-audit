@@ -232,6 +232,14 @@ const PARSER_OPTIONS: { value: DocumentParserType; label: string; description: s
   },
 ]
 
+const getAvailableParserOptions = () => {
+  return PARSER_OPTIONS.filter((option) => {
+    if (option.value === 'local') return platform.capabilities.advancedLocalDocumentParsing
+    if (option.value === 'mineru') return platform.capabilities.mineruDocumentParsing
+    return true
+  })
+}
+
 interface DocumentParserSelectorProps {
   parserConfig: DocumentParserConfig
   onParserConfigChange: (config: DocumentParserConfig) => void
@@ -247,6 +255,10 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
   const [mineruToken, setMineruToken] = useState(parserConfig.mineru?.apiToken || '')
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionResult, setConnectionResult] = useState<{ success: boolean; error?: string } | null>(null)
+  const availableParserOptions = getAvailableParserOptions()
+  const selectedOption =
+    availableParserOptions.find((opt) => opt.value === parserConfig.type) || availableParserOptions[0] || null
+  const currentParserType = selectedOption?.value || 'chatbox-ai'
 
   const handleParserTypeChange = useCallback(
     (value: string | null) => {
@@ -305,18 +317,16 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
     }
   }, [mineruToken, t])
 
-  const selectedOption = PARSER_OPTIONS.find((opt) => opt.value === parserConfig.type)
-
   return (
     <Stack gap="xs">
       <Select
         label={t('Document Parser')}
         description={t('Parser used to process uploaded documents')}
-        data={PARSER_OPTIONS.map((opt) => ({
+        data={availableParserOptions.map((opt) => ({
           value: opt.value,
           label: t(opt.label),
         }))}
-        value={parserConfig.type}
+        value={currentParserType}
         onChange={handleParserTypeChange}
         allowDeselect={false}
         disabled={disabled}
@@ -328,7 +338,7 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
         </Text>
       )}
 
-      {parserConfig.type === 'mineru' && !disabled && (
+      {currentParserType === 'mineru' && !disabled && (
         <Stack gap="xs">
           <PasswordInput
             placeholder={t('Enter your MinerU API token') as string}
@@ -377,13 +387,17 @@ interface DocumentParserDisplayProps {
 
 export const DocumentParserDisplay: React.FC<DocumentParserDisplayProps> = ({ parserType }) => {
   const { t } = useTranslation()
-  const currentType = parserType || 'local'
+  const availableParserOptions = getAvailableParserOptions()
+  const currentType =
+    availableParserOptions.find((opt) => opt.value === parserType)?.value ||
+    availableParserOptions[0]?.value ||
+    'chatbox-ai'
 
   return (
     <Select
       label={t('Document Parser')}
       description={t('Parser used to process uploaded documents')}
-      data={PARSER_OPTIONS.map((opt) => ({
+      data={availableParserOptions.map((opt) => ({
         value: opt.value,
         label: t(opt.label),
       }))}

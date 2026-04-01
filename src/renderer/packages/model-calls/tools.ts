@@ -8,6 +8,8 @@ import type { ModelInterface } from '../../../shared/models/types'
 import { webSearchExecutor } from '../web-search'
 import { generateText } from '.'
 
+const isKnowledgeBaseAvailable = () => platform.capabilities.knowledgeBase
+
 /**
  * Extracts and parses JSON from a model response result to find search actions
  * @param result The model response result containing content parts
@@ -71,6 +73,9 @@ export async function knowledgeBaseSearchByPromptEngineering(
   messages: Message[],
   knowledgeBaseId: number
 ) {
+  if (!isKnowledgeBaseAvailable()) {
+    return { query: '', searchResults: [] }
+  }
   const language = settingActions.getLanguage()
   const systemPrompt = promptFormat.constructKnowledgeBaseSearchAction(language)
   const result = await generateText(
@@ -105,8 +110,9 @@ export async function combinedSearchByPromptEngineering(
   knowledgeBaseId?: number,
   signal?: AbortSignal
 ) {
+  const canSearchKnowledgeBase = !!knowledgeBaseId && isKnowledgeBaseAvailable()
   const language = settingActions.getLanguage()
-  const systemPrompt = promptFormat.constructCombinedSearchAction(language, !!knowledgeBaseId)
+  const systemPrompt = promptFormat.constructCombinedSearchAction(language, canSearchKnowledgeBase)
   const result = await generateText(
     model,
     sequenceMessages([
@@ -125,7 +131,7 @@ export async function combinedSearchByPromptEngineering(
   }>(result)
 
   if (searchAction) {
-    if (searchAction.action === 'search_knowledge_base' && knowledgeBaseId) {
+    if (searchAction.action === 'search_knowledge_base' && knowledgeBaseId && canSearchKnowledgeBase) {
       const knowledgeBaseController = platform.getKnowledgeBaseController()
       const searchResults = await knowledgeBaseController.search(knowledgeBaseId, searchAction.query)
       return { query: searchAction.query, searchResults, type: 'knowledge_base' as const }
