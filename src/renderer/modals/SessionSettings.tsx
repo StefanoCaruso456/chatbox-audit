@@ -26,6 +26,7 @@ import { IconInfoCircle, IconTrash } from '@tabler/icons-react'
 import { pick } from 'lodash'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AdaptiveSelect } from '@/components/AdaptiveSelect'
 import { AssistantAvatar } from '@/components/common/Avatar'
 import { AdaptiveModal } from '@/components/common/AdaptiveModal'
 import LazyNumberInput from '@/components/common/LazyNumberInput'
@@ -37,10 +38,11 @@ import { ScalableIcon } from '@/components/common/ScalableIcon'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { trackingEvent } from '@/packages/event'
+import { findMatchingSessionModeValue, getSessionModePresets } from '@/packages/sessionModes'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { updateSession } from '@/stores/chatStore'
 import { getSessionMeta, mergeSettings } from '@/stores/sessionHelpers'
-import { settingsStore, useSettingsStore } from '@/stores/settingsStore'
+import { settingsStore, useLanguage, useSettingsStore } from '@/stores/settingsStore'
 import { getMessageText } from '../../shared/utils/message'
 
 const SessionSettingsModal = NiceModal.create(
@@ -48,6 +50,7 @@ const SessionSettingsModal = NiceModal.create(
     const modal = useModal()
     const { t } = useTranslation()
     const isSmallScreen = useIsSmallScreen()
+    const language = useLanguage()
 
     const [editingData, setEditingData] = useState<Session | null>(session || null)
     useEffect(() => {
@@ -145,6 +148,18 @@ const SessionSettingsModal = NiceModal.create(
       return null
     }
 
+    const sessionModeLabel = String(t('AI Model Mode'))
+    const customModeLabel = String(t('Custom'))
+    const sessionModePresets = getSessionModePresets(language, editingData.type ?? 'chat')
+    const selectedSessionMode = findMatchingSessionModeValue(editingData, systemPrompt, sessionModePresets)
+    const sessionModeOptions = [
+      { value: 'custom', label: customModeLabel },
+      ...sessionModePresets.map((preset) => ({
+        value: preset.value,
+        label: preset.label,
+      })),
+    ]
+
     return (
       <AdaptiveModal
         opened={modal.visible}
@@ -201,6 +216,38 @@ const SessionSettingsModal = NiceModal.create(
                 </Flex>
               )}
             </FileButton>
+
+            <AdaptiveSelect
+              label={sessionModeLabel}
+              placeholder={customModeLabel}
+              data={sessionModeOptions}
+              value={selectedSessionMode}
+              onChange={(value) => {
+                if (!value || value === 'custom') {
+                  return
+                }
+
+                const preset = sessionModePresets.find((item) => item.value === value)
+                if (!preset) {
+                  return
+                }
+
+                setEditingData((current) =>
+                  current
+                    ? {
+                        ...current,
+                        name: preset.name,
+                        picUrl: preset.picUrl,
+                        assistantAvatarKey: undefined,
+                        copilotId: preset.copilotId,
+                      }
+                    : current
+                )
+                setSystemPrompt(preset.systemPrompt)
+              }}
+              allowDeselect={false}
+              checkIconPosition="right"
+            />
 
             <Input.Wrapper label={t('name')}>
               <Input
