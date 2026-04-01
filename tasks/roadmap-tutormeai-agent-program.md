@@ -81,7 +81,7 @@ Create a shared location for all platform contracts and version them.
 
 #### Deliverables
 
-- `/shared/contracts/`
+- `src/shared/contracts/`
 - contract README
 - file structure for schemas
 
