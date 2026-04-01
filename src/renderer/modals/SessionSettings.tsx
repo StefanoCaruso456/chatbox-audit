@@ -27,26 +27,23 @@ import { pick } from 'lodash'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AdaptiveSelect } from '@/components/AdaptiveSelect'
-import { AssistantAvatar } from '@/components/common/Avatar'
 import { AdaptiveModal } from '@/components/common/AdaptiveModal'
+import { AssistantAvatar } from '@/components/common/Avatar'
 import LazyNumberInput from '@/components/common/LazyNumberInput'
 import MaxContextMessageCountSlider from '@/components/common/MaxContextMessageCountSlider'
+import { ScalableIcon } from '@/components/common/ScalableIcon'
+import SegmentedControl from '@/components/common/SegmentedControl'
 import SliderWithInput from '@/components/common/SliderWithInput'
 import { handleImageInputAndSave } from '@/components/Image'
 import ImageStyleSelect from '@/components/ImageStyleSelect'
-import { ScalableIcon } from '@/components/common/ScalableIcon'
-import SegmentedControl from '@/components/common/SegmentedControl'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { trackingEvent } from '@/packages/event'
 import { findMatchingSessionModeValue, getSessionModePresets } from '@/packages/sessionModes'
-import { router } from '@/router'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import { updateSession } from '@/stores/chatStore'
 import { getSessionMeta, mergeSettings } from '@/stores/sessionHelpers'
 import { settingsStore, useLanguage, useSettingsStore } from '@/stores/settingsStore'
 import { getMessageText } from '../../shared/utils/message'
-
-const IMAGE_CREATOR_MODE_VALUE = 'image-creator'
 
 const SessionSettingsModal = NiceModal.create(
   ({ session, disableAutoSave = false }: { session: Session; disableAutoSave?: boolean }) => {
@@ -151,7 +148,7 @@ const SessionSettingsModal = NiceModal.create(
       return null
     }
 
-    const sessionModeLabel = String(t('Conversation Preset'))
+    const sessionModeLabel = String(t('AI Model Mode'))
     const customModeLabel = String(t('Custom'))
     const sessionModePresets = getSessionModePresets(language, editingData.type ?? 'chat')
     const selectedSessionMode = findMatchingSessionModeValue(editingData, systemPrompt, sessionModePresets)
@@ -161,7 +158,6 @@ const SessionSettingsModal = NiceModal.create(
         value: preset.value,
         label: preset.label,
       })),
-      { value: IMAGE_CREATOR_MODE_VALUE, label: String(t('Image Creator')) },
     ]
 
     return (
@@ -228,14 +224,6 @@ const SessionSettingsModal = NiceModal.create(
               value={selectedSessionMode}
               onChange={(value) => {
                 if (!value || value === 'custom') {
-                  return
-                }
-
-                if (value === IMAGE_CREATOR_MODE_VALUE) {
-                  trackingEvent('open_image_creator', { event_category: 'user' })
-                  modal.resolve()
-                  modal.hide()
-                  void router.navigate({ to: '/image-creator' })
                   return
                 }
 
