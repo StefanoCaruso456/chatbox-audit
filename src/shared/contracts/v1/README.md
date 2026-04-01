@@ -11,6 +11,13 @@ Implemented in Phase 0:
 - `completion-signal`: canonical app completion payload
 - `conversation-context`: chat-facing active app and completion summary context
 
+Ticket 03-06 coverage in this package:
+
+- Ticket 03: `app-manifest` exports typed schemas, validators, and example manifests for internal, public external, and authenticated external apps
+- Ticket 04: `tool-schema` exports typed tool contracts, validation helpers, and example tool definitions
+- Ticket 05: `runtime-messages` exports the embedded app host/app message protocol plus example bootstrap, invoke, state, heartbeat, completion, and error messages
+- Ticket 06: `completion-signal` exports the canonical completion payload plus example results for chess, weather, and authenticated planner-style flows
+
 Still pending in later tickets:
 
 - `auth`
