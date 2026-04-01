@@ -10,7 +10,12 @@ import {
   SemverSchema,
   SlugSchema,
 } from '../shared'
-import { ToolSchemaSchema } from '../tool-schema'
+import {
+  exampleChessLaunchToolSchema,
+  examplePlannerDashboardToolSchema,
+  exampleWeatherLookupToolSchema,
+  ToolSchemaSchema,
+} from '../tool-schema'
 import { toValidationResult } from '../validation'
 
 export const AppDistributionSchema = z.enum(['internal', 'public-external', 'authenticated-external'])
@@ -141,6 +146,44 @@ export const AppManifestSchema = z
         path: ['authConfig'],
       })
     }
+
+    for (const [index, tool] of value.toolDefinitions.entries()) {
+      if (tool.requiredPermissions) {
+        for (const permission of tool.requiredPermissions) {
+          if (!value.permissions.includes(permission)) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `toolDefinitions[${index}] requires permission "${permission}" that is missing from manifest permissions`,
+              path: ['toolDefinitions', index, 'requiredPermissions'],
+            })
+          }
+        }
+      }
+
+      if (value.distribution === 'public-external' && tool.authRequirement !== 'none') {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'public-external app tools must use authRequirement "none"',
+          path: ['toolDefinitions', index, 'authRequirement'],
+        })
+      }
+
+      if (value.distribution === 'internal' && tool.authRequirement === 'app-oauth') {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'internal apps cannot require app-oauth tool authentication',
+          path: ['toolDefinitions', index, 'authRequirement'],
+        })
+      }
+
+      if (value.distribution === 'authenticated-external' && tool.authRequirement === 'platform-session') {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'authenticated-external apps cannot require platform-session tool authentication',
+          path: ['toolDefinitions', index, 'authRequirement'],
+        })
+      }
+    }
   })
 
 export type AppManifest = z.infer<typeof AppManifestSchema>
@@ -188,36 +231,7 @@ export const exampleInternalChessManifest: AppManifest = AppManifestSchema.parse
       minHeight: 480,
     },
   },
-  toolDefinitions: [
-    {
-      name: 'chess.launch-game',
-      displayName: 'Launch Chess Game',
-      description: 'Create or resume a chess session for the current conversation.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          mode: {
-            type: 'string',
-            enum: ['practice', 'analysis'],
-          },
-        },
-        required: ['mode'],
-      },
-      outputSchema: {
-        type: 'object',
-        properties: {
-          appSessionId: { type: 'string' },
-          boardState: { type: 'string' },
-        },
-        required: ['appSessionId'],
-      },
-      authRequirement: 'platform-session',
-      timeoutMs: 30_000,
-      idempotent: false,
-      invocationMode: 'embedded-bridge',
-      requiredPermissions: ['session:write', 'tool:invoke'],
-    },
-  ],
+  toolDefinitions: [exampleChessLaunchToolSchema],
   safetyMetadata: {
     reviewStatus: 'approved',
     ageRating: 'all-ages',
@@ -250,31 +264,7 @@ export const examplePublicWeatherManifest: AppManifest = AppManifestSchema.parse
       allowSameOrigin: false,
     },
   },
-  toolDefinitions: [
-    {
-      name: 'weather.lookup',
-      description: 'Look up the forecast for a given city or ZIP code.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          location: { type: 'string' },
-        },
-        required: ['location'],
-      },
-      outputSchema: {
-        type: 'object',
-        properties: {
-          summary: { type: 'string' },
-          temperatureF: { type: 'number' },
-        },
-      },
-      authRequirement: 'none',
-      timeoutMs: 15_000,
-      idempotent: true,
-      invocationMode: 'platform-proxy',
-      requiredPermissions: ['tool:invoke'],
-    },
-  ],
+  toolDefinitions: [exampleWeatherLookupToolSchema],
   safetyMetadata: {
     reviewStatus: 'approved',
     ageRating: 'all-ages',
@@ -311,32 +301,7 @@ export const exampleAuthenticatedPlannerManifest: AppManifest = AppManifestSchem
       allowSameOrigin: false,
     },
   },
-  toolDefinitions: [
-    {
-      name: 'planner.open-dashboard',
-      description: 'Open the authenticated planner experience for the current user.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          focus: {
-            type: 'string',
-            enum: ['today', 'week', 'overdue'],
-          },
-        },
-      },
-      outputSchema: {
-        type: 'object',
-        properties: {
-          requiresAuth: { type: 'boolean' },
-        },
-      },
-      authRequirement: 'app-oauth',
-      timeoutMs: 30_000,
-      idempotent: true,
-      invocationMode: 'embedded-bridge',
-      requiredPermissions: ['oauth:connect', 'tool:invoke'],
-    },
-  ],
+  toolDefinitions: [examplePlannerDashboardToolSchema],
   safetyMetadata: {
     reviewStatus: 'pending',
     ageRating: '13+',

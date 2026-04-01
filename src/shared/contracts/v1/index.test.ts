@@ -6,15 +6,23 @@ import {
   ConversationAppContextSchema,
   EmbeddedAppMessageSchema,
   exampleActiveChessSessionState,
+  exampleAppCompletionMessage,
+  exampleAppErrorMessage,
   exampleAppManifests,
+  exampleChessLaunchToolSchema,
+  exampleCompletionSignals,
   exampleConversationAppContext,
+  exampleEmbeddedAppMessages,
   exampleInternalChessManifest,
   examplePublicWeatherManifest,
+  exampleToolSchemas,
+  ToolSchemaSchema,
   validateAppManifest,
   validateAppSessionState,
   validateCompletionSignal,
   validateConversationAppContext,
   validateEmbeddedAppMessage,
+  validateToolSchema,
 } from '.'
 
 describe('AppManifestSchema', () => {
@@ -49,37 +57,55 @@ describe('AppManifestSchema', () => {
       expect(result.errors.some((error) => error.includes('toolDefinitions'))).toBe(true)
     }
   })
+
+  it('rejects tool permissions that are not granted by the manifest', () => {
+    const invalidManifest = {
+      ...exampleInternalChessManifest,
+      permissions: ['conversation:read-summary'],
+    }
+
+    const result = validateAppManifest(invalidManifest)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('requiredPermissions'))).toBe(true)
+    }
+  })
+})
+
+describe('ToolSchemaSchema', () => {
+  it('accepts the example tool schemas', () => {
+    for (const tool of exampleToolSchemas) {
+      expect(() => ToolSchemaSchema.parse(tool)).not.toThrow()
+    }
+  })
+
+  it('rejects required fields that are missing from object properties', () => {
+    const result = validateToolSchema({
+      ...exampleChessLaunchToolSchema,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          mode: {
+            type: 'string',
+          },
+        },
+        required: ['difficulty'],
+      },
+    })
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('Required field "difficulty"'))).toBe(true)
+    }
+  })
 })
 
 describe('EmbeddedAppMessageSchema', () => {
-  it('accepts a bootstrap message with typed tool definitions', () => {
-    const message = {
-      version: 'v1',
-      messageId: 'msg.bootstrap.1',
-      conversationId: 'conversation.1',
-      appSessionId: 'app-session.1',
-      appId: exampleInternalChessManifest.appId,
-      sequence: 1,
-      sentAt: '2026-03-31T15:00:00.000Z',
-      source: 'host',
-      type: 'host.bootstrap',
-      security: {
-        handshakeToken: 'nonce-123',
-        expectedOrigin: 'https://apps.chatbridge.dev',
-      },
-      payload: {
-        launchReason: 'chat-tool',
-        authState: 'connected',
-        grantedPermissions: ['session:write', 'tool:invoke'],
-        embedUrl: exampleInternalChessManifest.uiEmbedConfig.entryUrl,
-        initialState: {
-          boardState: 'startpos',
-        },
-        availableTools: exampleInternalChessManifest.toolDefinitions,
-      },
+  it('accepts the example runtime messages', () => {
+    for (const message of exampleEmbeddedAppMessages) {
+      expect(() => EmbeddedAppMessageSchema.parse(message)).not.toThrow()
     }
-
-    expect(() => EmbeddedAppMessageSchema.parse(message)).not.toThrow()
   })
 
   it('rejects malformed runtime messages', () => {
@@ -107,33 +133,20 @@ describe('EmbeddedAppMessageSchema', () => {
       expect(result.errors.some((error) => error.includes('payload.summary'))).toBe(true)
     }
   })
+
+  it('keeps completion and error payloads machine-readable', () => {
+    expect(exampleAppCompletionMessage.type).toBe('app.complete')
+    expect(exampleAppErrorMessage.type).toBe('app.error')
+    expect(() => EmbeddedAppMessageSchema.parse(exampleAppCompletionMessage)).not.toThrow()
+    expect(() => EmbeddedAppMessageSchema.parse(exampleAppErrorMessage)).not.toThrow()
+  })
 })
 
 describe('CompletionSignalSchema', () => {
-  it('accepts a valid completion signal', () => {
-    const signal = {
-      version: 'v1',
-      conversationId: 'conversation.1',
-      appSessionId: 'app-session.1',
-      appId: 'chess.internal',
-      toolCallId: 'tool-call.1',
-      status: 'succeeded',
-      resultSummary: 'The student finished the game and requested a summary.',
-      result: {
-        winner: 'white',
-      },
-      startedAt: '2026-03-31T15:00:00.000Z',
-      completedAt: '2026-03-31T15:05:00.000Z',
-      followUpContext: {
-        summary: 'White won by checkmate on move 22.',
-        recommendedPrompts: ['Explain the checkmate pattern.'],
-        stateDigest: {
-          opening: 'Italian Game',
-        },
-      },
+  it('accepts example completion signals across internal, public, and authenticated app flows', () => {
+    for (const signal of exampleCompletionSignals) {
+      expect(() => CompletionSignalSchema.parse(signal)).not.toThrow()
     }
-
-    expect(() => CompletionSignalSchema.parse(signal)).not.toThrow()
   })
 
   it('rejects a completion signal whose timestamps are out of order', () => {

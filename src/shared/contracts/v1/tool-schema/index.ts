@@ -69,6 +69,18 @@ export const ToolJsonSchemaSchema: z.ZodType<ToolJsonSchema> = z.lazy(() =>
           path: ['items'],
         })
       }
+
+      if (value.required && value.properties) {
+        for (const requiredField of value.required) {
+          if (!(requiredField in value.properties)) {
+            ctx.addIssue({
+              code: 'custom',
+              message: `Required field "${requiredField}" must exist in properties`,
+              path: ['required'],
+            })
+          }
+        }
+      }
     })
 ) as z.ZodType<ToolJsonSchema>
 
@@ -108,3 +120,87 @@ export function parseToolSchema(input: unknown): ToolSchema {
 export function validateToolSchema(input: unknown) {
   return toValidationResult(ToolSchemaSchema.safeParse(input))
 }
+
+export const exampleChessLaunchToolSchema: ToolSchema = ToolSchemaSchema.parse({
+  name: 'chess.launch-game',
+  displayName: 'Launch Chess Game',
+  description: 'Create or resume a chess session for the current conversation.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      mode: {
+        type: 'string',
+        enum: ['practice', 'analysis'],
+      },
+    },
+    required: ['mode'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      appSessionId: { type: 'string' },
+      boardState: { type: 'string' },
+    },
+    required: ['appSessionId'],
+  },
+  authRequirement: 'platform-session',
+  timeoutMs: 30_000,
+  idempotent: false,
+  invocationMode: 'embedded-bridge',
+  requiredPermissions: ['session:write', 'tool:invoke'],
+})
+
+export const exampleWeatherLookupToolSchema: ToolSchema = ToolSchemaSchema.parse({
+  name: 'weather.lookup',
+  description: 'Look up the forecast for a given city or ZIP code.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      location: { type: 'string' },
+    },
+    required: ['location'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string' },
+      temperatureF: { type: 'number' },
+    },
+  },
+  authRequirement: 'none',
+  timeoutMs: 15_000,
+  idempotent: true,
+  invocationMode: 'platform-proxy',
+  requiredPermissions: ['tool:invoke'],
+})
+
+export const examplePlannerDashboardToolSchema: ToolSchema = ToolSchemaSchema.parse({
+  name: 'planner.open-dashboard',
+  description: 'Open the authenticated planner experience for the current user.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      focus: {
+        type: 'string',
+        enum: ['today', 'week', 'overdue'],
+      },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      requiresAuth: { type: 'boolean' },
+    },
+  },
+  authRequirement: 'app-oauth',
+  timeoutMs: 30_000,
+  idempotent: true,
+  invocationMode: 'embedded-bridge',
+  requiredPermissions: ['oauth:connect', 'tool:invoke'],
+})
+
+export const exampleToolSchemas = [
+  exampleChessLaunchToolSchema,
+  exampleWeatherLookupToolSchema,
+  examplePlannerDashboardToolSchema,
+]
