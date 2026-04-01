@@ -4,6 +4,11 @@ import platform from '@/platform'
 export const windowMaximizedAtom = atom(false)
 
 windowMaximizedAtom.onMount = (set) => {
+  if (!platform.capabilities.windowControls) {
+    set(false)
+    return () => {}
+  }
+
   const check = async () => {
     set(await platform.isMaximized())
   }

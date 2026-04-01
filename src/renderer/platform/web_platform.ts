@@ -7,6 +7,7 @@ import { type ImageGenerationStorage, IndexedDBImageGenerationStorage } from '@/
 import { getBrowser, getOS } from '../packages/navigator'
 import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
+import { WEB_PLATFORM_CAPABILITIES } from './capabilities'
 import { IndexedDBStorage } from './storages'
 import WebExporter from './web_exporter'
 import webLogger from './web_logger'
@@ -14,15 +15,7 @@ import { parseTextFileLocally } from './web_platform_utils'
 
 export default class WebPlatform extends IndexedDBStorage implements Platform {
   public type: PlatformType = 'web'
-  public readonly capabilities: PlatformCapabilities = {
-    mcp: false,
-    knowledgeBase: false,
-    advancedLocalDocumentParsing: false,
-    mineruDocumentParsing: false,
-    appUpdateInstall: false,
-    navigationEvents: false,
-    windowControls: false,
-  }
+  public readonly capabilities: PlatformCapabilities = WEB_PLATFORM_CAPABILITIES
 
   public exporter = new WebExporter()
 

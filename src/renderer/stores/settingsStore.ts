@@ -11,6 +11,7 @@ import { createJSONStorage, persist, subscribeWithSelector } from 'zustand/middl
 import { immer } from 'zustand/middleware/immer'
 import { getLogger } from '@/lib/utils'
 import platform from '@/platform'
+import { getPreferredDocumentParserType } from '@/platform/capabilities'
 import storage from '@/storage'
 
 const log = getLogger('settings-store')
@@ -21,7 +22,7 @@ const log = getLogger('settings-store')
  * - Mobile/Web: 'none' (only basic text file support by default, user can enable chatbox-ai)
  */
 export function getPlatformDefaultDocumentParser(): DocumentParserConfig {
-  return platform.type === 'desktop' ? { type: 'local' } : { type: 'none' }
+  return { type: getPreferredDocumentParserType(platform.capabilities) }
 }
 
 type Action = {

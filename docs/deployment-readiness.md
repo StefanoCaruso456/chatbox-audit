@@ -15,6 +15,7 @@
 
 - `electron.vite.config.ts` now points to the existing PostCSS config file.
 - The missing `release-*.sh` wrapper scripts now exist and map to the corresponding package workflows.
+- Renderer platform capabilities now come from a shared capability map, and unsupported parser/platform states are normalized before desktop-only flows run.
 
 ## Current Deployment Constraints
 
@@ -27,6 +28,11 @@
 
 - Treat the web bundle as a live preview surface while the platform contracts and capability gating are being finalized.
 - Do not assume full feature parity across web, desktop, and mobile until the capability matrix and gating work is complete.
+
+## Current Capability Matrix
+
+- Desktop: `mcp`, `knowledgeBase`, advanced local document parsing, MinerU parsing, update install, navigation events, and window controls are enabled.
+- Web/Test: desktop-only capabilities are disabled by default, and document parser settings fall back to supported web-safe options.
 
 ## Verification Status
 

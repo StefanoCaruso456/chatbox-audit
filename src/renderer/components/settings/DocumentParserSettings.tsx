@@ -1,9 +1,10 @@
 import { Button, Flex, PasswordInput, Stack, Text, Title } from '@mantine/core'
 import type { DocumentParserType } from '@shared/types/settings'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AdaptiveSelect } from '@/components/AdaptiveSelect'
 import platform from '@/platform'
+import { getAvailableDocumentParserTypes, getSupportedDocumentParserType } from '@/platform/capabilities'
 import { getPlatformDefaultDocumentParser, useSettingsStore } from '@/stores/settingsStore'
 
 const ALL_PARSER_OPTIONS: {
@@ -42,15 +43,34 @@ export function DocumentParserSettings({ showTitle = true }: DocumentParserSetti
   const [connectionResult, setConnectionResult] = useState<boolean | undefined>()
 
   const parserOptions = useMemo(() => {
-    return ALL_PARSER_OPTIONS.filter((opt) => {
-      if (opt.value === 'local') return platform.capabilities.advancedLocalDocumentParsing
-      if (opt.value === 'mineru') return platform.capabilities.mineruDocumentParsing
-      if (opt.value === 'none') return !platform.capabilities.advancedLocalDocumentParsing
-      return true
-    })
+    const supportedParserTypes = new Set(getAvailableDocumentParserTypes(platform.capabilities))
+    return ALL_PARSER_OPTIONS.filter((opt) => supportedParserTypes.has(opt.value))
   }, [])
 
-  const currentParserType = documentParser?.type || getPlatformDefaultDocumentParser().type
+  const currentParserType = useMemo(
+    () =>
+      getSupportedDocumentParserType(
+        platform.capabilities,
+        documentParser?.type || getPlatformDefaultDocumentParser().type
+      ),
+    [documentParser?.type]
+  )
+
+  useEffect(() => {
+    if (!documentParser || documentParser.type === currentParserType) {
+      return
+    }
+
+    setSettings({
+      extension: {
+        ...extension,
+        documentParser: {
+          ...documentParser,
+          type: currentParserType,
+        },
+      },
+    })
+  }, [currentParserType, documentParser, extension, setSettings])
 
   const handleParserTypeChange = useCallback(
     (value: string | null) => {
@@ -87,7 +107,7 @@ export function DocumentParserSettings({ showTitle = true }: DocumentParserSetti
   )
 
   const handleTestConnection = useCallback(async () => {
-    if (!mineruToken.trim()) return
+    if (!mineruToken.trim() || !platform.capabilities.knowledgeBase) return
 
     setTestingConnection(true)
     setConnectionResult(undefined)
@@ -122,7 +142,7 @@ export function DocumentParserSettings({ showTitle = true }: DocumentParserSetti
         {t(PARSER_DESCRIPTIONS[currentParserType])}
       </Text>
 
-      {currentParserType === 'mineru' && (
+      {currentParserType === 'mineru' && platform.capabilities.knowledgeBase && (
         <Stack gap="xs">
           <Text fw="600">{t('MinerU API Token')}</Text>
           <Flex align="center" gap="xs">

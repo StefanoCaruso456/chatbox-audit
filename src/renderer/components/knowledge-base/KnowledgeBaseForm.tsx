@@ -2,10 +2,11 @@ import { Button, Group, Input, PasswordInput, Pill, Radio, Select, Stack, Text }
 import type { DocumentParserConfig, DocumentParserType } from '@shared/types/settings'
 import { IconCheck, IconTrash, IconX } from '@tabler/icons-react'
 import type React from 'react'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import platform from '@/platform'
+import { getAvailableDocumentParserTypes, getSupportedDocumentParserType } from '@/platform/capabilities'
 import { ScalableIcon } from '../common/ScalableIcon'
 
 interface ModelSelectorsProps {
@@ -233,11 +234,8 @@ const PARSER_OPTIONS: { value: DocumentParserType; label: string; description: s
 ]
 
 const getAvailableParserOptions = () => {
-  return PARSER_OPTIONS.filter((option) => {
-    if (option.value === 'local') return platform.capabilities.advancedLocalDocumentParsing
-    if (option.value === 'mineru') return platform.capabilities.mineruDocumentParsing
-    return true
-  })
+  const supportedParserTypes = new Set(getAvailableDocumentParserTypes(platform.capabilities))
+  return PARSER_OPTIONS.filter((option) => supportedParserTypes.has(option.value))
 }
 
 interface DocumentParserSelectorProps {
@@ -255,10 +253,10 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
   const [mineruToken, setMineruToken] = useState(parserConfig.mineru?.apiToken || '')
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionResult, setConnectionResult] = useState<{ success: boolean; error?: string } | null>(null)
-  const availableParserOptions = getAvailableParserOptions()
+  const availableParserOptions = useMemo(() => getAvailableParserOptions(), [])
+  const currentParserType = getSupportedDocumentParserType(platform.capabilities, parserConfig.type)
   const selectedOption =
-    availableParserOptions.find((opt) => opt.value === parserConfig.type) || availableParserOptions[0] || null
-  const currentParserType = selectedOption?.value || 'chatbox-ai'
+    availableParserOptions.find((opt) => opt.value === currentParserType) || availableParserOptions[0] || null
 
   const handleParserTypeChange = useCallback(
     (value: string | null) => {
@@ -300,6 +298,10 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
     setConnectionResult(null)
 
     try {
+      if (!platform.capabilities.knowledgeBase) {
+        toast.error(t('not available in browser'))
+        return
+      }
       const result = await platform.getKnowledgeBaseController().testMineruConnection(mineruToken)
       setConnectionResult(result)
 
@@ -338,7 +340,7 @@ export const DocumentParserSelector: React.FC<DocumentParserSelectorProps> = ({
         </Text>
       )}
 
-      {currentParserType === 'mineru' && !disabled && (
+      {currentParserType === 'mineru' && platform.capabilities.knowledgeBase && !disabled && (
         <Stack gap="xs">
           <PasswordInput
             placeholder={t('Enter your MinerU API token') as string}
@@ -387,11 +389,8 @@ interface DocumentParserDisplayProps {
 
 export const DocumentParserDisplay: React.FC<DocumentParserDisplayProps> = ({ parserType }) => {
   const { t } = useTranslation()
-  const availableParserOptions = getAvailableParserOptions()
-  const currentType =
-    availableParserOptions.find((opt) => opt.value === parserType)?.value ||
-    availableParserOptions[0]?.value ||
-    'chatbox-ai'
+  const availableParserOptions = useMemo(() => getAvailableParserOptions(), [])
+  const currentType = getSupportedDocumentParserType(platform.capabilities, parserType)
 
   return (
     <Select
