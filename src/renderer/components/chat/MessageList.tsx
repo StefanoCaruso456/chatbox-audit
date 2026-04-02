@@ -15,7 +15,6 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { throttle } from 'lodash'
 import {
   type FC,
   forwardRef,
@@ -265,9 +264,14 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
   }))
 
   return (
-    <div className={cn('w-full h-full mx-auto', props.className)}>
+    <div className={cn('relative flex h-full w-full flex-col overflow-hidden', props.className)}>
+      <div className="flex items-center justify-between gap-3 border-b border-chatbox-border-primary/60 px-4 py-2 text-[10px] uppercase tracking-[0.18em] text-chatbox-tertiary sm:px-5">
+        <span>Conversation stage</span>
+        <span className="hidden sm:inline">Streaming responses and embedded app blocks share this surface</span>
+      </div>
       <BlockCodeCollapsedStateProvider defaultCollapsed={!!settingsStore.getState().autoCollapseCodeBlock}>
-        <div className="overflow-hidden h-full pr-0 pl-1 sm:pl-0 relative" ref={messageListRef}>
+        <div className="relative flex h-full min-h-0 flex-1 overflow-hidden pr-0 pl-1 sm:pl-0" ref={messageListRef}>
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-chatbox-background-primary via-chatbox-background-primary/70 to-transparent" />
           <Virtuoso
             style={{ scrollbarGutter: 'stable' }}
             className={platformType === 'win32' ? 'scrollbar-custom' : ''}
@@ -473,7 +477,7 @@ const ThreadLabel: FC<ThreadLabelProps> = memo(({ thread, sessionId }) => {
   const handleEditThreadName = useCallback(async () => {
     if (!thread.id) return
     await NiceModal.show('thread-name-edit', { sessionId, threadId: thread.id })
-  }, [thread.id])
+  }, [sessionId, thread.id])
 
   const handleContinueThread = useCallback(() => {
     if (!thread.id) return
