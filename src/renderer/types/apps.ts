@@ -8,6 +8,7 @@ export type AppCategory =
   | 'Creativity, Coding & Projects'
 
 export type LaunchMode = 'iframe' | 'external'
+export type AppEmbedStatus = 'verified' | 'needs-district-url'
 
 export interface ApprovedApp {
   id: string
@@ -18,6 +19,7 @@ export interface ApprovedApp {
   gradeRanges: GradeRange[]
   launchUrl: string
   launchMode: LaunchMode
+  embedStatus?: AppEmbedStatus
   isApproved: boolean
   tags: string[]
 }
