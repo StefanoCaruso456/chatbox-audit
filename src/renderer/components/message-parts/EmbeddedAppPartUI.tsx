@@ -1,7 +1,7 @@
+import type { JsonObject } from '@shared/contracts/v1/shared'
 import type { MessageEmbeddedAppPart } from '@shared/types'
+import { useMemo } from 'react'
 import EmbeddedAppHost from './EmbeddedAppHost'
-
-const EMBEDDED_APP_BRIDGE_PARAM = 'chatboxBridge'
 
 function toHostState(status: MessageEmbeddedAppPart['status']) {
   if (status === 'error') {
@@ -13,33 +13,6 @@ function toHostState(status: MessageEmbeddedAppPart['status']) {
   }
 
   return 'loading'
-}
-
-function buildEmbeddedAppSrc(part: MessageEmbeddedAppPart) {
-  if (!part.bridge) {
-    return part.sourceUrl
-  }
-
-  try {
-    const url = new URL(part.sourceUrl)
-    url.searchParams.set(
-      EMBEDDED_APP_BRIDGE_PARAM,
-      JSON.stringify({
-        appId: part.appId,
-        appName: part.appName,
-        appSessionId: part.bridge.appSessionId ?? part.appSessionId,
-        expectedOrigin: part.bridge.expectedOrigin,
-        conversationId: part.bridge.conversationId,
-        handshakeToken: part.bridge.handshakeToken,
-        bootstrap: part.bridge.bootstrap,
-        pendingInvocation: part.bridge.pendingInvocation,
-        completion: part.bridge.completion,
-      })
-    )
-    return url.toString()
-  } catch {
-    return part.sourceUrl
-  }
 }
 
 function getEmbeddedAppDescription(part: MessageEmbeddedAppPart) {
@@ -59,11 +32,38 @@ function getEmbeddedAppErrorMessage(part: MessageEmbeddedAppPart) {
 }
 
 export function EmbeddedAppPartUI({ part }: { part: MessageEmbeddedAppPart }) {
+  const runtime = useMemo(() => {
+    if (!part.bridge) {
+      return undefined
+    }
+
+    return {
+      expectedOrigin: part.bridge.expectedOrigin,
+      conversationId: part.bridge.conversationId,
+      appSessionId: part.bridge.appSessionId ?? part.appSessionId,
+      handshakeToken: part.bridge.handshakeToken,
+      heartbeatTimeoutMs: part.bridge.heartbeatTimeoutMs,
+      bootstrap: part.bridge.bootstrap,
+      pendingInvocation: part.bridge.pendingInvocation,
+      completion: part.bridge.completion
+        ? {
+            status: part.bridge.completion.status,
+            summary: part.bridge.completion.resultSummary,
+            resultPayload:
+              part.bridge.completion.result && typeof part.bridge.completion.result === 'object'
+                ? (part.bridge.completion.result as JsonObject)
+                : undefined,
+            errorMessage: part.bridge.completion.errorMessage,
+          }
+        : undefined,
+    } as const
+  }, [part])
+
   return (
     <EmbeddedAppHost
       appId={part.appId}
       appName={part.appName}
-      src={buildEmbeddedAppSrc(part)}
+      src={part.sourceUrl}
       state={toHostState(part.status)}
       title={part.title}
       subtitle={part.appSessionId}
@@ -72,6 +72,7 @@ export function EmbeddedAppPartUI({ part }: { part: MessageEmbeddedAppPart }) {
       height={part.minHeight}
       sandbox={part.sandbox}
       errorMessage={getEmbeddedAppErrorMessage(part)}
+      runtime={runtime}
     />
   )
 }

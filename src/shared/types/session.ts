@@ -1,5 +1,9 @@
 import type { LanguageModelUsage } from 'ai'
 import { z } from 'zod'
+import { CompletionStatusSchema } from '../contracts/v1/completion-signal'
+import { AppPermissionsSchema } from '../contracts/v1/permissions'
+import { JsonObjectSchema, OriginSchema } from '../contracts/v1/shared'
+import { ToolSchemaSchema } from '../contracts/v1/tool-schema'
 import { SessionSettingsSchema } from '../types/settings'
 import { ModelProviderEnum } from './provider'
 
@@ -129,36 +133,41 @@ export const MessageEmbeddedAppPartSchema = z.object({
   minHeight: z.number().int().positive().optional(),
   aspectRatio: z.number().positive().optional(),
   sandbox: z.string().optional(),
-  allowedOrigin: z.string().optional(),
+  allowedOrigin: OriginSchema.optional(),
   errorMessage: z.string().optional(),
   bridge: z
     .object({
-      expectedOrigin: z.string().url(),
+      expectedOrigin: OriginSchema,
       conversationId: z.string(),
       appSessionId: z.string().optional(),
       handshakeToken: z.string().min(1).optional(),
+      heartbeatTimeoutMs: z.number().int().positive().optional(),
       bootstrap: z
         .object({
           launchReason: z.enum(['chat-tool', 'resume-session', 'manual-open']),
+          authState: z.enum(['not-required', 'connected', 'required', 'expired']).optional(),
+          grantedPermissions: AppPermissionsSchema.optional(),
           messageId: z.string().optional(),
           correlationId: z.string().optional(),
-          initialState: z.unknown().optional(),
-          availableTools: z.array(z.string()).optional(),
+          initialState: JsonObjectSchema.optional(),
+          availableTools: z.array(ToolSchemaSchema).optional(),
         })
         .optional(),
       pendingInvocation: z
         .object({
           toolCallId: z.string(),
           toolName: z.string(),
-          arguments: z.unknown().optional(),
+          arguments: JsonObjectSchema.optional(),
           timeoutMs: z.number().int().positive().optional(),
+          messageId: z.string().optional(),
+          correlationId: z.string().optional(),
         })
         .optional(),
       completion: z
         .object({
-          status: z.enum(['succeeded', 'cancelled', 'failed', 'timed-out']),
+          status: CompletionStatusSchema,
           resultSummary: z.string().optional(),
-          result: z.unknown().optional(),
+          result: JsonObjectSchema.optional(),
           errorMessage: z.string().optional(),
         })
         .optional(),
