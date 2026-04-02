@@ -62,6 +62,10 @@ export class AppSecurityService {
       appVersionId: normalized.value.appVersionId,
       reviewedByUserId: normalized.value.reviewedByUserId,
       reviewStatus: normalized.value.reviewStatus,
+      reviewState: normalized.value.reviewState,
+      decisionAction: normalized.value.decisionAction,
+      decisionSummary: normalized.value.decisionSummary,
+      remediationItems: normalized.value.remediationItems,
       ageRating: normalized.value.ageRating,
       dataAccessLevel: normalized.value.dataAccessLevel,
       permissionsSnapshot: [...normalized.value.permissionsSnapshot],
@@ -172,6 +176,7 @@ export class AppSecurityService {
 
     const next = structuredClone(app)
     next.reviewStatus = review.reviewStatus
+    next.reviewState = review.reviewState ?? next.reviewState
 
     const currentVersion = next.currentVersion
     currentVersion.manifest.safetyMetadata = {
@@ -180,6 +185,15 @@ export class AppSecurityService {
       reviewedAt: review.decidedAt ?? review.createdAt,
       reviewedBy: review.reviewedByUserId,
       notes: review.notes,
+    }
+    currentVersion.review = {
+      ...currentVersion.review,
+      reviewState: review.reviewState ?? currentVersion.review.reviewState,
+      runtimeReviewStatus: review.reviewStatus,
+      reviewedByUserId: review.reviewedByUserId ?? currentVersion.review.reviewedByUserId,
+      reviewerNotes: review.notes ?? currentVersion.review.reviewerNotes,
+      reviewRecordId: review.appReviewRecordId,
+      decidedAt: review.decidedAt ?? currentVersion.review.decidedAt,
     }
     next.currentVersion = currentVersion
 
@@ -190,6 +204,7 @@ export class AppSecurityService {
 
       return {
         ...version,
+        review: currentVersion.review,
         manifest: {
           ...version.manifest,
           safetyMetadata: currentVersion.manifest.safetyMetadata,
@@ -231,6 +246,15 @@ export class AppSecurityService {
       }
     }
 
+    if (latest.reviewStatus === 'blocked' && nextStatus === 'pending' && latest.reviewState === 'suspended') {
+      return {
+        fromStatus: latest.reviewStatus,
+        toStatus: nextStatus,
+        allowed: true,
+        reason: 'suspended review can re-enter active review',
+      }
+    }
+
     if (latest.reviewStatus === nextStatus) {
       return {
         fromStatus: latest.reviewStatus,
@@ -252,13 +276,27 @@ export class AppSecurityService {
     left: AppSecurityReviewRecord,
     right: Pick<
       AppSecurityReviewRecord,
-      'appId' | 'appVersionId' | 'reviewStatus' | 'ageRating' | 'dataAccessLevel' | 'permissionsSnapshot' | 'notes'
+      | 'appId'
+      | 'appVersionId'
+      | 'reviewStatus'
+      | 'reviewState'
+      | 'decisionAction'
+      | 'decisionSummary'
+      | 'remediationItems'
+      | 'ageRating'
+      | 'dataAccessLevel'
+      | 'permissionsSnapshot'
+      | 'notes'
     >
   ): boolean {
     return (
       left.appId === right.appId &&
       left.appVersionId === right.appVersionId &&
       left.reviewStatus === right.reviewStatus &&
+      left.reviewState === right.reviewState &&
+      left.decisionAction === right.decisionAction &&
+      left.decisionSummary === right.decisionSummary &&
+      JSON.stringify(left.remediationItems ?? []) === JSON.stringify(right.remediationItems ?? []) &&
       left.ageRating === right.ageRating &&
       left.dataAccessLevel === right.dataAccessLevel &&
       JSON.stringify(left.permissionsSnapshot) === JSON.stringify(right.permissionsSnapshot) &&
@@ -275,6 +313,10 @@ export class AppSecurityService {
         appVersionId?: string
         reviewedByUserId?: string
         reviewStatus: AppSecurityReviewRecord['reviewStatus']
+        reviewState?: AppSecurityReviewRecord['reviewState']
+        decisionAction?: AppSecurityReviewRecord['decisionAction']
+        decisionSummary?: AppSecurityReviewRecord['decisionSummary']
+        remediationItems?: AppSecurityReviewRecord['remediationItems']
         ageRating: AppSecurityReviewRecord['ageRating']
         dataAccessLevel: AppSecurityReviewRecord['dataAccessLevel']
         permissionsSnapshot: string[]
@@ -294,9 +336,14 @@ export class AppSecurityService {
     const notes = this.normalizeOptionalText(request.notes)
     const createdAt = this.normalizeOptionalText(request.createdAt)
     const decidedAt = this.normalizeOptionalText(request.decidedAt)
+    const decisionSummary = this.normalizeOptionalText(request.decisionSummary)
     const permissionsSnapshot = this.normalizePermissions(request.permissionsSnapshot)
     if (!permissionsSnapshot.ok) {
       return permissionsSnapshot
+    }
+    const remediationItems = this.normalizeRemediationItems(request.remediationItems)
+    if (!remediationItems.ok) {
+      return remediationItems
     }
 
     const metadata = request.metadata ?? {}
@@ -310,6 +357,10 @@ export class AppSecurityService {
         appVersionId,
         reviewedByUserId,
         reviewStatus: request.reviewStatus,
+        reviewState: request.reviewState,
+        decisionAction: request.decisionAction,
+        decisionSummary,
+        remediationItems: remediationItems.value,
         ageRating: request.ageRating,
         dataAccessLevel: request.dataAccessLevel,
         permissionsSnapshot: permissionsSnapshot.value,
@@ -336,6 +387,51 @@ export class AppSecurityService {
     }
 
     return { ok: true, value: normalized }
+  }
+
+  private normalizeRemediationItems(
+    remediationItems: AppSecurityReviewRecord['remediationItems']
+  ): AppSecurityResult<AppSecurityReviewRecord['remediationItems']> {
+    if (!remediationItems) {
+      return { ok: true, value: undefined }
+    }
+
+    if (!Array.isArray(remediationItems)) {
+      return this.failure('invalid-request', 'remediationItems must be an array when provided.')
+    }
+
+    const normalized = remediationItems.map((item) => {
+      const code = this.normalizeText(item.code)
+      const summary = this.normalizeText(item.summary)
+      const recommendation = this.normalizeOptionalText(item.recommendation)
+      const field = this.normalizeOptionalText(item.field)
+
+      if (!code || !summary) {
+        return null
+      }
+
+      return {
+        code,
+        summary,
+        recommendation,
+        field,
+        blocking: Boolean(item.blocking),
+      }
+    })
+
+    if (normalized.some((item) => item === null)) {
+      return this.failure('invalid-request', 'Each remediation item requires a code and summary.')
+    }
+
+    const uniqueCodes = new Set(normalized.map((item) => item?.code))
+    if (uniqueCodes.size !== normalized.length) {
+      return this.failure('invalid-request', 'remediationItems must not reuse the same remediation code.')
+    }
+
+    return {
+      ok: true,
+      value: normalized.filter((item): item is NonNullable<typeof item> => Boolean(item)),
+    }
   }
 
   private normalizeText(value: string | undefined | null): string | undefined {

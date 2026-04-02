@@ -2,7 +2,7 @@ import { Alert, Badge, Code, Divider, Group, Paper, ScrollArea, SimpleGrid, Stac
 import { IconAlertTriangle, IconShieldSearch } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
-import type { ReviewHarnessConfig } from '../review-harness'
+import type { ReviewHarnessConfig } from '../-lib/review-harness'
 import {
   appendCompletionEvent,
   appendHeartbeatTimeoutEvent,
@@ -16,8 +16,8 @@ import {
   type ReviewHarnessLog,
   type ReviewHarnessReviewSeverity,
   summarizeReviewHarnessLog,
-} from '../review-harness-log'
-import { inspectReviewMessage, type ReviewMessageInspectionResult } from '../review-message-inspector'
+} from '../-lib/review-harness-log'
+import { inspectReviewMessage, type ReviewMessageInspectionResult } from '../-lib/review-message-inspector'
 
 type LoggedRawMessagePayload = {
   inspection: ReviewMessageInspectionResult
@@ -471,8 +471,8 @@ export function ReviewHarnessPage({ config }: { config: ReviewHarnessConfig }) {
                   conversationId: config.conversationId,
                   appId: config.appId,
                   appSessionId: config.appSessionId,
-                  errorName: 'type' in error ? error.type : undefined,
-                  message: error.message,
+                  errorName: 'payload' in error ? error.payload.code : error.code,
+                  message: 'payload' in error ? error.payload.message : error.message,
                   recoverable: 'payload' in error ? error.payload.recoverable : error.recoverable,
                 })
               )

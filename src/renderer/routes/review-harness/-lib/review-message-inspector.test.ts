@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest'
 import {
   exampleAppHeartbeatMessage,
   exampleAppStateUpdateMessage,
   exampleHostBootstrapMessage,
-} from '../../../shared/contracts/v1/runtime-messages'
+} from '@shared/contracts/v1/runtime-messages'
+import { describe, expect, it } from 'vitest'
 import { inspectReviewMessage } from './review-message-inspector'
 
 const context = {
