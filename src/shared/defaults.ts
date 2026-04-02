@@ -73,6 +73,11 @@ export function settings(): Settings {
     showModelName: true,
     showMessageTimestamp: false,
     showFirstTokenLatency: false,
+    tutorMeAIProfile: {
+      name: '',
+      email: '',
+      role: 'student',
+    },
     userAvatarKey: '',
     defaultAssistantAvatarKey: '',
     theme: Theme.System,
