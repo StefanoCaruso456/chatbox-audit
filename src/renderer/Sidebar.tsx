@@ -220,6 +220,7 @@ export default function Sidebar() {
                   icon={IconFolderPlus}
                   label={t('New project')}
                   onClick={() => void NiceModal.show('create-project')}
+                  emphasized
                   compact
                 />
 
@@ -256,17 +257,16 @@ export default function Sidebar() {
               </Stack>
             </Collapse>
 
+            <SidebarDisclosure
+              label={t('Your chats')}
+              expanded={chatsExpanded}
+              onClick={() => setChatsExpanded((expanded) => !expanded)}
+            />
             <SidebarPrimaryAction
               icon={IconCirclePlus}
               label={t('New Chat')}
               onClick={handleCreateNewSession}
               emphasized
-            />
-
-            <SidebarDisclosure
-              label={t('Your chats')}
-              expanded={chatsExpanded}
-              onClick={() => setChatsExpanded((expanded) => !expanded)}
             />
             <Collapse in={chatsExpanded}>
               <Stack gap={2} pt={4}>
