@@ -1,9 +1,6 @@
 import { createMessage } from '@shared/types'
 import { describe, expect, it } from 'vitest'
-import {
-  buildEmbeddedAppConversationIndicators,
-  selectConversationAppReference,
-} from './conversation-state'
+import { buildEmbeddedAppConversationIndicators, selectConversationAppReference } from './conversation-state'
 
 describe('tutormeai app conversation state helpers', () => {
   it('marks the latest active app as current and older apps as recent', () => {

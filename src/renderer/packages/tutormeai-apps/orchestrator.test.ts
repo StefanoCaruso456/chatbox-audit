@@ -200,4 +200,78 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(context?.selection.includedSessionIds).toEqual(['app-session.chess.1', 'app-session.weather.1'])
     expect(context?.notes?.[0]).toContain('Multiple app sessions')
   })
+
+  it('prioritizes an explicitly referenced app over a newer active app', () => {
+    const completedWeather = createMessage('assistant', 'Weather Lookup finished.')
+    completedWeather.timestamp = Date.parse('2026-04-01T12:02:00.000Z')
+    completedWeather.contentParts = [
+      {
+        type: 'embedded-app',
+        appId: 'weather.public',
+        appName: 'Weather Lookup',
+        appSessionId: 'app-session.weather.2',
+        sourceUrl: 'http://localhost:1212/embedded-apps/weather',
+        title: 'Weather Lookup',
+        summary: 'Forecast ready for discussion.',
+        status: 'ready',
+        bridge: {
+          expectedOrigin: 'http://localhost:1212',
+          conversationId: 'conversation.multi.2',
+          appSessionId: 'app-session.weather.2',
+          bootstrap: {
+            launchReason: 'chat-tool',
+            authState: 'connected',
+            availableTools: [],
+          },
+          completion: {
+            status: 'succeeded',
+            resultSummary: 'Forecast ready for discussion.',
+            result: {
+              location: 'Austin, TX',
+            },
+          },
+        },
+      },
+    ]
+
+    const activePlanner = createMessage('assistant', 'Planner Connect is active.')
+    activePlanner.timestamp = Date.parse('2026-04-01T12:04:00.000Z')
+    activePlanner.contentParts = [
+      {
+        type: 'embedded-app',
+        appId: 'planner.oauth',
+        appName: 'Planner Connect',
+        appSessionId: 'app-session.planner.2',
+        sourceUrl: 'http://localhost:1212/embedded-apps/planner',
+        title: 'Planner Connect',
+        summary: 'Planner is active.',
+        status: 'ready',
+        bridge: {
+          expectedOrigin: 'http://localhost:1212',
+          conversationId: 'conversation.multi.2',
+          appSessionId: 'app-session.planner.2',
+          pendingInvocation: {
+            toolCallId: 'tool-call.planner.2',
+            toolName: 'planner.open-dashboard',
+          },
+          bootstrap: {
+            launchReason: 'chat-tool',
+            authState: 'connected',
+            availableTools: [],
+          },
+        },
+      },
+    ]
+
+    const context = deriveConversationAppContext(
+      'conversation.multi.2',
+      [createMessage('user', 'open weather'), completedWeather, activePlanner],
+      '2026-04-01T12:05:00.000Z',
+      'What did the weather app say about jackets?'
+    )
+
+    expect(context?.activeApp?.appId).toBe('planner.oauth')
+    expect(context?.recentCompletions[0]?.appId).toBe('weather.public')
+    expect(context?.notes?.some((note) => note.includes('weather.public'))).toBe(true)
+  })
 })

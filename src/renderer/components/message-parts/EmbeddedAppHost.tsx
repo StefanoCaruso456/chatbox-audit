@@ -142,7 +142,14 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
       props.runtime?.restartNonce ?? '',
       retryNonce,
     ].join('|')
-  }, [normalizedSrc, props.appId, props.runtime?.conversationId, props.runtime?.restartNonce, runtimeAppSessionId, retryNonce])
+  }, [
+    normalizedSrc,
+    props.appId,
+    props.runtime?.conversationId,
+    props.runtime?.restartNonce,
+    runtimeAppSessionId,
+    retryNonce,
+  ])
 
   const originValidation = useMemo(() => {
     if (!props.runtime) {

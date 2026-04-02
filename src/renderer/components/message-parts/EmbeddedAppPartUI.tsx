@@ -3,10 +3,10 @@ import type { JsonObject } from '@shared/contracts/v1/shared'
 import { createMessage, type MessageEmbeddedAppPart } from '@shared/types'
 import { useCallback, useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import type { EmbeddedAppConversationIndicator } from '@/packages/tutormeai-apps/conversation-state'
 import { getSession } from '@/stores/chatStore'
 import { findMessageLocation } from '@/stores/session/forks'
 import { insertMessageAfter, modifyMessage } from '@/stores/sessionActions'
-import type { EmbeddedAppConversationIndicator } from '@/packages/tutormeai-apps/conversation-state'
 import EmbeddedAppHost from './EmbeddedAppHost'
 import type {
   EmbeddedAppHostErrorMessage,

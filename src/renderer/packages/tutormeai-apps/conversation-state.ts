@@ -1,6 +1,5 @@
 import type { ConversationAppContext } from '@shared/contracts/v1'
 import { parseConversationAppContext } from '@shared/contracts/v1'
-import type { CompletionStatus } from '@shared/contracts/v1/completion-signal'
 import type { Message, MessageEmbeddedAppPart } from '@shared/types'
 
 export interface EmbeddedAppConversationIndicator {
@@ -92,10 +91,6 @@ export function collectEmbeddedAppReferences(messages: Message[]): EmbeddedAppRe
   return refs
 }
 
-function getCompletionStatus(part: MessageEmbeddedAppPart): CompletionStatus | null {
-  return part.bridge?.completion?.status ?? null
-}
-
 function isRecoverableFailure(part: MessageEmbeddedAppPart) {
   return part.status === 'error' && !part.bridge?.completion
 }
@@ -146,7 +141,7 @@ export function buildConversationAppContextFromReference(
     reference.part.summary ??
     completion?.resultSummary ??
     (reference.part.status === 'error'
-      ? reference.part.errorMessage ?? `${reference.part.appName} needs attention.`
+      ? (reference.part.errorMessage ?? `${reference.part.appName} needs attention.`)
       : `${reference.part.appName} is active in chat.`)
   const latestStateDigest = completion?.result ?? reference.part.bridge?.bootstrap?.initialState ?? undefined
   const availableToolNames = reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name)
@@ -160,21 +155,22 @@ export function buildConversationAppContextFromReference(
         ? 'failed'
         : 'active'
 
-  const activeApp = completion || reference.part.status === 'error'
-    ? null
-    : {
-        appSessionId: reference.appSessionId,
-        appId: reference.appId,
-        status: sessionStatus,
-        summary,
-        updatedAt: generatedAt,
-        latestSequence: 1,
-        latestStateDigest,
-        authState,
-        currentToolCallId: reference.part.bridge?.pendingInvocation?.toolCallId,
-        resumableUntil: undefined,
-        availableToolNames,
-      }
+  const activeApp =
+    completion || reference.part.status === 'error'
+      ? null
+      : {
+          appSessionId: reference.appSessionId,
+          appId: reference.appId,
+          status: sessionStatus,
+          summary,
+          updatedAt: generatedAt,
+          latestSequence: 1,
+          latestStateDigest,
+          authState,
+          currentToolCallId: reference.part.bridge?.pendingInvocation?.toolCallId,
+          resumableUntil: undefined,
+          availableToolNames,
+        }
 
   const recentCompletions = completion
     ? [
