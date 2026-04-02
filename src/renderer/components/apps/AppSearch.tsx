@@ -16,8 +16,8 @@ export default function AppSearch({ value, onChange }: AppSearchProps) {
       value={value}
       onChange={(event) => onChange(event.currentTarget.value)}
       leftSection={<ScalableIcon icon={IconSearch} size={16} />}
-      placeholder={t('Search by app, category, or tag')}
-      aria-label={t('Search apps')}
+      placeholder={t('Search by app, category, or tag') || ''}
+      aria-label={t('Search apps') || ''}
       radius="md"
       size="md"
       styles={{
