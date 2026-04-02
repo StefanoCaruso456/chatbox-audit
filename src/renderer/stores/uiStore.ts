@@ -45,6 +45,8 @@ export const uiStore = createStore(
         showCopilotsInNewSession: false,
         sidebarWidth: null as number | null, // Custom sidebar width, null means use default
         pendingConversationModeHintId: null as number | null,
+        approvedAppsModalOpen: false,
+        activeApprovedAppId: null as string | null,
       },
       (set, get) => ({
         addToast: (content: string, duration?: number) => {
@@ -211,6 +213,18 @@ export const uiStore = createStore(
             }
             return { pendingConversationModeHintId: null }
           })
+        },
+
+        setApprovedAppsModalOpen: (approvedAppsModalOpen: boolean) => {
+          set({ approvedAppsModalOpen })
+        },
+
+        openApprovedApp: (appId: string) => {
+          set({ activeApprovedAppId: appId, approvedAppsModalOpen: false })
+        },
+
+        closeApprovedApp: () => {
+          set({ activeApprovedAppId: null })
         },
       })
     ),

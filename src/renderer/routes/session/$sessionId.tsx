@@ -5,6 +5,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from 'zustand'
+import AppsWorkspace from '@/components/apps/AppsWorkspace'
 import MessageList, { type MessageListRef } from '@/components/chat/MessageList'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import InputBox from '@/components/InputBox/InputBox'
@@ -157,34 +158,36 @@ function RouteComponent() {
         <Header session={currentSession} />
 
         <div className="relative flex min-h-0 flex-1 flex-col px-2 pb-2 pt-1 sm:px-3 sm:pb-3">
-          <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-chatbox-border-primary/70 bg-chatbox-background-primary shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-chatbox-tint-brand/60 to-transparent" />
-            <div className="relative flex min-h-0 flex-1 flex-col">
-              <MessageList
-                ref={messageListRef}
-                key={`message-list${currentSessionId}`}
-                currentSession={currentSession}
-                className="min-h-0 flex-1"
-              />
-            </div>
-            <ErrorBoundary name="session-inputbox">
-              <div className="border-t border-chatbox-border-primary/60 bg-chatbox-background-secondary/80 px-2 py-2 backdrop-blur-sm sm:px-3">
-                <InputBox
-                  key={`input-box${currentSession.id}`}
-                  sessionId={currentSession.id}
-                  sessionType={currentSession.type}
-                  model={model}
-                  onStartNewThread={onStartNewThread}
-                  onRollbackThread={onRollbackThread}
-                  onSelectModel={onSelectModel}
-                  onClickSessionSettings={onClickSessionSettings}
-                  generating={!!lastGeneratingMessage}
-                  onSubmit={onSubmit}
-                  onStopGenerating={onStopGenerating}
+          <AppsWorkspace>
+            <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-chatbox-border-primary/70 bg-chatbox-background-primary shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-chatbox-tint-brand/60 to-transparent" />
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                <MessageList
+                  ref={messageListRef}
+                  key={`message-list${currentSessionId}`}
+                  currentSession={currentSession}
+                  className="min-h-0 flex-1"
                 />
               </div>
-            </ErrorBoundary>
-          </section>
+              <ErrorBoundary name="session-inputbox">
+                <div className="border-t border-chatbox-border-primary/60 bg-chatbox-background-secondary/80 px-2 py-2 backdrop-blur-sm sm:px-3">
+                  <InputBox
+                    key={`input-box${currentSession.id}`}
+                    sessionId={currentSession.id}
+                    sessionType={currentSession.type}
+                    model={model}
+                    onStartNewThread={onStartNewThread}
+                    onRollbackThread={onRollbackThread}
+                    onSelectModel={onSelectModel}
+                    onClickSessionSettings={onClickSessionSettings}
+                    generating={!!lastGeneratingMessage}
+                    onSubmit={onSubmit}
+                    onStopGenerating={onStopGenerating}
+                  />
+                </div>
+              </ErrorBoundary>
+            </section>
+          </AppsWorkspace>
         </div>
         <ThreadHistoryDrawer session={currentSession} />
       </div>

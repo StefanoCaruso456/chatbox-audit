@@ -1,5 +1,6 @@
 import { type RemoteConfig, Theme } from '@shared/types'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
+import AppsModal from '@/components/apps/AppsModal'
 import Toasts from '@/components/common/Toasts'
 import ExitFullscreenButton from '@/components/layout/ExitFullscreenButton'
 import useAppTheme from '@/hooks/useAppTheme'
@@ -198,6 +199,7 @@ function Root() {
       {/* <ReportContentDialog /> */}
       {/* 搜索 */}
       <SearchDialog />
+      <AppsModal />
       {/* 没有配置模型时的欢迎弹窗 */}
       {/* <WelcomeDialog /> */}
       <Toasts /> {/* mui */}
