@@ -18,7 +18,7 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
       <div
         className={cn('flex h-full min-h-0 flex-1', activeApprovedAppId && !isSmallScreen ? 'gap-3' : '', className)}
       >
-        <div className="min-h-0 min-w-0 flex-1">{children}</div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
         {!isSmallScreen && activeApprovedAppId ? <AppIframePanel /> : null}
       </div>
       {isSmallScreen && activeApprovedAppId ? <AppIframePanel /> : null}
