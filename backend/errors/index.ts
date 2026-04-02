@@ -5,6 +5,9 @@ export type BackendErrorDomain =
   | 'app-session'
   | 'tool-invocation'
   | 'app-context'
+  | 'auth'
+  | 'oauth'
+  | 'security'
 
 export interface BackendSuccess<T> {
   ok: true

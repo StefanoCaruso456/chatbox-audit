@@ -92,6 +92,7 @@ This is the orchestration authority for the platform.
 Persistent stores:
 
 - users
+- platform_sessions
 - conversations
 - messages
 - apps
@@ -100,6 +101,11 @@ Persistent stores:
 - tool_invocations
 - oauth_connections
 - app_review_records
+
+Phase 3 auth/security adds two important persistence rules:
+
+- `platform_sessions` stores hashed platform session secrets plus rotation metadata owned by the Railway backend
+- `oauth_connections` stores callback state hashes, PKCE verifier ciphertext, token ciphertext, and refresh metadata for authenticated third-party apps
 
 ### 4. Embedded App Runtime
 
@@ -263,6 +269,7 @@ Contents:
 - platform user session
 - per-app OAuth connections
 - encrypted token material
+- hashed platform session tokens
 - token refresh status
 
 ### Invocation History
