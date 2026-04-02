@@ -1,5 +1,5 @@
 import type { AppManifest } from '@shared/contracts/v1'
-import { exampleInternalChessManifest, examplePublicWeatherManifest } from '@shared/contracts/v1'
+import { exampleInternalChessManifest, examplePublicFlashcardsManifest } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
 import type { AppRegistryRecord, AppRegistryVersionRecord } from '../registry/types'
 import { InMemoryAppSecurityRepository } from './repository'
@@ -102,7 +102,7 @@ describe('AppSecurityService', () => {
     })
 
     await service.recordReview({
-      appId: 'weather.public',
+      appId: 'flashcards.public',
       appVersionId: '1.0.0',
       reviewedByUserId: 'reviewer.platform',
       reviewStatus: 'approved',
@@ -112,7 +112,7 @@ describe('AppSecurityService', () => {
     })
 
     const invalid = await service.recordReview({
-      appId: 'weather.public',
+      appId: 'flashcards.public',
       appVersionId: '1.0.0',
       reviewedByUserId: 'reviewer.platform',
       reviewStatus: 'pending',
@@ -135,7 +135,7 @@ describe('AppSecurityService', () => {
       now: () => '2026-04-01T12:00:00.000Z',
     })
 
-    const pendingApp = makeRegistryRecord(withReviewStatus(examplePublicWeatherManifest, 'pending'))
+    const pendingApp = makeRegistryRecord(withReviewStatus(examplePublicFlashcardsManifest, 'pending'))
     const pendingLaunch = await service.evaluateLaunchability({
       app: pendingApp,
       clientOrigin: 'https://chatbridge.app',
@@ -150,7 +150,7 @@ describe('AppSecurityService', () => {
     expect(pendingLaunch.code).toBe('app-not-launchable')
 
     const approvedReview = await service.recordReview({
-      appId: 'weather.public',
+      appId: 'flashcards.public',
       appVersionId: '1.0.0',
       reviewedByUserId: 'reviewer.platform',
       reviewStatus: 'approved',
@@ -164,11 +164,11 @@ describe('AppSecurityService', () => {
       return
     }
 
-    const approvedApp = makeRegistryRecord(withReviewStatus(examplePublicWeatherManifest, 'approved'), 'weather')
+    const approvedApp = makeRegistryRecord(withReviewStatus(examplePublicFlashcardsManifest, 'approved'), 'flashcards')
 
     const launch = await service.evaluateLaunchability({
       app: approvedApp,
-      requestedOrigin: 'https://weather.chatbridge.dev',
+      requestedOrigin: 'https://flashcards.chatbridge.dev',
       clientOrigin: 'https://chatbridge.app',
       backendOrigin: 'https://api.chatbridge.app',
     })
@@ -179,7 +179,7 @@ describe('AppSecurityService', () => {
     }
 
     expect(launch.value.launchable).toBe(true)
-    expect(launch.value.iframePolicy.targetOrigin).toBe('https://weather.chatbridge.dev')
+    expect(launch.value.iframePolicy.targetOrigin).toBe('https://flashcards.chatbridge.dev')
     expect(launch.value.platformSecurity.csp.headerValue).toContain("frame-src")
     expect(launch.value.platformSecurity.headers['content-security-policy']).toBeDefined()
   })

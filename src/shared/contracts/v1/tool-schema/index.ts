@@ -150,27 +150,28 @@ export const exampleChessLaunchToolSchema: ToolSchema = ToolSchemaSchema.parse({
   requiredPermissions: ['session:write', 'tool:invoke'],
 })
 
-export const exampleWeatherLookupToolSchema: ToolSchema = ToolSchemaSchema.parse({
-  name: 'weather.lookup',
-  description: 'Look up the forecast for a given city or ZIP code.',
+export const exampleFlashcardsStartToolSchema: ToolSchema = ToolSchemaSchema.parse({
+  name: 'flashcards.start-session',
+  displayName: 'Start Flashcard Session',
+  description: 'Open a public flashcard practice session for the requested topic.',
   inputSchema: {
     type: 'object',
     properties: {
-      location: { type: 'string' },
+      topic: { type: 'string' },
     },
-    required: ['location'],
+    required: ['topic'],
   },
   outputSchema: {
     type: 'object',
     properties: {
-      summary: { type: 'string' },
-      temperatureF: { type: 'number' },
+      topic: { type: 'string' },
+      cardCount: { type: 'integer' },
     },
   },
   authRequirement: 'none',
-  timeoutMs: 15_000,
-  idempotent: true,
-  invocationMode: 'platform-proxy',
+  timeoutMs: 20_000,
+  idempotent: false,
+  invocationMode: 'embedded-bridge',
   requiredPermissions: ['tool:invoke'],
 })
 
@@ -201,6 +202,6 @@ export const examplePlannerDashboardToolSchema: ToolSchema = ToolSchemaSchema.pa
 
 export const exampleToolSchemas = [
   exampleChessLaunchToolSchema,
-  exampleWeatherLookupToolSchema,
+  exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
 ]

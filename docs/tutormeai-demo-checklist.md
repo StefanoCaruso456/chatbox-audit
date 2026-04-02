@@ -59,7 +59,7 @@ What this proves:
 
 Suggested prompt:
 
-- `What did the weather app say about jackets?`
+- `What did the flashcards app say about fractions?`
 
 or
 
@@ -104,7 +104,7 @@ What this proves:
 - Confirm the branch or deployment includes all merged Phase 0-6 work.
 - Confirm the three demo apps are present:
   - Chess Tutor
-  - Weather Lookup or replacement public learning app
+  - Flashcards Coach or replacement public learning app
   - Planner Connect
 - Confirm the latest TutorMeAI integration tests pass.
 - Confirm the architecture doc, setup guide, developer guide, and cost analysis docs are available.
@@ -125,5 +125,4 @@ What this proves:
 
 ## Optional Final Polish
 
-- Replace Weather Lookup with a more education-native public app before the final submission if the grading emphasis is strongly product-story driven.
 - Record the demo immediately after a clean focused test run so the implementation and narration stay aligned.

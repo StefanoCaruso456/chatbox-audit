@@ -14,10 +14,10 @@ import {
   exampleCompletionSignals,
   exampleConversationAppContext,
   exampleEmbeddedAppMessages,
+  exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
-  examplePublicWeatherManifest,
+  examplePublicFlashcardsManifest,
   exampleToolSchemas,
-  exampleWeatherLookupToolSchema,
   ToolSchemaSchema,
   validateAppManifest,
   validateAppSessionState,
@@ -49,7 +49,7 @@ describe('AppManifestSchema', () => {
   })
 
   it('rejects missing toolDefinitions', () => {
-    const invalidManifest = { ...examplePublicWeatherManifest }
+    const invalidManifest = { ...examplePublicFlashcardsManifest }
     delete (invalidManifest as { toolDefinitions?: unknown[] }).toolDefinitions
 
     const result = validateAppManifest(invalidManifest)
@@ -90,10 +90,10 @@ describe('AppManifestSchema', () => {
 
   it('rejects public external apps whose tools require session auth', () => {
     const invalidManifest = {
-      ...examplePublicWeatherManifest,
+      ...examplePublicFlashcardsManifest,
       toolDefinitions: [
         {
-          ...exampleWeatherLookupToolSchema,
+          ...exampleFlashcardsStartToolSchema,
           authRequirement: 'platform-session',
         },
       ],

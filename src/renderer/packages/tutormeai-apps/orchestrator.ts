@@ -3,8 +3,9 @@ import {
   type AppSessionAuthState,
   type ConversationAppContext,
   exampleAuthenticatedPlannerManifest,
+  exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
-  examplePublicWeatherManifest,
+  examplePublicFlashcardsManifest,
   parseConversationAppContext,
   type ToolSchema,
 } from '@shared/contracts/v1'
@@ -19,7 +20,7 @@ import {
 import { type AppRegistryRecord, AppRegistryService, InMemoryAppRegistryRepository } from '../../../../backend/registry'
 import { selectConversationAppReference } from './conversation-state'
 
-type LocalAppCategory = 'games' | 'utilities' | 'productivity'
+type LocalAppCategory = 'games' | 'study' | 'productivity'
 
 type LocalAppDefinition = {
   routePath: `/embedded-apps/${string}`
@@ -106,9 +107,9 @@ function getLocalAppDefinitions(origin: string): LocalAppDefinition[] {
       manifest: buildLocalManifest(origin, exampleInternalChessManifest, '/embedded-apps/chess'),
     },
     {
-      category: 'utilities',
-      routePath: '/embedded-apps/weather',
-      manifest: buildLocalManifest(origin, examplePublicWeatherManifest, '/embedded-apps/weather'),
+      category: 'study',
+      routePath: '/embedded-apps/flashcards',
+      manifest: buildLocalManifest(origin, examplePublicFlashcardsManifest, '/embedded-apps/flashcards'),
     },
     {
       category: 'productivity',
@@ -180,8 +181,12 @@ function hasLaunchIntent(userRequest: string): boolean {
     'check',
     'connect',
     'resume',
-    'forecast',
-    'weather',
+    'flashcards',
+    'flashcard',
+    'study',
+    'quiz',
+    'review',
+    'vocabulary',
     'chess',
     'planner',
     'dashboard',
@@ -190,23 +195,18 @@ function hasLaunchIntent(userRequest: string): boolean {
   return launchKeywords.some((keyword) => normalized.includes(keyword))
 }
 
-function extractLocation(userRequest: string): string {
-  const zipMatch = userRequest.match(/\b\d{5}(?:-\d{4})?\b/)
-  if (zipMatch) {
-    return zipMatch[0]
-  }
-
-  const phraseMatch = userRequest.match(/\b(?:in|for|at)\s+([A-Za-z][A-Za-z\s,.-]{1,48})$/u)
+function extractFlashcardTopic(userRequest: string): string {
+  const phraseMatch = userRequest.match(/\b(?:about|for|on)\s+([A-Za-z][A-Za-z\s,.-]{1,48})$/u)
   if (phraseMatch?.[1]) {
     return phraseMatch[1].trim().replace(/[?.!]+$/u, '')
   }
 
-  const weatherMatch = userRequest.match(/\bweather\s+([A-Za-z][A-Za-z\s,.-]{1,48})$/iu)
-  if (weatherMatch?.[1]) {
-    return weatherMatch[1].trim().replace(/[?.!]+$/u, '')
+  const flashcardsMatch = userRequest.match(/\b(?:flashcards|quiz me|study)\s+([A-Za-z][A-Za-z\s,.-]{1,48})$/iu)
+  if (flashcardsMatch?.[1]) {
+    return flashcardsMatch[1].trim().replace(/[?.!]+$/u, '')
   }
 
-  return 'Chicago, IL'
+  return 'fractions'
 }
 
 function extractPlannerFocus(userRequest: string): 'today' | 'week' | 'overdue' {
@@ -227,9 +227,9 @@ function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
     }
   }
 
-  if (tool.name === 'weather.lookup') {
+  if (tool.name === exampleFlashcardsStartToolSchema.name) {
     return {
-      location: extractLocation(userRequest),
+      topic: extractFlashcardTopic(userRequest),
     }
   }
 
@@ -714,7 +714,7 @@ export async function routeTutorMeAiAppRequest(
       return {
         kind: 'clarify',
         message: buildClarificationMessage(
-          'Which app would you like to open: Chess Tutor, Weather Lookup, or Planner Connect?'
+          'Which app would you like to open: Chess Tutor, Flashcards Coach, or Planner Connect?'
         ),
       }
     }

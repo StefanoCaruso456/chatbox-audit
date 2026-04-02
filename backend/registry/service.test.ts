@@ -1,7 +1,7 @@
 import {
   exampleAuthenticatedPlannerManifest,
   exampleInternalChessManifest,
-  examplePublicWeatherManifest,
+  examplePublicFlashcardsManifest,
 } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
 import { InMemoryAppRegistryRepository } from './repository'
@@ -37,7 +37,7 @@ describe('AppRegistryService', () => {
 
     const result = await service.registerApp({
       manifest: {
-        ...examplePublicWeatherManifest,
+        ...examplePublicFlashcardsManifest,
         authType: 'magic-ticket',
       },
       category: 'utilities',
@@ -54,7 +54,7 @@ describe('AppRegistryService', () => {
     const service = createService()
 
     const result = await service.registerApp({
-      manifest: examplePublicWeatherManifest,
+      manifest: examplePublicFlashcardsManifest,
       category: '   ',
     })
 
@@ -78,10 +78,10 @@ describe('AppRegistryService', () => {
 
     const result = await service.registerApp({
       manifest: {
-        ...examplePublicWeatherManifest,
+        ...examplePublicFlashcardsManifest,
         slug: exampleInternalChessManifest.slug,
       },
-      category: 'weather',
+      category: 'study',
     })
 
     expect(result.ok).toBe(false)
@@ -94,18 +94,18 @@ describe('AppRegistryService', () => {
     const service = createService()
 
     const first = await service.registerApp({
-      manifest: examplePublicWeatherManifest,
-      category: 'weather',
+      manifest: examplePublicFlashcardsManifest,
+      category: 'study',
     })
     expect(first.ok).toBe(true)
 
     const second = await service.registerApp({
       manifest: {
-        ...examplePublicWeatherManifest,
+        ...examplePublicFlashcardsManifest,
         appVersion: '1.1.0',
-        shortDescription: 'Check local weather conditions with hourly updates for classroom planning.',
+        shortDescription: 'Review topic-based flashcards with guided study prompts inside chat.',
       },
-      category: 'weather',
+      category: 'study',
     })
 
     expect(second.ok).toBe(true)

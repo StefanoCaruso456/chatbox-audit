@@ -94,14 +94,14 @@ describe('EmbeddedAppHost', () => {
   it('posts bootstrap and invoke messages to the iframe once it loads', async () => {
     renderHost(
       <EmbeddedAppHost
-        appId="weather.public"
-        appName="Weather Dashboard"
-        src="https://example.com/weather"
+        appId="flashcards.public"
+        appName="Flashcards Coach"
+        src="https://example.com/flashcards"
         runtime={{
           expectedOrigin: 'https://example.com',
           conversationId: 'conversation.1',
-          appSessionId: 'app-session.weather.1',
-          handshakeToken: 'nonce-weather-1',
+          appSessionId: 'app-session.flashcards.1',
+          handshakeToken: 'nonce-flashcards-1',
           heartbeatTimeoutMs: 5_000,
           bootstrap: {
             launchReason: 'chat-tool',
@@ -109,10 +109,10 @@ describe('EmbeddedAppHost', () => {
             grantedPermissions: ['session:write', 'tool:invoke'],
           },
           pendingInvocation: {
-            toolCallId: 'tool-call.weather.1',
-            toolName: 'weather.lookup-current',
+            toolCallId: 'tool-call.flashcards.1',
+            toolName: 'flashcards.start-session',
             arguments: {
-              location: 'Chicago, IL',
+              topic: 'fractions',
             },
             timeoutMs: 10_000,
           },
@@ -143,14 +143,14 @@ describe('EmbeddedAppHost', () => {
 
     renderHost(
       <EmbeddedAppHost
-        appId="weather.public"
-        appName="Weather Dashboard"
-        src="https://example.com/weather"
+        appId="flashcards.public"
+        appName="Flashcards Coach"
+        src="https://example.com/flashcards"
         runtime={{
           expectedOrigin: 'https://example.com',
           conversationId: 'conversation.1',
-          appSessionId: 'app-session.weather.1',
-          handshakeToken: 'nonce-weather-1',
+          appSessionId: 'app-session.flashcards.1',
+          handshakeToken: 'nonce-flashcards-1',
           onStateUpdate,
         }}
       />
@@ -162,29 +162,30 @@ describe('EmbeddedAppHost', () => {
 
     dispatchRuntimeMessage(iframe, {
       version: 'v1',
-      messageId: 'msg.runtime.weather.1',
+      messageId: 'msg.runtime.flashcards.1',
       conversationId: 'conversation.1',
-      appSessionId: 'app-session.weather.1',
-      appId: 'weather.public',
+      appSessionId: 'app-session.flashcards.1',
+      appId: 'flashcards.public',
       sequence: 1,
       sentAt: '2026-04-01T12:00:00.000Z',
       security: {
-        handshakeToken: 'nonce-weather-1',
+        handshakeToken: 'nonce-flashcards-1',
         expectedOrigin: 'https://example.com',
       },
       source: 'app',
       type: 'app.state',
       payload: {
         status: 'active',
-        summary: 'Forecast loaded for Chicago.',
+        summary: 'Flashcards on fractions are ready for review.',
         state: {
-          location: 'Chicago, IL',
+          topic: 'fractions',
+          reviewedCount: 0,
         },
       },
     })
 
     await waitFor(() => {
-      expect(screen.getByText('Forecast loaded for Chicago.')).toBeTruthy()
+      expect(screen.getByText('Flashcards on fractions are ready for review.')).toBeTruthy()
     })
 
     expect(onStateUpdate).toHaveBeenCalledTimes(1)
@@ -195,14 +196,14 @@ describe('EmbeddedAppHost', () => {
 
     renderHost(
       <EmbeddedAppHost
-        appId="weather.public"
-        appName="Weather Dashboard"
-        src="https://example.com/weather"
+        appId="flashcards.public"
+        appName="Flashcards Coach"
+        src="https://example.com/flashcards"
         runtime={{
           expectedOrigin: 'https://example.com',
           conversationId: 'conversation.1',
-          appSessionId: 'app-session.weather.1',
-          handshakeToken: 'nonce-weather-1',
+          appSessionId: 'app-session.flashcards.1',
+          handshakeToken: 'nonce-flashcards-1',
           onCompletion,
         }}
       />
@@ -214,14 +215,14 @@ describe('EmbeddedAppHost', () => {
 
     dispatchRuntimeMessage(iframe, {
       version: 'v1',
-      messageId: 'msg.runtime.weather.2',
+      messageId: 'msg.runtime.flashcards.2',
       conversationId: 'conversation.1',
-      appSessionId: 'app-session.weather.1',
-      appId: 'weather.public',
+      appSessionId: 'app-session.flashcards.1',
+      appId: 'flashcards.public',
       sequence: 2,
       sentAt: '2026-04-01T12:01:00.000Z',
       security: {
-        handshakeToken: 'nonce-weather-1',
+        handshakeToken: 'nonce-flashcards-1',
         expectedOrigin: 'https://example.com',
       },
       source: 'app',
@@ -229,21 +230,21 @@ describe('EmbeddedAppHost', () => {
       payload: {
         version: 'v1',
         conversationId: 'conversation.1',
-        appSessionId: 'app-session.weather.1',
-        appId: 'weather.public',
+        appSessionId: 'app-session.flashcards.1',
+        appId: 'flashcards.public',
         status: 'succeeded',
-        resultSummary: 'Forecast ready for discussion.',
+        resultSummary: 'Flashcards on fractions are ready for review.',
         completedAt: '2026-04-01T12:01:05.000Z',
         followUpContext: {
-          summary: 'Use the forecast to answer weather planning questions.',
-          userVisibleSummary: 'Forecast ready for discussion.',
+          summary: 'Use the flashcard deck to quiz the student or choose the next topic.',
+          userVisibleSummary: 'Flashcards on fractions are ready for review.',
         },
       },
     })
 
     await waitFor(() => {
       expect(screen.getByText('Completed')).toBeTruthy()
-      expect(screen.getByText('Forecast ready for discussion.')).toBeTruthy()
+      expect(screen.getByText('Flashcards on fractions are ready for review.')).toBeTruthy()
     })
 
     expect(onCompletion).toHaveBeenCalledTimes(1)
@@ -350,24 +351,24 @@ describe('EmbeddedAppHost', () => {
 
     renderHost(
       <EmbeddedAppHost
-        appId="weather.public"
-        appName="Weather Dashboard"
-        src="https://example.com/weather"
+        appId="flashcards.public"
+        appName="Flashcards Coach"
+        src="https://example.com/flashcards"
         runtime={{
           expectedOrigin: 'https://example.com',
           conversationId: 'conversation.4',
-          appSessionId: 'app-session.weather.4',
-          handshakeToken: 'nonce-weather-4',
+          appSessionId: 'app-session.flashcards.4',
+          handshakeToken: 'nonce-flashcards-4',
           bootstrap: {
             launchReason: 'chat-tool',
             authState: 'connected',
             grantedPermissions: ['session:write', 'tool:invoke'],
           },
           pendingInvocation: {
-            toolCallId: 'tool-call.weather.4',
-            toolName: 'weather.lookup-current',
+            toolCallId: 'tool-call.flashcards.4',
+            toolName: 'flashcards.start-session',
             arguments: {
-              location: 'Chicago, IL',
+              topic: 'fractions',
             },
             timeoutMs: 10_000,
           },
@@ -387,21 +388,21 @@ describe('EmbeddedAppHost', () => {
 
     dispatchRuntimeMessage(iframe, {
       version: 'v1',
-      messageId: 'msg.runtime.weather.fail',
+      messageId: 'msg.runtime.flashcards.fail',
       conversationId: 'conversation.4',
-      appSessionId: 'app-session.weather.4',
-      appId: 'weather.public',
+      appSessionId: 'app-session.flashcards.4',
+      appId: 'flashcards.public',
       sequence: 3,
       sentAt: '2026-04-01T12:04:00.000Z',
       security: {
-        handshakeToken: 'nonce-weather-4',
+        handshakeToken: 'nonce-flashcards-4',
         expectedOrigin: 'https://example.com',
       },
       source: 'app',
       type: 'app.error',
       payload: {
         code: 'app.runtime-error',
-        message: 'The forecast widget failed to initialize.',
+        message: 'The flashcards session failed to initialize.',
         recoverable: true,
       },
     })

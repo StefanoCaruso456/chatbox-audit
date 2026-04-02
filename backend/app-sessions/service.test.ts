@@ -150,9 +150,9 @@ describe('AppSessionService', () => {
     })
 
     const conflict = await service.createSession({
-      appSessionId: 'app-session.weather.1',
+      appSessionId: 'app-session.flashcards.1',
       conversationId: 'conversation.4',
-      appId: 'weather.public',
+      appId: 'flashcards.public',
       launchReason: 'manual-open',
       authState: 'not-required',
       status: 'active',
@@ -183,9 +183,9 @@ describe('AppSessionService', () => {
     })
 
     await service.createSession({
-      appSessionId: 'app-session.weather.2',
+      appSessionId: 'app-session.flashcards.2',
       conversationId: 'conversation.6',
-      appId: 'weather.public',
+      appId: 'flashcards.public',
       launchReason: 'manual-open',
       authState: 'not-required',
       status: 'completed',
@@ -193,8 +193,8 @@ describe('AppSessionService', () => {
       completion: {
         ...exampleChessCompletionSignal,
         conversationId: 'conversation.6',
-        appSessionId: 'app-session.weather.2',
-        appId: 'weather.public',
+        appSessionId: 'app-session.flashcards.2',
+        appId: 'flashcards.public',
         completedAt: '2026-04-01T12:05:00.000Z',
         startedAt: '2026-04-01T12:00:10.000Z',
       },

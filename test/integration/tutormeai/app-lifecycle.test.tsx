@@ -12,8 +12,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
 import { deriveConversationAppContext, routeTutorMeAiAppRequest } from '@/packages/tutormeai-apps/orchestrator'
 import { ChessAppPage } from '@/routes/embedded-apps/-components/chess/ChessAppPage'
+import { FlashcardsAppPage } from '@/routes/embedded-apps/-components/flashcards/FlashcardsAppPage'
 import { PlannerAppPage } from '@/routes/embedded-apps/-components/planner/PlannerAppPage'
-import { WeatherAppPage } from '@/routes/embedded-apps/-components/weather/WeatherAppPage'
 
 const localOrigin = 'http://localhost:1212'
 const originalParentDescriptor = Object.getOwnPropertyDescriptor(window, 'parent')
@@ -184,13 +184,13 @@ afterEach(() => {
 })
 
 describe('TutorMeAI embedded app lifecycle integration', () => {
-  it('completes the weather app lifecycle and produces follow-up context', async () => {
+  it('completes the flashcards app lifecycle and produces follow-up context', async () => {
     const launch = await routeTutorMeAiAppRequest({
       origin: localOrigin,
-      conversationId: 'conversation.weather',
-      userId: 'user.weather',
-      userRequest: 'show me the weather in Austin, TX',
-      requestMessageId: 'message.weather.request',
+      conversationId: 'conversation.flashcards',
+      userId: 'user.flashcards',
+      userRequest: 'start flashcards on fractions',
+      requestMessageId: 'message.flashcards.request',
       previousMessages: [createMessage('user', 'hello')],
     })
 
@@ -202,8 +202,15 @@ describe('TutorMeAI embedded app lifecycle integration', () => {
     const part = extractEmbeddedAppPart(launch.message)
     const { onCompletion } = renderLifecycleHarness({
       part,
-      page: <WeatherAppPage />,
+      page: <FlashcardsAppPage />,
     })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /reveal answer/i })).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /reveal answer/i }))
+    fireEvent.click(screen.getByRole('button', { name: /send study summary to chat/i }))
 
     await waitFor(() => {
       expect(onCompletion).toHaveBeenCalledTimes(1)
@@ -214,25 +221,19 @@ describe('TutorMeAI embedded app lifecycle integration', () => {
     if (!completion) {
       return
     }
-    expect(completion?.appId).toBe('weather.public')
-    expect(completion.resultSummary).toContain('Austin, TX')
-    expect(completion.followUpContext.summary).toContain('forecast')
+    expect(completion.appId).toBe('flashcards.public')
+    expect(completion.resultSummary).toContain('fractions')
+    expect(completion.followUpContext.summary).toContain('flashcard deck')
     expect(screen.getByText('Completed')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /re-send forecast summary to chat/i }))
-
-    await waitFor(() => {
-      expect(onCompletion).toHaveBeenCalledTimes(2)
-    })
-
     const followUpContext = deriveConversationAppContext(
-      'conversation.weather',
-      [createMessage('user', 'show me the weather in Austin, TX'), buildCompletedLaunchMessage(launch.message, completion)],
+      'conversation.flashcards',
+      [createMessage('user', 'start flashcards on fractions'), buildCompletedLaunchMessage(launch.message, completion)],
       '2026-04-02T10:00:00.000Z',
-      'Can we talk about the weather result?'
+      'Can we talk about the flashcards result?'
     )
 
-    expect(followUpContext?.recentCompletions[0]?.appId).toBe('weather.public')
+    expect(followUpContext?.recentCompletions[0]?.appId).toBe('flashcards.public')
     expect(followUpContext?.recentCompletions[0]?.resultSummary).toBe(completion.resultSummary)
   })
 

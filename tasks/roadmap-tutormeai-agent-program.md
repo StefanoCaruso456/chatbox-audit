@@ -228,7 +228,7 @@ Create the canonical completion payload used by all apps.
 #### Acceptance Criteria
 
 - chatbot can consume completion summary after any app finishes
-- compatible with chess, weather, and authenticated app flows
+- compatible with chess, flashcards, and authenticated app flows
 
 #### Dependencies
 
@@ -998,7 +998,7 @@ Implement chess actions such as start game, move piece, get help state, and comp
 
 #### Objective
 
-Implement a public external app such as weather.
+Implement a public external learning app such as flashcards.
 
 #### Deliverables
 

@@ -4,27 +4,28 @@ import { buildEmbeddedAppConversationIndicators, selectConversationAppReference 
 
 describe('tutormeai app conversation state helpers', () => {
   it('marks the latest active app as current and older apps as recent', () => {
-    const weatherMessage = createMessage('assistant', 'Weather ready')
-    weatherMessage.timestamp = Date.parse('2026-04-02T10:00:00.000Z')
-    weatherMessage.contentParts = [
+    const flashcardsMessage = createMessage('assistant', 'Flashcards ready')
+    flashcardsMessage.timestamp = Date.parse('2026-04-02T10:00:00.000Z')
+    flashcardsMessage.contentParts = [
       {
         type: 'embedded-app',
-        appId: 'weather.public',
-        appName: 'Weather Lookup',
-        appSessionId: 'app-session.weather.1',
-        sourceUrl: 'http://localhost:1212/embedded-apps/weather',
-        title: 'Weather Lookup',
-        summary: 'Forecast ready for Chicago.',
+        appId: 'flashcards.public',
+        appName: 'Flashcards Coach',
+        appSessionId: 'app-session.flashcards.1',
+        sourceUrl: 'http://localhost:1212/embedded-apps/flashcards',
+        title: 'Flashcards Coach',
+        summary: 'Flashcards on fractions are ready for review.',
         status: 'ready',
         bridge: {
           expectedOrigin: 'http://localhost:1212',
           conversationId: 'conversation.multi.1',
-          appSessionId: 'app-session.weather.1',
+          appSessionId: 'app-session.flashcards.1',
           completion: {
             status: 'succeeded',
-            resultSummary: 'Forecast ready for Chicago.',
+            resultSummary: 'Flashcards on fractions are ready for review.',
             result: {
-              location: 'Chicago, IL',
+              topic: 'fractions',
+              reviewedCount: 3,
             },
           },
         },
@@ -59,13 +60,13 @@ describe('tutormeai app conversation state helpers', () => {
       },
     ]
 
-    const indicators = buildEmbeddedAppConversationIndicators([weatherMessage, plannerMessage])
+    const indicators = buildEmbeddedAppConversationIndicators([flashcardsMessage, plannerMessage])
 
     expect(indicators[`${plannerMessage.id}:0`]).toEqual({
       label: 'Current app',
       tone: 'blue',
     })
-    expect(indicators[`${weatherMessage.id}:0`]).toEqual({
+    expect(indicators[`${flashcardsMessage.id}:0`]).toEqual({
       label: 'Recent app',
       tone: 'gray',
     })
@@ -96,27 +97,28 @@ describe('tutormeai app conversation state helpers', () => {
       },
     ]
 
-    const weatherMessage = createMessage('assistant', 'Weather ready')
-    weatherMessage.timestamp = Date.parse('2026-04-02T10:05:00.000Z')
-    weatherMessage.contentParts = [
+    const flashcardsMessage = createMessage('assistant', 'Flashcards ready')
+    flashcardsMessage.timestamp = Date.parse('2026-04-02T10:05:00.000Z')
+    flashcardsMessage.contentParts = [
       {
         type: 'embedded-app',
-        appId: 'weather.public',
-        appName: 'Weather Lookup',
-        appSessionId: 'app-session.weather.1',
-        sourceUrl: 'http://localhost:1212/embedded-apps/weather',
-        title: 'Weather Lookup',
-        summary: 'Forecast ready for Chicago.',
+        appId: 'flashcards.public',
+        appName: 'Flashcards Coach',
+        appSessionId: 'app-session.flashcards.1',
+        sourceUrl: 'http://localhost:1212/embedded-apps/flashcards',
+        title: 'Flashcards Coach',
+        summary: 'Flashcards on fractions are ready for review.',
         status: 'ready',
         bridge: {
           expectedOrigin: 'http://localhost:1212',
           conversationId: 'conversation.multi.2',
-          appSessionId: 'app-session.weather.1',
+          appSessionId: 'app-session.flashcards.1',
           completion: {
             status: 'succeeded',
-            resultSummary: 'Forecast ready for Chicago.',
+            resultSummary: 'Flashcards on fractions are ready for review.',
             result: {
-              location: 'Chicago, IL',
+              topic: 'fractions',
+              reviewedCount: 3,
             },
           },
         },
@@ -124,11 +126,11 @@ describe('tutormeai app conversation state helpers', () => {
     ]
 
     const selected = selectConversationAppReference(
-      [chessMessage, weatherMessage],
-      'Based on the weather app, should students bring jackets tomorrow?'
+      [chessMessage, flashcardsMessage],
+      'Based on the flashcards app, which card should the student review first?'
     )
 
-    expect(selected?.appId).toBe('weather.public')
-    expect(selected?.appSessionId).toBe('app-session.weather.1')
+    expect(selected?.appId).toBe('flashcards.public')
+    expect(selected?.appSessionId).toBe('app-session.flashcards.1')
   })
 })
