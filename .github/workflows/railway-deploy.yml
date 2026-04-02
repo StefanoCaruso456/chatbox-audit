@@ -1,0 +1,54 @@
+name: Deploy to Railway
+
+# Required GitHub secrets:
+# - RAILWAY_TOKEN: Railway project token or account token with deploy access
+# - RAILWAY_PROJECT_ID: Railway project id for the production project
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: railway-production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy production service
+    runs-on: ubuntu-latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+      RAILWAY_ENVIRONMENT: production
+      RAILWAY_SERVICE: chatbox-audit
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Validate Railway secrets
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Missing RAILWAY_TOKEN GitHub secret"
+            exit 1
+          fi
+
+          if [ -z "$RAILWAY_PROJECT_ID" ]; then
+            echo "Missing RAILWAY_PROJECT_ID GitHub secret"
+            exit 1
+          fi
+
+      - name: Deploy latest main commit to Railway production
+        run: railway up --ci --service "$RAILWAY_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --project "$RAILWAY_PROJECT_ID" --message "GitHub Actions deploy ${GITHUB_SHA}"
