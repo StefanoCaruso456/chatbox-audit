@@ -271,10 +271,6 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
 
   return (
     <div className={cn('relative flex h-full w-full flex-col overflow-hidden', props.className)}>
-      <div className="flex items-center justify-between gap-3 border-b border-chatbox-border-primary/60 px-4 py-2 text-[10px] uppercase tracking-[0.18em] text-chatbox-tertiary sm:px-5">
-        <span>Conversation stage</span>
-        <span className="hidden sm:inline">Streaming responses and embedded app blocks share this surface</span>
-      </div>
       <BlockCodeCollapsedStateProvider defaultCollapsed={!!settingsStore.getState().autoCollapseCodeBlock}>
         <div className="relative flex h-full min-h-0 flex-1 overflow-hidden pr-0 pl-1 sm:pl-0" ref={messageListRef}>
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-chatbox-background-primary via-chatbox-background-primary/70 to-transparent" />
