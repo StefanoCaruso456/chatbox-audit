@@ -54,8 +54,8 @@ const CreateProject = NiceModal.create(() => {
       <Stack gap="sm">
         <TextInput
           autoFocus
-          label={t('Project name')}
-          placeholder={t('Project name')}
+          label={t('Project name') || ''}
+          placeholder={t('Project name') || ''}
           value={name}
           onChange={(event) => {
             setName(event.currentTarget.value)
