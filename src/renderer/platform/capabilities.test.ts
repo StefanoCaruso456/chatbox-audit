@@ -16,14 +16,14 @@ describe('platform capabilities', () => {
   })
 
   it('exposes the expected parser types for web-like platforms', () => {
-    expect(getAvailableDocumentParserTypes(WEB_PLATFORM_CAPABILITIES)).toEqual(['none', 'chatbox-ai'])
-    expect(getAvailableDocumentParserTypes(TEST_PLATFORM_CAPABILITIES)).toEqual(['none', 'chatbox-ai'])
-    expect(getPreferredDocumentParserType(WEB_PLATFORM_CAPABILITIES)).toBe('none')
+    expect(getAvailableDocumentParserTypes(WEB_PLATFORM_CAPABILITIES)).toEqual(['local', 'chatbox-ai'])
+    expect(getAvailableDocumentParserTypes(TEST_PLATFORM_CAPABILITIES)).toEqual(['local', 'chatbox-ai'])
+    expect(getPreferredDocumentParserType(WEB_PLATFORM_CAPABILITIES)).toBe('local')
   })
 
   it('normalizes unsupported parser selections to a supported fallback', () => {
-    expect(getSupportedDocumentParserType(WEB_PLATFORM_CAPABILITIES, 'mineru')).toBe('none')
-    expect(getSupportedDocumentParserType(WEB_PLATFORM_CAPABILITIES, 'local')).toBe('none')
+    expect(getSupportedDocumentParserType(WEB_PLATFORM_CAPABILITIES, 'mineru')).toBe('local')
+    expect(getSupportedDocumentParserType(WEB_PLATFORM_CAPABILITIES, 'local')).toBe('local')
     expect(getSupportedDocumentParserType(DESKTOP_PLATFORM_CAPABILITIES, 'mineru')).toBe('mineru')
   })
 

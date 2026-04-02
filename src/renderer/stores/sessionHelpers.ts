@@ -82,7 +82,7 @@ function getEffectiveDocumentParserConfig(): DocumentParserConfig {
 }
 
 /**
- * Parse file using local parser (desktop only)
+ * Parse file using built-in local parser
  */
 async function parseFileWithLocalParser(
   file: File,
@@ -247,7 +247,6 @@ export async function preprocessFile(
     let result: { content: string; storageKey: string; tokenCountMap: Record<string, number> }
 
     // Text files always use local parsing for efficiency (same as Knowledge Base behavior)
-    // This applies to all platforms (desktop/web/mobile)
     if (isTextFilePath(file.name)) {
       log.debug(`Text file detected, using local parser: ${file.name}`)
       try {
@@ -266,8 +265,7 @@ export async function preprocessFile(
         }
 
         case 'local': {
-          // Local parsing - only available on desktop
-          // On mobile/web, this will fail and throw local_parser_failed
+          // Local parsing - available on desktop and web
           try {
             result = await parseFileWithLocalParser(file, uniqKey)
           } catch (error) {
