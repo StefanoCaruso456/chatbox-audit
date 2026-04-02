@@ -2,12 +2,14 @@ import { normalizeOrigin } from '@shared/contracts/v1/shared'
 
 export type ReviewHarnessSearch = {
   appId?: string
+  appVersionId?: string
   appName?: string
   entryUrl: string
   targetOrigin?: string
   allowedOrigins?: string
   conversationId?: string
   appSessionId?: string
+  reviewerUserId?: string
   authState?: 'not-required' | 'connected' | 'required' | 'expired'
   sandbox?: string
   reviewerNotes?: string
@@ -15,12 +17,14 @@ export type ReviewHarnessSearch = {
 
 export type ReviewHarnessConfig = {
   appId: string
+  appVersionId?: string
   appName: string
   entryUrl: string
   targetOrigin: string
   allowedOrigins: string[]
   conversationId: string
   appSessionId: string
+  reviewerUserId?: string
   authState: 'not-required' | 'connected' | 'required' | 'expired'
   sandbox?: string
   reviewerNotes?: string
@@ -82,12 +86,14 @@ export function buildReviewHarnessConfig(search: ReviewHarnessSearch): ReviewHar
 
   return {
     appId,
+    appVersionId: search.appVersionId?.trim() || undefined,
     appName,
     entryUrl,
     targetOrigin,
     allowedOrigins,
     conversationId,
     appSessionId,
+    reviewerUserId: search.reviewerUserId?.trim() || undefined,
     authState,
     sandbox: search.sandbox?.trim() || undefined,
     reviewerNotes: search.reviewerNotes?.trim() || undefined,

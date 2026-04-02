@@ -11,6 +11,7 @@ import {
   IconKeyboard,
   IconMessages,
   IconSchool,
+  IconShieldSearch,
   IconSparkles,
   IconWorldWww,
 } from '@tabler/icons-react'
@@ -32,6 +33,12 @@ const ITEMS = [
     label: 'TutorMeAI Profile',
     icon: <IconSchool className="w-full h-full" />,
     to: '/settings/tutormeai-profile',
+  },
+  {
+    key: 'tutormeai-reviews',
+    label: 'TutorMeAI Reviews',
+    icon: <IconShieldSearch className="w-full h-full" />,
+    to: '/settings/tutormeai-reviews',
   },
   {
     key: 'chatbox-ai',

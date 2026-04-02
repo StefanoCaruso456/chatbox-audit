@@ -1,11 +1,8 @@
 import { Alert, Badge, Code, Divider, Group, Paper, ScrollArea, SimpleGrid, Stack, Text, Title } from '@mantine/core'
 import { IconAlertTriangle, IconShieldSearch } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  inspectReviewMessage,
-  type ReviewMessageInspectionResult,
-} from '@/packages/review-harness/review-message-inspector'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
+import type { ReviewHarnessConfig } from '@/packages/review-harness/review-harness'
 import {
   appendCompletionEvent,
   appendHeartbeatTimeoutEvent,
@@ -15,12 +12,23 @@ import {
   appendReviewerNoteEvent,
   appendRuntimeErrorEvent,
   appendRuntimeStateEvent,
-  summarizeReviewHarnessLog,
   type ReviewHarnessEvent,
   type ReviewHarnessLog,
   type ReviewHarnessReviewSeverity,
+  summarizeReviewHarnessLog,
 } from '@/packages/review-harness/review-harness-log'
-import type { ReviewHarnessConfig } from '@/packages/review-harness/review-harness'
+import {
+  inspectReviewMessage,
+  type ReviewMessageInspectionResult,
+} from '@/packages/review-harness/review-message-inspector'
+import { getTrustReviewWorkspace } from '@/packages/trust-review/workspace'
+import type {
+  AppReviewContext,
+  AppSecurityFailure,
+  RecordReviewerDecisionRequest,
+  StartAppReviewRequest,
+} from '../../../../../backend/security/types'
+import { ReviewWorkflowPanel } from './ReviewWorkflowPanel'
 
 type LoggedRawMessagePayload = {
   inspection: ReviewMessageInspectionResult
@@ -142,11 +150,32 @@ function formatEvent(event: ReviewHarnessEvent) {
   }
 }
 
+function toFailureMessage(result: AppSecurityFailure) {
+  return result.details?.[0] ?? result.message
+}
+
+function getActionSeverity(action: RecordReviewerDecisionRequest['action']): ReviewHarnessReviewSeverity {
+  if (action === 'request-remediation' || action === 'reject') {
+    return 'medium'
+  }
+
+  if (action === 'suspend') {
+    return 'high'
+  }
+
+  return 'info'
+}
+
 export function ReviewHarnessPage({ config }: { config: ReviewHarnessConfig }) {
   const [log, setLog] = useState<ReviewHarnessLog>([])
+  const [reviewContext, setReviewContext] = useState<AppReviewContext | null>(null)
+  const [reviewContextLoading, setReviewContextLoading] = useState(false)
+  const [reviewActionSubmitting, setReviewActionSubmitting] = useState(false)
+  const [reviewActionError, setReviewActionError] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const iframeLoadStartedAtRef = useRef<number>(Date.now())
   const sessionId = useMemo(() => getReviewSessionId(config), [config])
+  const reviewWorkspace = useMemo(() => getTrustReviewWorkspace(), [])
 
   const appendLog = useCallback((updater: (current: ReviewHarnessLog) => ReviewHarnessLog) => {
     setLog((current) => updater(current).slice(-100))
@@ -210,6 +239,112 @@ export function ReviewHarnessPage({ config }: { config: ReviewHarnessConfig }) {
   const runtimeWarnings = useMemo(() => config.runtimeWarnings, [config.runtimeWarnings])
   const summary = useMemo(() => summarizeReviewHarnessLog(log), [log])
   const timelineEvents = useMemo(() => [...log].reverse(), [log])
+
+  const loadReviewContext = useCallback(async () => {
+    if (!config.appId || config.appId === 'review.candidate') {
+      setReviewContext(null)
+      return
+    }
+
+    setReviewContextLoading(true)
+    setReviewActionError(null)
+
+    const result = await reviewWorkspace.getReviewContext(config.appId, config.appVersionId)
+    if (!result.ok) {
+      setReviewContext(null)
+      setReviewActionError(toFailureMessage(result))
+      setReviewContextLoading(false)
+      return
+    }
+
+    setReviewContext(result.value)
+    setReviewContextLoading(false)
+  }, [config.appId, config.appVersionId, reviewWorkspace])
+
+  useEffect(() => {
+    void loadReviewContext()
+  }, [loadReviewContext])
+
+  const handleStartReview = useCallback(
+    async (request: StartAppReviewRequest) => {
+      setReviewActionSubmitting(true)
+      setReviewActionError(null)
+
+      const result = await reviewWorkspace.startReview(request)
+      if (!result.ok) {
+        setReviewActionError(toFailureMessage(result))
+        setReviewActionSubmitting(false)
+        return
+      }
+
+      appendLog((current) =>
+        appendReviewerNoteEvent(current, {
+          sessionId,
+          conversationId: config.conversationId,
+          appId: config.appId,
+          appSessionId: config.appSessionId,
+          actor: 'reviewer',
+          note: `${request.reviewedByUserId ?? 'reviewer'} started active review.`,
+          severity: 'info',
+          tags: ['workflow', 'start-review'],
+        })
+      )
+
+      await loadReviewContext()
+      setReviewActionSubmitting(false)
+    },
+    [appendLog, config.appId, config.appSessionId, config.conversationId, loadReviewContext, reviewWorkspace, sessionId]
+  )
+
+  const handleRecordDecision = useCallback(
+    async (request: RecordReviewerDecisionRequest) => {
+      setReviewActionSubmitting(true)
+      setReviewActionError(null)
+
+      const result = await reviewWorkspace.recordDecision(request)
+      if (!result.ok) {
+        setReviewActionError(toFailureMessage(result))
+        setReviewActionSubmitting(false)
+        return
+      }
+
+      appendLog((current) => {
+        let next = appendReviewerNoteEvent(current, {
+          sessionId,
+          conversationId: config.conversationId,
+          appId: config.appId,
+          appSessionId: config.appSessionId,
+          actor: 'reviewer',
+          note: `${request.reviewedByUserId} recorded ${request.action}: ${request.decisionSummary}`,
+          severity: getActionSeverity(request.action),
+          tags: ['workflow', request.action],
+        })
+
+        if (request.remediationItems?.length) {
+          for (const remediationItem of request.remediationItems) {
+            next = appendReviewerFindingEvent(next, {
+              sessionId,
+              conversationId: config.conversationId,
+              appId: config.appId,
+              appSessionId: config.appSessionId,
+              actor: 'reviewer',
+              title: remediationItem.code,
+              summary: remediationItem.summary,
+              severity: remediationItem.blocking ? 'medium' : 'low',
+              recommendation: remediationItem.recommendation,
+              evidence: remediationItem.field ? [`Field: ${remediationItem.field}`] : undefined,
+            })
+          }
+        }
+
+        return next
+      })
+
+      await loadReviewContext()
+      setReviewActionSubmitting(false)
+    },
+    [appendLog, config.appId, config.appSessionId, config.conversationId, loadReviewContext, reviewWorkspace, sessionId]
+  )
 
   useEffect(() => {
     const iframe = containerRef.current?.querySelector('iframe')
@@ -379,6 +514,16 @@ export function ReviewHarnessPage({ config }: { config: ReviewHarnessConfig }) {
             ) : null}
           </Stack>
         </Paper>
+
+        <ReviewWorkflowPanel
+          reviewContext={reviewContext}
+          loading={reviewContextLoading}
+          submitting={reviewActionSubmitting}
+          errorMessage={reviewActionError}
+          defaultReviewerUserId={config.reviewerUserId ?? 'reviewer.platform'}
+          onStartReview={handleStartReview}
+          onRecordDecision={handleRecordDecision}
+        />
 
         <Paper withBorder p="md">
           <Stack gap="sm">
