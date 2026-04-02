@@ -55,6 +55,15 @@ function getFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>[
     }
   }
 
+  if (app.experience === 'tutormeai-runtime') {
+    return {
+      title: t('TutorMeAI Runtime'),
+      description: t(
+        'This TutorMeAI runtime is still booting. You can keep waiting or open it in a new tab while the embedded session finishes loading.'
+      ),
+    }
+  }
+
   return {
     title: t('This app could not open beside chat'),
     description: t(
@@ -65,6 +74,8 @@ function getFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>[
 
 function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
   const { t } = useTranslation()
+  const badgeLabel = app.experience === 'tutormeai-runtime' ? t('TutorMeAI Runtime') : t('Approved Apps')
+  const badgeColor = app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'chatbox-success'
 
   return (
     <Flex justify="space-between" align="start" gap="sm">
@@ -75,8 +86,8 @@ function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => voi
             <Title order={4} fz="lg" className="truncate">
               {app.name}
             </Title>
-            <Badge radius="xl" variant="light" color="chatbox-success">
-              {t('Approved Apps')}
+            <Badge radius="xl" variant="light" color={badgeColor}>
+              {badgeLabel}
             </Badge>
           </Group>
           <Text size="sm" c="chatbox-secondary" className="line-clamp-2">
@@ -96,6 +107,9 @@ function AppPanelBadges({ app }: { app: ApprovedApp }) {
   return (
     <Flex wrap="wrap" gap="xs">
       <AppCategoryBadge category={app.category} />
+      <Badge radius="xl" variant="outline" color={app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'gray'}>
+        {app.experience === 'tutormeai-runtime' ? 'Chat-aware runtime' : 'Approved library'}
+      </Badge>
       {app.gradeRanges.map((gradeRange) => (
         <AppGradeBadge key={`${app.id}:${gradeRange}`} gradeRange={gradeRange} />
       ))}
@@ -108,17 +122,28 @@ function AppPanelBadges({ app }: { app: ApprovedApp }) {
   )
 }
 
-function AppTrustNotice() {
+function AppTrustNotice({ app }: { app: ApprovedApp }) {
   const { t } = useTranslation()
+
+  const title =
+    app.experience === 'tutormeai-runtime' ? t('Governed TutorMeAI runtime') : t('Curated for K-12 classrooms')
+  const body =
+    app.experience === 'tutormeai-runtime'
+      ? t(
+          'This app runs inside the TutorMeAI embedded runtime with chat context, lifecycle events, and governed launch behavior.'
+        )
+      : t(
+          'This approved tool opens through the TutorMeAI app library shell so it stays in the same governed sidebar ecosystem.'
+        )
 
   return (
     <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/85 px-4 py-3">
       <Stack gap={4}>
         <Text size="sm" fw={600}>
-          {t('Curated for K-12 classrooms')}
+          {title}
         </Text>
         <Text size="sm" c="chatbox-secondary">
-          {t('This approved tool opens beside chat when the vendor supports secure classroom embedding.')}
+          {body}
         </Text>
       </Stack>
     </div>
@@ -139,6 +164,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
   const resolvedLaunchUrl = useMemo(() => (app ? resolveLaunchUrl(app.launchUrl) : ''), [app])
   const fallbackCopy = useMemo(() => getFallbackCopy(app, t), [app, t])
+  const resolvedVendorUrl = useMemo(() => resolveLaunchUrl(app.vendorUrl ?? app.launchUrl), [app])
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current !== null) {
@@ -206,7 +232,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
       <AppPanelHeader app={app} onClose={closeApprovedApp} />
       <AppPanelBadges app={app} />
-      <AppTrustNotice />
+      <AppTrustNotice app={app} />
 
       <Group gap="xs">
         <Button
@@ -221,7 +247,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           variant="subtle"
           color="chatbox-secondary"
           leftSection={<IconExternalLink size={16} />}
-          onClick={() => window.open(resolvedLaunchUrl, '_blank', 'noopener,noreferrer')}
+          onClick={() => window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')}
         >
           {t('Open in new tab')}
         </Button>
@@ -278,7 +304,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
                   variant="light"
                   color="chatbox-brand"
                   leftSection={<IconExternalLink size={14} />}
-                  onClick={() => window.open(resolvedLaunchUrl, '_blank', 'noopener,noreferrer')}
+                  onClick={() => window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')}
                 >
                   {t('Open in new tab')}
                 </Button>

@@ -1,9 +1,9 @@
-import { Badge, Box, Container, Flex, Stack, Text, Title } from '@mantine/core'
+import { Anchor, Badge, Box, Container, Flex, Stack, Text, Title } from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
-import { getApprovedAppById } from '@/data/approvedApps'
 import AppCategoryBadge from '@/components/apps/AppCategoryBadge'
 import AppGradeBadge from '@/components/apps/AppGradeBadge'
 import AppIcon from '@/components/apps/AppIcon'
+import { getApprovedAppById } from '@/data/approvedApps'
 
 export const Route = createFileRoute('/embedded-apps/catalog/$appId')({
   component: ApprovedAppPlaceholderRoute,
@@ -67,17 +67,25 @@ function ApprovedAppPlaceholderRoute() {
           <div className="rounded-[1.75rem] border border-white/12 bg-white/6 p-6 backdrop-blur-sm">
             <Stack gap="sm">
               <Title order={3} c="white">
-                Local embed harness
+                Governed library preview
               </Title>
               <Text c="rgba(255,255,255,0.76)">
-                This route exists so the Apps workspace can be exercised end-to-end during local development or while
-                an approved embed target is still being finalized.
+                This route keeps approved library apps inside the same TutorMeAI app ecosystem as the integrated
+                runtimes while a dedicated embedded experience is still being finalized.
               </Text>
               <Text c="rgba(255,255,255,0.66)">
-                The runtime source of truth is <code>src/renderer/data/approvedApps.ts</code>. Point an app&apos;s
-                <code>launchUrl</code> here only when you intentionally want a local preview surface instead of the
-                vendor launch target.
+                The sidebar library source of truth is <code>src/renderer/data/approvedApps.ts</code>. This preview
+                route lets the app panel, filters, and governance surface stay unified even when the vendor destination
+                still needs a richer bridge.
               </Text>
+              {app.vendorUrl ? (
+                <Text c="rgba(255,255,255,0.72)">
+                  Vendor destination:{' '}
+                  <Anchor href={app.vendorUrl} target="_blank" rel="noreferrer" c="white" underline="always">
+                    {app.vendorUrl}
+                  </Anchor>
+                </Text>
+              ) : null}
             </Stack>
           </div>
         </Stack>

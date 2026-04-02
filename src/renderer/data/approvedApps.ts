@@ -1,6 +1,6 @@
 import type { ApprovedApp } from '@/types/apps'
 
-export const approvedApps: ApprovedApp[] = [
+const curatedApprovedAppCatalog: ApprovedApp[] = [
   {
     id: 'google-classroom',
     name: 'Google Classroom',
@@ -307,6 +307,61 @@ export const approvedApps: ApprovedApp[] = [
     isApproved: true,
     tags: ['coding', 'computational-thinking', 'games', 'elementary'],
   },
+]
+
+const tutorMeAiApps: ApprovedApp[] = [
+  {
+    id: 'chess-tutor',
+    name: 'Chess Tutor',
+    icon: '/icons/apps/chess-tutor.png',
+    shortSummary:
+      'A chat-aware chess practice experience with board state, move guidance, and completion summaries that flow back into TutorMeAI.',
+    category: 'Study, Assessment & Engagement',
+    gradeRanges: ['6-8', '9-12'],
+    launchUrl: '/embedded-apps/chess',
+    launchMode: 'iframe',
+    isApproved: true,
+    tags: ['tutormeai', 'chess', 'strategy', 'guided-practice'],
+    experience: 'tutormeai-runtime',
+  },
+  {
+    id: 'flashcards-coach',
+    name: 'Flashcards Coach',
+    icon: '/icons/apps/flashcards-coach.png',
+    shortSummary:
+      'A TutorMeAI flashcards session that keeps study topics, progress, and completion summaries connected to the conversation.',
+    category: 'Study, Assessment & Engagement',
+    gradeRanges: ['3-5', '6-8', '9-12'],
+    launchUrl: '/embedded-apps/flashcards',
+    launchMode: 'iframe',
+    isApproved: true,
+    tags: ['tutormeai', 'flashcards', 'study', 'review'],
+    experience: 'tutormeai-runtime',
+  },
+  {
+    id: 'planner-connect',
+    name: 'Planner Connect',
+    icon: '/icons/apps/planner-connect.png',
+    shortSummary:
+      'An authenticated TutorMeAI planner workspace that keeps assignment focus, auth state, and completion context attached to chat.',
+    category: 'Learning Management & Communication',
+    gradeRanges: ['6-8', '9-12'],
+    launchUrl: '/embedded-apps/planner',
+    launchMode: 'iframe',
+    isApproved: true,
+    tags: ['tutormeai', 'planner', 'assignments', 'authenticated'],
+    experience: 'tutormeai-runtime',
+  },
+]
+
+export const approvedApps: ApprovedApp[] = [
+  ...tutorMeAiApps,
+  ...curatedApprovedAppCatalog.map((app) => ({
+    ...app,
+    launchUrl: `/embedded-apps/catalog/${app.id}`,
+    vendorUrl: app.launchUrl,
+    experience: 'approved-library' as const,
+  })),
 ]
 
 export const approvedAppsById = new Map(approvedApps.map((app) => [app.id, app] as const))
