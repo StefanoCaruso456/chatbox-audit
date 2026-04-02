@@ -273,8 +273,8 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
         <div className="relative flex h-full min-h-0 flex-1 overflow-hidden pr-0 pl-1 sm:pl-0" ref={messageListRef}>
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-chatbox-background-primary via-chatbox-background-primary/70 to-transparent" />
           <Virtuoso
-            style={{ scrollbarGutter: 'stable' }}
-            className={platformType === 'win32' ? 'scrollbar-custom' : ''}
+            style={{ flex: 1, height: '100%', scrollbarGutter: 'stable' }}
+            className={cn('min-h-0', platformType === 'win32' && 'scrollbar-custom')}
             data={currentMessageList}
             ref={virtuoso}
             followOutput="smooth"
@@ -284,9 +284,11 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
                   // 需要额外设置 initialScrollTop，否则恢复位置后 scrollTop 为 0。这时如果用户没有滚动，那么下次保存时 scrollTop 将记为 0，导致下一次恢复时位置始终为顶部。
                   initialScrollTop: sessionScrollPositionCache.get(currentSession.id)?.scrollTop,
                 }
-              : {
-                  initialTopMostItemIndex: currentMessageList.length - 1,
-                })}
+              : currentMessageList.length > 0
+                ? {
+                    initialTopMostItemIndex: currentMessageList.length - 1,
+                  }
+                : {})}
             increaseViewportBy={{ top: 2000, bottom: 2000 }}
             itemContent={(index, msg) => {
               return (
