@@ -175,6 +175,7 @@ function ExportAndImport(props: { onCancel: () => void }) {
     if (!exportItems.includes(ExportDataItem.Conversations)) {
       delete data[StorageKey.ChatSessions]
       delete data[StorageKey.ChatSessionsList]
+      delete data[StorageKey.ChatProjects]
       Object.keys(data).forEach((key) => {
         if (key.startsWith('session:')) {
           delete data[key]

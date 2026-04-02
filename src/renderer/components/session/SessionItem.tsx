@@ -1,7 +1,7 @@
 import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Flex, Text } from '@mantine/core'
 import type { SessionMeta } from '@shared/types'
-import { IconCopy, IconDots, IconEdit, IconStar, IconStarFilled, IconTrash } from '@tabler/icons-react'
+import { IconCopy, IconDots, IconEdit, IconFolder, IconStar, IconStarFilled, IconTrash } from '@tabler/icons-react'
 import clsx from 'clsx'
 import { memo, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -54,6 +54,15 @@ function SessionItem(props: Props) {
         icon: IconCopy,
         onClick: () => {
           copyAndSwitchSession(session)
+        },
+      },
+      {
+        text: t('Move to project'),
+        icon: IconFolder,
+        onClick: async () => {
+          await NiceModal.show('move-session-to-project', {
+            sessionId: session.id,
+          })
         },
       },
       {

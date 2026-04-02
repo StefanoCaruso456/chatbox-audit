@@ -1,3 +1,4 @@
+import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Box, Collapse, Flex, Image, NavLink, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import SwipeableDrawer from '@mui/material/SwipeableDrawer'
 import {
@@ -6,6 +7,7 @@ import {
   IconCirclePlus,
   IconCode,
   IconFolder,
+  IconFolderPlus,
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
   IconMessageChatbot,
@@ -22,7 +24,7 @@ import { ScalableIcon } from './components/common/ScalableIcon'
 import ThemeSwitchButton from './components/dev/ThemeSwitchButton'
 import SessionItem from './components/session/SessionItem'
 import { FORCE_ENABLE_DEV_PAGES } from './dev/devToolsConfig'
-import { useMyCopilots, useRemoteCopilots } from './hooks/useCopilots'
+import { useProjects } from './hooks/useProjects'
 import useNeedRoomForMacWinControls from './hooks/useNeedRoomForWinControls'
 import { useIsSmallScreen, useSidebarWidth } from './hooks/useScreenChange'
 import useVersion from './hooks/useVersion'
@@ -46,33 +48,44 @@ export default function Sidebar() {
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
   const setOpenSearchDialog = useUIStore((s) => s.setOpenSearchDialog)
   const { sessionMetaList: sortedSessions } = useSessionList()
-  const { copilots: myCopilots } = useMyCopilots()
-  const { copilots: remoteCopilots } = useRemoteCopilots()
+  const { projects } = useProjects()
 
   const sidebarWidth = useSidebarWidth()
   const isSmallScreen = useIsSmallScreen()
   const currentPath = routerState.location.pathname
-  const currentCopilotId = (routerState.location.search as { copilotId?: string } | undefined)?.copilotId
+  const currentSessionId = currentPath.startsWith('/session/') ? currentPath.replace('/session/', '') : null
+  const currentSession = useMemo(
+    () => (sortedSessions || []).find((session) => session.id === currentSessionId),
+    [currentSessionId, sortedSessions]
+  )
+  const currentProjectId = currentSession?.projectId
 
-  const [projectsExpanded, setProjectsExpanded] = useState(() => Boolean(currentCopilotId))
+  const [projectsExpanded, setProjectsExpanded] = useState(() => Boolean(currentProjectId))
   const [chatsExpanded, setChatsExpanded] = useState(() => currentPath.startsWith('/session/'))
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Record<string, boolean>>({})
   const [isResizing, setIsResizing] = useState(false)
   const resizeStartX = useRef<number>(0)
   const resizeStartWidth = useRef<number>(0)
 
   const { needRoomForMacWindowControls } = useNeedRoomForMacWinControls()
 
-  const projectItems = useMemo(() => {
-    const local = [...myCopilots].sort((a, b) => {
-      if (a.starred !== b.starred) {
-        return a.starred ? -1 : 1
+  const validProjectIds = useMemo(() => new Set(projects.map((project) => project.id)), [projects])
+  const unassignedSessions = useMemo(
+    () => (sortedSessions || []).filter((session) => !session.projectId || !validProjectIds.has(session.projectId)),
+    [sortedSessions, validProjectIds]
+  )
+  const sessionsByProject = useMemo(() => {
+    const grouped = new Map<string, typeof sortedSessions>()
+    for (const project of projects) {
+      grouped.set(project.id, [])
+    }
+    for (const session of sortedSessions || []) {
+      if (session.projectId && grouped.has(session.projectId)) {
+        grouped.get(session.projectId)?.push(session)
       }
-      return (b.usedCount || 0) - (a.usedCount || 0)
-    })
-    const seen = new Set(local.map((copilot) => copilot.id))
-    const remote = remoteCopilots.filter((copilot) => !seen.has(copilot.id))
-    return [...local, ...remote]
-  }, [myCopilots, remoteCopilots])
+    }
+    return grouped
+  }, [projects, sortedSessions])
 
   const handleCreateNewSession = useCallback(() => {
     navigate({ to: `/` })
@@ -119,10 +132,11 @@ export default function Sidebar() {
   }, [isResizing, language, setSidebarWidth])
 
   useEffect(() => {
-    if (currentCopilotId) {
+    if (currentProjectId) {
       setProjectsExpanded(true)
+      setExpandedProjectIds((prev) => ({ ...prev, [currentProjectId]: true }))
     }
-  }, [currentCopilotId])
+  }, [currentProjectId])
 
   useEffect(() => {
     if (currentPath.startsWith('/session/')) {
@@ -208,24 +222,43 @@ export default function Sidebar() {
             />
             <Collapse in={projectsExpanded}>
               <Stack gap={4} pt={4} pb="xs">
-                {projectItems.map((project) => (
-                  <SidebarProjectItem
-                    key={project.id}
-                    label={project.name}
-                    selected={currentCopilotId === project.id}
-                    onClick={() => {
-                      navigate({
-                        to: '/',
-                        search: {
-                          copilotId: project.id,
-                        },
-                      })
-                      if (isSmallScreen) {
-                        setShowSidebar(false)
-                      }
-                    }}
-                  />
-                ))}
+                <SidebarPrimaryAction
+                  icon={IconFolderPlus}
+                  label={t('New project')}
+                  onClick={() => void NiceModal.show('create-project')}
+                  compact
+                />
+
+                {projects.map((project) => {
+                  const projectSessions = sessionsByProject.get(project.id) || []
+                  const expanded = Boolean(expandedProjectIds[project.id])
+
+                  return (
+                    <Box key={project.id}>
+                      <SidebarProjectDisclosure
+                        label={project.name}
+                        chatCount={projectSessions.length}
+                        expanded={expanded}
+                        selected={currentProjectId === project.id}
+                        onClick={() =>
+                          setExpandedProjectIds((prev) => ({
+                            ...prev,
+                            [project.id]: !prev[project.id],
+                          }))
+                        }
+                      />
+                      <Collapse in={expanded}>
+                        <Stack gap={2} pt={4}>
+                          {projectSessions.map((session) => (
+                            <Box key={session.id} pl="lg">
+                              <SessionItem session={session} selected={currentPath === `/session/${session.id}`} />
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Collapse>
+                    </Box>
+                  )
+                })}
               </Stack>
             </Collapse>
 
@@ -236,7 +269,7 @@ export default function Sidebar() {
             />
             <Collapse in={chatsExpanded}>
               <Stack gap={2} pt={4}>
-                {(sortedSessions || []).map((session) => (
+                {unassignedSessions.map((session) => (
                   <SessionItem key={session.id} session={session} selected={currentPath === `/session/${session.id}`} />
                 ))}
               </Stack>
@@ -338,17 +371,20 @@ function SidebarPrimaryAction({
   label,
   onClick,
   emphasized = false,
+  compact = false,
 }: {
   icon: ElementType<IconProps>
   label: string
   onClick: () => void
   emphasized?: boolean
+  compact?: boolean
 }) {
   return (
     <UnstyledButton
       onClick={onClick}
       className={clsx(
-        'w-full rounded-xl px-3 py-3 transition-colors',
+        'w-full transition-colors',
+        compact ? 'rounded-lg px-3 py-2.5' : 'rounded-xl px-3 py-3',
         emphasized
           ? 'bg-chatbox-background-gray-secondary hover:bg-chatbox-background-brand-secondary'
           : 'hover:bg-chatbox-background-gray-secondary'
@@ -384,7 +420,19 @@ function SidebarDisclosure({ label, expanded, onClick }: { label: string; expand
   )
 }
 
-function SidebarProjectItem({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+function SidebarProjectDisclosure({
+  label,
+  chatCount,
+  expanded,
+  selected,
+  onClick,
+}: {
+  label: string
+  chatCount: number
+  expanded: boolean
+  selected: boolean
+  onClick: () => void
+}) {
   return (
     <UnstyledButton
       onClick={onClick}
@@ -393,15 +441,28 @@ function SidebarProjectItem({ label, selected, onClick }: { label: string; selec
         selected ? 'bg-chatbox-background-brand-secondary' : 'hover:bg-chatbox-background-gray-secondary'
       )}
     >
-      <Flex align="center" gap="sm">
-        <ScalableIcon
-          icon={IconFolder}
-          size={18}
-          className={selected ? 'text-chatbox-brand' : 'text-chatbox-tertiary'}
-        />
-        <Text lineClamp={1} c={selected ? 'chatbox-brand' : 'chatbox-primary'}>
-          {label}
-        </Text>
+      <Flex align="center" justify="space-between" gap="sm">
+        <Flex align="center" gap="sm" maw="80%">
+          <ScalableIcon
+            icon={IconFolder}
+            size={18}
+            className={selected ? 'text-chatbox-brand' : 'text-chatbox-tertiary'}
+          />
+          <Text lineClamp={1} c={selected ? 'chatbox-brand' : 'chatbox-primary'}>
+            {label}
+          </Text>
+        </Flex>
+
+        <Flex align="center" gap={6}>
+          <Text size="xs" c="chatbox-tertiary">
+            {chatCount}
+          </Text>
+          <ScalableIcon
+            icon={expanded ? IconChevronDown : IconChevronRight}
+            size={16}
+            className="text-chatbox-tertiary"
+          />
+        </Flex>
       </Flex>
     </UnstyledButton>
   )

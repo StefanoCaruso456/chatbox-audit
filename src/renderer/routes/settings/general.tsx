@@ -325,6 +325,7 @@ const ImportExportDataSection = () => {
     }
     if (!exportItems.includes(ExportDataItem.Conversations)) {
       delete data[StorageKey.ChatSessions]
+      delete data[StorageKey.ChatProjects]
     }
     if (!exportItems.includes(ExportDataItem.Copilot)) {
       delete data[StorageKey.MyCopilots]
