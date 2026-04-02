@@ -117,12 +117,29 @@ export const MessageToolCallPartSchema = z.object({
   result: z.unknown().optional(),
 })
 
+export const MessageEmbeddedAppPartSchema = z.object({
+  type: z.literal('embedded-app'),
+  appId: z.string(),
+  appName: z.string(),
+  appSessionId: z.string().optional(),
+  sourceUrl: z.string().url(),
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  status: z.enum(['loading', 'ready', 'error']),
+  minHeight: z.number().int().positive().optional(),
+  aspectRatio: z.number().positive().optional(),
+  sandbox: z.string().optional(),
+  allowedOrigin: z.string().optional(),
+  errorMessage: z.string().optional(),
+})
+
 export const MessageContentPartSchema = z.discriminatedUnion('type', [
   MessageTextPartSchema,
   MessageImagePartSchema,
   MessageInfoPartSchema,
   MessageReasoningPartSchema,
   MessageToolCallPartSchema,
+  MessageEmbeddedAppPartSchema,
 ])
 
 export const MessageContentPartsSchema = z.array(MessageContentPartSchema)
@@ -154,6 +171,18 @@ export const MessageStatusSchema = z.discriminatedUnion('type', [
     attempt: z.number(),
     maxAttempts: z.number(),
     error: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('launching_app'),
+    appName: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('loading_embedded_app'),
+    appName: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('waiting_app_completion'),
+    appName: z.string().optional(),
   }),
 ])
 
@@ -298,6 +327,7 @@ export type MessageToolCallPart<Args = unknown, Result = unknown> = z.infer<type
   args: Args
   result?: Result
 }
+export type MessageEmbeddedAppPart = z.infer<typeof MessageEmbeddedAppPartSchema>
 export type MessageContentParts = z.infer<typeof MessageContentPartsSchema>
 export type StreamTextResult = z.infer<typeof StreamTextResultSchema>
 export type ToolUseScope = z.infer<typeof ToolUseScopeSchema>

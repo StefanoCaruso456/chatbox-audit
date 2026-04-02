@@ -13,7 +13,7 @@ import {
   type SessionType,
   type Settings,
 } from '@shared/types'
-import { cloneMessage, getMessageText, mergeMessages } from '@shared/utils/message'
+import { cloneMessage, mergeMessages } from '@shared/utils/message'
 import { identity, pickBy } from 'lodash'
 import { createModelDependencies } from '@/adapters'
 import * as appleAppStore from '@/packages/apple_app_store'
@@ -99,6 +99,20 @@ export function createLoadingPictures(n: number): MessagePicture[] {
     ret.push({ loading: true })
   }
   return ret
+}
+
+function hasVisibleAssistantContent(message: Message): boolean {
+  return (message.contentParts || []).some((part) => {
+    if (part.type === 'text' || part.type === 'reasoning') {
+      return part.text.trim().length > 0
+    }
+
+    if (part.type === 'info') {
+      return part.text.trim().length > 0
+    }
+
+    return true
+  })
 }
 
 /**
@@ -188,14 +202,17 @@ export async function generate(
           { compactionPoints: session.compactionPoints }
         )
         const modifyMessageCache: OnResultChangeWithCancel = async (updated) => {
-          const textLength = getMessageText(targetMsg, true, true).length
-          if (!firstTokenLatency && textLength > 0) {
+          const nextMessage = {
+            ...targetMsg,
+            ...pickBy(updated, identity),
+          }
+          const hasVisibleContent = hasVisibleAssistantContent(nextMessage)
+          if (!firstTokenLatency && hasVisibleContent) {
             firstTokenLatency = Date.now() - startTime
           }
           targetMsg = {
-            ...targetMsg,
-            ...pickBy(updated, identity),
-            status: textLength > 0 ? [] : targetMsg.status,
+            ...nextMessage,
+            status: hasVisibleContent ? [] : targetMsg.status,
             firstTokenLatency,
           }
           // update cache on each chunk and persist to storage periodically
@@ -435,7 +452,10 @@ export async function genMessageContext(
     const keys = Array.from(allStorageKeys)
     const contents = await Promise.all(keys.map((key) => storageGetBlob(key)))
     keys.forEach((key, index) => {
-      blobContents.set(key, contents[index])
+      const content = contents[index]
+      if (typeof content === 'string') {
+        blobContents.set(key, content)
+      }
     })
   }
 
@@ -497,7 +517,7 @@ export async function genMessageContext(
               fileKey: isTruncated ? file.storageKey : undefined,
             })
 
-            const attachment = prefix + contentToAdd + '\n' + suffix
+            const attachment = `${prefix}${contentToAdd}\n${suffix}`
             msg = mergeMessages(msg, createMessage(msg.role, attachment))
           }
         }
@@ -535,7 +555,7 @@ export async function genMessageContext(
               fileKey: isTruncated ? link.storageKey : undefined,
             })
 
-            const attachment = prefix + contentToAdd + '\n' + suffix
+            const attachment = `${prefix}${contentToAdd}\n${suffix}`
             msg = mergeMessages(msg, createMessage(msg.role, attachment))
           }
         }

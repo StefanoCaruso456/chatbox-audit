@@ -1,6 +1,6 @@
 import type { Message } from '@shared/types'
 import { describe, expect, test } from 'vitest'
-import { sequenceMessages } from '../../shared/utils/message'
+import { getMessageText, sequenceMessages } from '../../shared/utils/message'
 
 describe('SequenceMessages', () => {
   // Each test case
@@ -275,4 +275,22 @@ L3
     const result3 = sequenceMessages(originalMessages)
     expect(result3[0].contentParts[0]).toEqual({ type: 'text', text: '> Hello\n' })
   })
+})
+
+test('getMessageText includes a readable placeholder for embedded app parts', () => {
+  const message: Message = {
+    id: 'assistant.app.1',
+    role: 'assistant',
+    contentParts: [
+      {
+        type: 'embedded-app',
+        appId: 'chess.internal',
+        appName: 'Chess Tutor',
+        sourceUrl: 'https://example.com/chess',
+        status: 'loading',
+      },
+    ],
+  }
+
+  expect(getMessageText(message)).toContain('[embedded app: Chess Tutor]')
 })

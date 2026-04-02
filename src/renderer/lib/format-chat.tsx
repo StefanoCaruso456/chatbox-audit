@@ -4,7 +4,7 @@ import ReactDOMServer from 'react-dom/server'
 import Markdown, { BlockCodeCollapsedStateProvider } from '@/components/Markdown'
 import * as base64 from '@/packages/base64'
 import storage from '@/storage'
-import type { Message, MessageToolCallPart, SessionThread } from '../../shared/types'
+import type { Message, MessageEmbeddedAppPart, MessageToolCallPart, SessionThread } from '../../shared/types'
 import { getMessageText } from '../../shared/utils/message'
 
 type ToolCallSummary = {
@@ -126,10 +126,28 @@ function renderToolCallHtml(summary: ToolCallSummary): string {
   return html
 }
 
+function renderEmbeddedAppMarkdown(part: MessageEmbeddedAppPart): string {
+  return `Embedded App: ${part.title || part.appName} (status: ${part.status})\n`
+}
+
+function renderEmbeddedAppTxt(part: MessageEmbeddedAppPart): string {
+  return `    Embedded App: ${part.title || part.appName} (status: ${part.status})\n`
+}
+
+function renderEmbeddedAppHtml(part: MessageEmbeddedAppPart): string {
+  let html = '<div class="mt-2 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm">\n'
+  html += `<p class="font-semibold text-sm">${escapeHtml(part.title || part.appName)} <span class="text-xs text-slate-500">(embedded app, status: ${escapeHtml(part.status)})</span></p>\n`
+  if (part.summary) {
+    html += `<p class="text-sm text-slate-600 mt-1">${escapeHtml(part.summary)}</p>\n`
+  }
+  html += '</div>\n'
+  return html
+}
+
 export function formatChatAsMarkdown(sessionName: string, threads: SessionThread[]) {
   let content = `# ${sessionName}\n\n`
   for (let i = 0; i < threads.length; i++) {
-    let thread = threads[i]
+    const thread = threads[i]
     content += `## ${i + 1}. ${thread.name}\n\n`
     for (const msg of thread.messages) {
       const attachments = getAttachmentNames(msg)
@@ -142,7 +160,7 @@ export function formatChatAsMarkdown(sessionName: string, threads: SessionThread
         }
         const rawText = textBuffer.join('\n')
         const sanitized = rawText.replaceAll(/```\w*/g, '')
-        content += '```\n' + sanitized + '\n```\n\n'
+        content += `\`\`\`\n${sanitized}\n\`\`\`\n\n`
         textBuffer.length = 0
       }
       content += `**${msg.role}**: \n\n`
@@ -171,11 +189,16 @@ export function formatChatAsMarkdown(sessionName: string, threads: SessionThread
           }
           if (part.type === 'info') {
             textBuffer.push(part.text)
+            continue
+          }
+          if (part.type === 'embedded-app') {
+            flushTextBuffer()
+            content += renderEmbeddedAppMarkdown(part)
           }
         }
         flushTextBuffer()
       } else {
-        content += '```\n' + getMessageText(msg).replaceAll(/```\w*/g, '') + '\n```\n\n'
+        content += `\`\`\`\n${getMessageText(msg).replaceAll(/```\w*/g, '')}\n\`\`\`\n\n`
       }
       if (attachments.length > 0) {
         content += 'Attachments:\n'
@@ -200,7 +223,7 @@ export function formatChatAsMarkdown(sessionName: string, threads: SessionThread
 export function formatChatAsTxt(sessionName: string, threads: SessionThread[]) {
   let content = `==================================== [[${sessionName}]] ====================================`
   for (let i = 0; i < threads.length; i++) {
-    let thread = threads[i]
+    const thread = threads[i]
     content += `\n\n------------------------------ [${i + 1}. ${thread.name}] ------------------------------\n\n`
     for (const msg of thread.messages) {
       const attachments = getAttachmentNames(msg)
@@ -240,6 +263,11 @@ export function formatChatAsTxt(sessionName: string, threads: SessionThread[]) {
           }
           if (part.type === 'info') {
             textBuffer.push(part.text)
+            continue
+          }
+          if (part.type === 'embedded-app') {
+            flushTextBuffer()
+            content += renderEmbeddedAppTxt(part)
           }
         }
         flushTextBuffer()
@@ -265,7 +293,7 @@ export function formatChatAsTxt(sessionName: string, threads: SessionThread[]) {
 export async function formatChatAsHtml(sessionName: string, threads: SessionThread[]) {
   let content = '<div class="prose-sm">\n'
   for (let i = 0; i < threads.length; i++) {
-    let thread = threads[i]
+    const thread = threads[i]
     content += `<h2>${i + 1}. ${thread.name}</h2>\n`
     for (const msg of thread.messages) {
       const attachments = getAttachmentNames(msg)
@@ -317,6 +345,8 @@ export async function formatChatAsHtml(sessionName: string, threads: SessionThre
             }
             content += `<img src="${url}" class="my-2" />\n`
           }
+        } else if (p.type === 'embedded-app') {
+          content += renderEmbeddedAppHtml(p)
         }
       }
       if (attachments.length > 0) {
