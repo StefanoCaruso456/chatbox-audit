@@ -1,4 +1,10 @@
-export type BackendErrorDomain = 'api' | 'registry' | 'conversation' | 'app-session' | 'tool-invocation'
+export type BackendErrorDomain =
+  | 'api'
+  | 'registry'
+  | 'conversation'
+  | 'app-session'
+  | 'tool-invocation'
+  | 'app-context'
 
 export interface BackendSuccess<T> {
   ok: true
