@@ -7,6 +7,8 @@ export type AppCategory =
   | 'Study, Assessment & Engagement'
   | 'Creativity, Coding & Projects'
 
+export type LaunchMode = 'iframe' | 'external'
+
 export interface ApprovedApp {
   id: string
   name: string
@@ -15,6 +17,7 @@ export interface ApprovedApp {
   category: AppCategory
   gradeRanges: GradeRange[]
   launchUrl: string
+  launchMode: LaunchMode
   isApproved: boolean
   tags: string[]
 }
@@ -84,4 +87,12 @@ export function isMultiLevelApp(app: Pick<ApprovedApp, 'gradeRanges'>) {
   return (
     app.gradeRanges.includes('Multi-level') || app.gradeRanges.filter((range) => range !== 'Multi-level').length > 1
   )
+}
+
+export function formatAppTagLabel(tag: string) {
+  return tag
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
