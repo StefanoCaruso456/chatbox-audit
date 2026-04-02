@@ -2,14 +2,8 @@ import { Badge, Button, Modal, ScrollArea, Stack, Text, Title } from '@mantine/c
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { approvedApps } from '@/data/approvedApps'
-import {
-  APP_CATEGORY_OPTIONS,
-  gradeRangeMeta,
-  isMultiLevelApp,
-  type AppCategory,
-  type GradeRange,
-} from '@/types/apps'
 import { useUIStore } from '@/stores/uiStore'
+import { APP_CATEGORY_OPTIONS, type AppCategory, type GradeRange, gradeRangeMeta, isMultiLevelApp } from '@/types/apps'
 import AppCard from './AppCard'
 import AppFilters from './AppFilters'
 import AppSearch from './AppSearch'
@@ -87,7 +81,7 @@ export default function AppsModal() {
           </Title>
           <Text size="sm" c="chatbox-secondary">
             {t(
-              'Approved education tools curated for K-12. Apps open beside chat when embedding is supported, or in a trusted new tab when vendors require it.'
+              'Approved education tools curated for K-12. Select any app to open it in the companion panel beside chat.'
             )}
           </Text>
         </Stack>

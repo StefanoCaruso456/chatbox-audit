@@ -1,17 +1,4 @@
-import {
-  ActionIcon,
-  Badge,
-  Box,
-  Button,
-  Divider,
-  Drawer,
-  Flex,
-  Group,
-  Loader,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core'
+import { ActionIcon, Badge, Box, Button, Divider, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
 import { IconExternalLink, IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -19,7 +6,7 @@ import { getApprovedAppById } from '@/data/approvedApps'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
-import { formatAppTagLabel, type ApprovedApp } from '@/types/apps'
+import { type ApprovedApp, formatAppTagLabel } from '@/types/apps'
 import AppCategoryBadge from './AppCategoryBadge'
 import AppGradeBadge from './AppGradeBadge'
 import AppIcon from './AppIcon'
@@ -77,12 +64,7 @@ function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => voi
         </Stack>
       </Flex>
 
-      <ActionIcon
-        variant="subtle"
-        color="chatbox-secondary"
-        onClick={onClose}
-        aria-label={t('Close app')}
-      >
+      <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
         <IconX size={18} />
       </ActionIcon>
     </Flex>
@@ -105,13 +87,8 @@ function AppPanelBadges({ app }: { app: ApprovedApp }) {
   )
 }
 
-function AppTrustNotice({ app }: { app: ApprovedApp }) {
+function AppTrustNotice() {
   const { t } = useTranslation()
-
-  const copy =
-    app.launchMode === 'iframe'
-      ? t('This approved tool opens beside chat when the vendor supports secure classroom embedding.')
-      : t('This approved tool opens in a new tab because the vendor keeps sign-in and learning activity on its own site.')
 
   return (
     <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/85 px-4 py-3">
@@ -120,62 +97,10 @@ function AppTrustNotice({ app }: { app: ApprovedApp }) {
           {t('Curated for K-12 classrooms')}
         </Text>
         <Text size="sm" c="chatbox-secondary">
-          {copy}
+          {t('This approved tool opens beside chat when the vendor supports secure classroom embedding.')}
         </Text>
       </Stack>
     </div>
-  )
-}
-
-function ExternalLaunchSurface({ app }: { app: ApprovedApp }) {
-  const { t } = useTranslation()
-  const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
-  const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
-
-  const resolvedLaunchUrl = useMemo(() => (app ? resolveLaunchUrl(app.launchUrl) : ''), [app])
-
-  return (
-    <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
-      <AppPanelHeader app={app} onClose={closeApprovedApp} />
-      <AppPanelBadges app={app} />
-      <AppTrustNotice app={app} />
-
-      <div className="rounded-[1.5rem] border border-chatbox-border-primary/70 bg-chatbox-background-primary/80 p-5">
-        <Stack gap="md">
-          <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-secondary/70 p-4">
-            <Stack gap={6}>
-              <Text size="sm" fw={700}>
-                {t('External launch')}
-              </Text>
-              <Text size="sm" c="chatbox-secondary">
-                {t('Chat stays open while you launch the approved tool in a separate tab.')}
-              </Text>
-              <Text size="sm" c="chatbox-tertiary" className="break-all">
-                {resolvedLaunchUrl}
-              </Text>
-            </Stack>
-          </div>
-
-          <Group gap="xs">
-            <Button
-              color="chatbox-brand"
-              leftSection={<IconExternalLink size={16} />}
-              onClick={() => window.open(resolvedLaunchUrl, '_blank', 'noopener,noreferrer')}
-            >
-              {t('Open vendor site')}
-            </Button>
-            <Button
-              variant="light"
-              color="chatbox-brand"
-              leftSection={<IconLayoutGrid size={16} />}
-              onClick={() => setApprovedAppsModalOpen(true)}
-            >
-              {t('Switch apps')}
-            </Button>
-          </Group>
-        </Stack>
-      </div>
-    </Stack>
   )
 }
 
@@ -203,13 +128,19 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [app, reloadNonce])
+  }, [app])
+
+  const handleReload = () => {
+    setIsLoading(true)
+    setShowLoadNotice(false)
+    setReloadNonce((value) => value + 1)
+  }
 
   return (
     <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
       <AppPanelHeader app={app} onClose={closeApprovedApp} />
       <AppPanelBadges app={app} />
-      <AppTrustNotice app={app} />
+      <AppTrustNotice />
 
       <Group gap="xs">
         <Button
@@ -228,12 +159,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         >
           {t('Open in new tab')}
         </Button>
-        <ActionIcon
-          variant="subtle"
-          color="chatbox-secondary"
-          onClick={() => setReloadNonce((value) => value + 1)}
-          aria-label={t('Reload app')}
-        >
+        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
           <IconReload size={17} />
         </ActionIcon>
       </Group>
@@ -298,11 +224,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
   }
 
   const activeApp = getApprovedAppById(activeApprovedAppId)
-  const panelContent = activeApp
-    ? activeApp.launchMode === 'external'
-      ? <ExternalLaunchSurface app={activeApp} />
-      : <AppIframeSurface app={activeApp} />
-    : null
+  const panelContent = activeApp ? <AppIframeSurface app={activeApp} /> : null
 
   if (isSmallScreen) {
     return (
