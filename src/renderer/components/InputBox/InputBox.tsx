@@ -1171,7 +1171,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
 
                 {!isSmallScreen && (
                   <Tooltip
-                    label={conversationModeHintActive ? t('Review Conversation Mode') : t('Conversation Mode')}
+                    label={t('Conversation Mode and Settings')}
                     position="top"
                     withArrow
                     opened={conversationModeHintActive ? conversationModeHintVisible : undefined}
@@ -1228,7 +1228,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                         leftSection={<ScalableIcon icon={IconAdjustmentsHorizontal} size={16} />}
                         onClick={handleConversationModeClick}
                       >
-                        {conversationModeHintActive ? t('Review Conversation Mode') : t('Conversation Mode')}
+                        {t('Conversation Mode and Settings')}
                       </Menu.Item>
                     </Menu.Dropdown>
                   </Menu>
