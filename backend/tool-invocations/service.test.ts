@@ -236,9 +236,11 @@ describe('ToolInvocationLoggingService', () => {
 
     expect(duplicate).toEqual({
       ok: false,
+      domain: 'tool-invocation',
       code: 'duplicate-tool-call',
       message: 'Tool call "tool-call.chess.4" already exists.',
       details: undefined,
+      retryable: false,
     })
   })
 
@@ -268,9 +270,11 @@ describe('ToolInvocationLoggingService', () => {
 
     expect(retryStart).toEqual({
       ok: false,
+      domain: 'tool-invocation',
       code: 'invalid-transition',
       message: 'Tool call "tool-call.chess.5" cannot transition from "succeeded" to "running".',
       details: undefined,
+      retryable: false,
     })
   })
 })

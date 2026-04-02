@@ -1,4 +1,5 @@
 import { type AppManifest, type ContractValidationFailure, validateAppManifest } from '@shared/contracts/v1'
+import { failureResult } from '../errors'
 import type { AppRegistryRepository } from './repository'
 import type {
   AppRegistryFailure,
@@ -183,11 +184,6 @@ export class AppRegistryService {
     message: string,
     details?: string[]
   ): AppRegistryFailure {
-    return {
-      ok: false,
-      code,
-      message,
-      details,
-    }
+    return failureResult('registry', code, message, { details })
   }
 }
