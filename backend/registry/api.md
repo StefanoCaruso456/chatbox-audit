@@ -120,12 +120,16 @@ All route failures use the same JSON envelope:
 {
   "ok": false,
   "error": {
+    "domain": "api",
     "code": "invalid-query",
     "message": "Registry list query is invalid.",
-    "details": ["Optional validation details"]
+    "details": ["Optional validation details"],
+    "retryable": false
   }
 }
 ```
+
+`domain` distinguishes route-surface failures such as invalid JSON or invalid query params from registry-domain failures returned by the service layer.
 
 ## Error Codes
 

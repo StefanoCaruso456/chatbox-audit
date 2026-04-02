@@ -1,4 +1,5 @@
 import type { JsonObject } from '@shared/contracts/v1'
+import { failureResult } from '../errors'
 import type { ConversationRepository } from './repository'
 import type {
   AppendConversationMessageRequest,
@@ -375,11 +376,6 @@ export class ConversationService {
     message: string,
     details?: string[]
   ): ConversationServiceFailure {
-    return {
-      ok: false,
-      code,
-      message,
-      details,
-    }
+    return failureResult('conversation', code, message, { details })
   }
 }

@@ -8,6 +8,7 @@ import type {
   CompletionSignal,
   JsonObject,
 } from '@shared/contracts/v1'
+import type { BackendFailureResult, BackendResult } from '../errors'
 
 export type AppSessionRecord = AppSessionState
 
@@ -106,16 +107,6 @@ export type AppSessionErrorCode =
   | 'active-session-conflict'
   | 'invalid-session-state'
 
-export interface AppSessionSuccess<T> {
-  ok: true
-  value: T
-}
+export type AppSessionFailureResult = BackendFailureResult<AppSessionErrorCode, 'app-session'>
 
-export interface AppSessionFailureResult {
-  ok: false
-  code: AppSessionErrorCode
-  message: string
-  details?: string[]
-}
-
-export type AppSessionResult<T> = AppSessionSuccess<T> | AppSessionFailureResult
+export type AppSessionResult<T> = BackendResult<T, AppSessionErrorCode, 'app-session'>

@@ -66,8 +66,10 @@ describe('AppRegistryApi', () => {
     expect(body).toEqual({
       ok: false,
       error: {
+        domain: 'api',
         code: 'invalid-json',
         message: 'Request body must be valid JSON.',
+        retryable: false,
       },
     })
   })
@@ -108,6 +110,7 @@ describe('AppRegistryApi', () => {
 
     expect(response.status).toBe(409)
     expect(body.ok).toBe(false)
+    expect(body.error.domain).toBe('registry')
     expect(body.error.code).toBe('slug-conflict')
   })
 
@@ -149,8 +152,10 @@ describe('AppRegistryApi', () => {
     expect(body).toEqual({
       ok: false,
       error: {
+        domain: 'api',
         code: 'unapproved-read-disabled',
         message: 'Unapproved registry exposure is disabled on this API surface.',
+        retryable: false,
       },
     })
   })

@@ -181,9 +181,11 @@ describe('ConversationService', () => {
     })
     expect(duplicateConversation).toEqual({
       ok: false,
+      domain: 'conversation',
       code: 'conversation-already-exists',
       message: 'Conversation "conversation.6" already exists.',
       details: undefined,
+      retryable: false,
     })
 
     const firstMessage = await service.appendMessage({
@@ -206,9 +208,11 @@ describe('ConversationService', () => {
 
     expect(duplicateSequence).toEqual({
       ok: false,
+      domain: 'conversation',
       code: 'message-sequence-conflict',
       message: 'Conversation "conversation.6" already has a message at sequence 0.',
       details: undefined,
+      retryable: false,
     })
   })
 
@@ -239,9 +243,11 @@ describe('ConversationService', () => {
 
     expect(appendAfterArchive).toEqual({
       ok: false,
+      domain: 'conversation',
       code: 'conversation-not-open',
       message: 'Conversation "conversation.7" is not active and cannot receive new messages.',
       details: undefined,
+      retryable: false,
     })
   })
 })

@@ -1,4 +1,5 @@
 import type { JsonObject, JsonValue } from '@shared/contracts/v1'
+import type { BackendFailureResult, BackendResult } from '../errors'
 
 export type ConversationStatus = 'active' | 'archived' | 'deleted'
 
@@ -83,16 +84,6 @@ export type ConversationServiceErrorCode =
   | 'message-already-exists'
   | 'message-sequence-conflict'
 
-export interface ConversationServiceSuccess<T> {
-  ok: true
-  value: T
-}
+export type ConversationServiceFailure = BackendFailureResult<ConversationServiceErrorCode, 'conversation'>
 
-export interface ConversationServiceFailure {
-  ok: false
-  code: ConversationServiceErrorCode
-  message: string
-  details?: string[]
-}
-
-export type ConversationServiceResult<T> = ConversationServiceSuccess<T> | ConversationServiceFailure
+export type ConversationServiceResult<T> = BackendResult<T, ConversationServiceErrorCode, 'conversation'>

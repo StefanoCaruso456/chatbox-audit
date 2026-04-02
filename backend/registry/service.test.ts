@@ -60,9 +60,11 @@ describe('AppRegistryService', () => {
 
     expect(result).toEqual({
       ok: false,
+      domain: 'registry',
       code: 'invalid-category',
       message: 'App registration requires a non-empty category.',
       details: undefined,
+      retryable: false,
     })
   })
 
@@ -156,9 +158,11 @@ describe('AppRegistryService', () => {
     })
     expect(blockedLookup).toEqual({
       ok: false,
+      domain: 'registry',
       code: 'not-approved',
       message: `App "${exampleAuthenticatedPlannerManifest.appId}" is not approved for registry exposure.`,
       details: undefined,
+      retryable: false,
     })
   })
 })
