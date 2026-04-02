@@ -20,6 +20,7 @@ import { deleteSession, getSession } from '@/stores/chatStore'
 import { clear as clearSession } from '@/stores/sessionActions'
 import { useUIStore } from '@/stores/uiStore'
 import ActionMenu from '../ActionMenu'
+import AppsTrigger from '../apps/AppsTrigger'
 import Broom from '../icons/Broom'
 import LayoutExpand from '../icons/LayoutExpand'
 import LayoutShrink from '../icons/LayoutShrink'
@@ -94,6 +95,8 @@ export default function Toolbar({ sessionId }: { sessionId: string }) {
           <IconSearch strokeWidth={1.8} />
         </ActionIcon>
       )}
+
+      <AppsTrigger />
 
       {isLargeScreen && (
         <ActionIcon variant="subtle" size={28} color="chatbox-secondary" onClick={() => setWidthFull(!widthFull)}>
@@ -173,6 +176,7 @@ export default function Toolbar({ sessionId }: { sessionId: string }) {
       <ActionIcon variant="subtle" size={24} color="chatbox-secondary" onClick={() => setOpenSearchDialog(true)}>
         <IconSearch strokeWidth={1.8} />
       </ActionIcon>
+      <AppsTrigger />
       <ActionMenu
         position="bottom-end"
         items={[

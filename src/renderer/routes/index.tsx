@@ -10,6 +10,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
+import AppsTrigger from '@/components/apps/AppsTrigger'
+import AppsWorkspace from '@/components/apps/AppsWorkspace'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import InputBox, { type InputBoxPayload } from '@/components/InputBox/InputBox'
 import HomepageIcon from '@/components/icons/HomepageIcon'
@@ -168,101 +170,104 @@ function Index() {
   }, [session])
 
   return (
-    <Page title="">
-      <div className="p-0 flex flex-col h-full">
-        <Stack align="center" justify="center" gap="sm" flex={1}>
-          <HomepageIcon className="h-8" />
-          <Text fw="600" size={isSmallScreen ? 'sm' : 'md'}>
-            {t('What can I help you with today?')}
-          </Text>
-        </Stack>
+    <Page title="" right={<AppsTrigger />}>
+      <AppsWorkspace>
+        <div className="p-0 flex h-full min-h-0 flex-col">
+          <Stack align="center" justify="center" gap="sm" flex={1}>
+            <HomepageIcon className="h-8" />
+            <Text fw="600" size={isSmallScreen ? 'sm' : 'md'}>
+              {t('What can I help you with today?')}
+            </Text>
+          </Stack>
 
-        {!providers.length && (
-          <Box px="sm">
-            <Paper
-              radius="md"
-              shadow="none"
-              withBorder
-              py="md"
-              px="sm"
-              mb="md"
-              className={widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto'}
-            >
-              <Stack gap="sm">
-                <Stack gap="xxs" align="center">
-                  <Text fw={600} className="text-center">
-                    {t('Select and configure an AI model provider')}
-                  </Text>
+          {!providers.length && (
+            <Box px="sm">
+              <Paper
+                radius="md"
+                shadow="none"
+                withBorder
+                py="md"
+                px="sm"
+                mb="md"
+                className={widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto'}
+              >
+                <Stack gap="sm">
+                  <Stack gap="xxs" align="center">
+                    <Text fw={600} className="text-center">
+                      {t('Select and configure an AI model provider')}
+                    </Text>
 
-                  <Text size="xs" c="chatbox-tertiary" className="text-center">
-                    {t(
-                      'To start a conversation, you need to configure at least one AI model. Click the buttons below to get started.'
-                    )}
-                  </Text>
+                    <Text size="xs" c="chatbox-tertiary" className="text-center">
+                      {t(
+                        'To start a conversation, you need to configure at least one AI model. Click the buttons below to get started.'
+                      )}
+                    </Text>
+                  </Stack>
+
+                  <Flex gap="xs" justify="center" align="center">
+                    <Button
+                      size="xs"
+                      variant="light"
+                      h={32}
+                      miw={160}
+                      fw={600}
+                      flex="0 1 auto"
+                      onClick={() => {
+                        router.navigate({
+                          to: isSmallScreen ? '/settings/provider' : '/settings/chatbox-ai',
+                        })
+                      }}
+                    >
+                      {t('Setup Provider')}
+                    </Button>
+                  </Flex>
                 </Stack>
-
-                <Flex gap="xs" justify="center" align="center">
-                  <Button
-                    size="xs"
-                    variant="light"
-                    h={32}
-                    miw={160}
-                    fw={600}
-                    flex="0 1 auto"
-                    onClick={() => {
-                      router.navigate({
-                        to: isSmallScreen ? '/settings/provider' : '/settings/chatbox-ai',
-                      })
-                    }}
-                  >
-                    {t('Setup Provider')}
-                  </Button>
-                </Flex>
-              </Stack>
-            </Paper>
-          </Box>
-        )}
-
-        <Stack gap="sm">
-          {session.copilotId ? (
-            <Box px="md">
-              <Stack gap="sm" className={widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto'}>
-                <Flex align="center" gap="sm">
-                  <CopilotItem name={session.name} picUrl={session.picUrl} selected />
-                  <ActionIcon
-                    size={32}
-                    radius={16}
-                    c="chatbox-tertiary"
-                    bg="#F1F3F5"
-                    onClick={() => setSession((old) => ({ ...old, copilotId: undefined }))}
-                  >
-                    <ScalableIcon icon={IconX} size={24} />
-                  </ActionIcon>
-                </Flex>
-
-                <Text c="chatbox-secondary" className="line-clamp-5">
-                  {session.messages[0]?.contentParts?.map((part) => (part.type === 'text' ? part.text : '')).join('') ||
-                    ''}
-                </Text>
-              </Stack>
+              </Paper>
             </Box>
-          ) : (
-            showCopilotsInNewSession && (
-              <CopilotPicker onSelect={(copilot) => setSession((old) => ({ ...old, copilotId: copilot?.id }))} />
-            )
           )}
 
-          <InputBox
-            sessionType="chat"
-            sessionId="new"
-            model={selectedModel}
-            // fullWidth
-            onSelectModel={onSelectModel}
-            onClickSessionSettings={onClickSessionSettings}
-            onSubmit={handleSubmit}
-          />
-        </Stack>
-      </div>
+          <Stack gap="sm">
+            {session.copilotId ? (
+              <Box px="md">
+                <Stack gap="sm" className={widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto'}>
+                  <Flex align="center" gap="sm">
+                    <CopilotItem name={session.name} picUrl={session.picUrl} selected />
+                    <ActionIcon
+                      size={32}
+                      radius={16}
+                      c="chatbox-tertiary"
+                      bg="#F1F3F5"
+                      onClick={() => setSession((old) => ({ ...old, copilotId: undefined }))}
+                    >
+                      <ScalableIcon icon={IconX} size={24} />
+                    </ActionIcon>
+                  </Flex>
+
+                  <Text c="chatbox-secondary" className="line-clamp-5">
+                    {session.messages[0]?.contentParts
+                      ?.map((part) => (part.type === 'text' ? part.text : ''))
+                      .join('') || ''}
+                  </Text>
+                </Stack>
+              </Box>
+            ) : (
+              showCopilotsInNewSession && (
+                <CopilotPicker onSelect={(copilot) => setSession((old) => ({ ...old, copilotId: copilot?.id }))} />
+              )
+            )}
+
+            <InputBox
+              sessionType="chat"
+              sessionId="new"
+              model={selectedModel}
+              // fullWidth
+              onSelectModel={onSelectModel}
+              onClickSessionSettings={onClickSessionSettings}
+              onSubmit={handleSubmit}
+            />
+          </Stack>
+        </div>
+      </AppsWorkspace>
     </Page>
   )
 }
