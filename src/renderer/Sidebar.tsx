@@ -185,11 +185,9 @@ export default function Sidebar() {
               gap="sm"
               onClick={() => platform.openLink('https://chatboxai.app/')}
               style={{ cursor: 'pointer' }}
+              aria-label="Chatbox"
             >
               <Image src={icon} w={20} h={20} />
-              <Text span c="chatbox-secondary" size="xl" lh={1.2} fw="700">
-                Chatbox
-              </Text>
             </Flex>
             {FORCE_ENABLE_DEV_PAGES && <ThemeSwitchButton size="xs" />}
           </Flex>
