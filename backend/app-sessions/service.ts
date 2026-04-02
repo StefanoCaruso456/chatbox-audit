@@ -4,6 +4,7 @@ import {
   parseAppSessionState,
   validateAppSessionState,
 } from '@shared/contracts/v1'
+import { failureResult } from '../errors'
 import type { AppSessionRepository } from './repository'
 import type {
   AppSessionErrorCode,
@@ -569,11 +570,6 @@ export class AppSessionService {
     message: string,
     details?: string[]
   ): AppSessionFailureResult {
-    return {
-      ok: false,
-      code,
-      message,
-      details,
-    }
+    return failureResult('app-session', code, message, { details })
   }
 }

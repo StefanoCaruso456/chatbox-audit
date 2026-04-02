@@ -1,4 +1,5 @@
 import type { AppAuthType, AppDistribution, AppManifest, AppReviewStatus } from '@shared/contracts/v1'
+import type { BackendFailureResult, BackendResult } from '../errors'
 
 export interface AppRegistryVersionRecord {
   appVersionId: string
@@ -47,16 +48,6 @@ export type AppRegistryErrorCode =
   | 'not-found'
   | 'not-approved'
 
-export interface AppRegistrySuccess<T> {
-  ok: true
-  value: T
-}
+export type AppRegistryFailure = BackendFailureResult<AppRegistryErrorCode, 'registry'>
 
-export interface AppRegistryFailure {
-  ok: false
-  code: AppRegistryErrorCode
-  message: string
-  details?: string[]
-}
-
-export type AppRegistryResult<T> = AppRegistrySuccess<T> | AppRegistryFailure
+export type AppRegistryResult<T> = BackendResult<T, AppRegistryErrorCode, 'registry'>

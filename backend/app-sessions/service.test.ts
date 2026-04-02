@@ -160,9 +160,11 @@ describe('AppSessionService', () => {
 
     expect(conflict).toEqual({
       ok: false,
+      domain: 'app-session',
       code: 'active-session-conflict',
       message: 'Conversation "conversation.4" already has an active app session "app-session.chess.7".',
       details: undefined,
+      retryable: false,
     })
   })
 
@@ -215,9 +217,11 @@ describe('AppSessionService', () => {
     const missing = await service.getSession('app-session.missing')
     expect(missing).toEqual({
       ok: false,
+      domain: 'app-session',
       code: 'not-found',
       message: 'App session "app-session.missing" was not found.',
       details: undefined,
+      retryable: false,
     })
   })
 

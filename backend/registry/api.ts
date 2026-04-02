@@ -1,5 +1,6 @@
 import { AppAuthTypeSchema, AppDistributionSchema, IdentifierSchema, SlugSchema } from '@shared/contracts/v1'
 import { z } from 'zod'
+import { failureResult, toApiErrorBody } from '../errors'
 import type { AppRegistryService } from './service'
 import type { AppRegistryErrorCode, AppRegistryFailure, AppRegistryRecord } from './types'
 
@@ -45,9 +46,11 @@ export interface AppRegistryApiSuccessBody<T> {
 export interface AppRegistryApiErrorBody {
   ok: false
   error: {
+    domain: 'api' | 'registry'
     code: AppRegistryApiErrorCode
     message: string
     details?: string[]
+    retryable?: boolean
   }
 }
 
@@ -207,7 +210,7 @@ function toRegistryResponse(result: { ok: true; value: AppRegistryRecord } | App
     return jsonSuccess(successStatus, { app: result.value })
   }
 
-  return jsonError(statusForRegistryFailure(result.code), result.code, result.message, result.details)
+  return jsonResponse<AppRegistryApiErrorBody>(statusForRegistryFailure(result.code), toApiErrorBody(result))
 }
 
 function statusForRegistryFailure(code: AppRegistryErrorCode): number {
@@ -233,14 +236,7 @@ function jsonSuccess<T>(status: number, data: T): Response {
 }
 
 function jsonError(status: number, code: AppRegistryApiErrorCode, message: string, details?: string[]): Response {
-  return jsonResponse<AppRegistryApiErrorBody>(status, {
-    ok: false,
-    error: {
-      code,
-      message,
-      details,
-    },
-  })
+  return jsonResponse<AppRegistryApiErrorBody>(status, toApiErrorBody(failureResult('api', code, message, { details })))
 }
 
 function jsonResponse<T>(status: number, body: T): Response {
