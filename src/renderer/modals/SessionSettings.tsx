@@ -170,7 +170,7 @@ const SessionSettingsModal = NiceModal.create(
         // fullScreen={isSmallScreen}
         centered
         size="lg"
-        title={t('Conversation Settings')}
+        title={t('Conversation Mode')}
         onFocus={(e) => e.stopPropagation()}
         trapFocus={false}
         // fullWidth
