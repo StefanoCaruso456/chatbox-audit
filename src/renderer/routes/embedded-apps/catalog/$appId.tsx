@@ -1,8 +1,9 @@
-import { Badge, Box, Container, Flex, Image, Stack, Text, Title } from '@mantine/core'
+import { Badge, Box, Container, Flex, Stack, Text, Title } from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
 import { getApprovedAppById } from '@/data/approvedApps'
 import AppCategoryBadge from '@/components/apps/AppCategoryBadge'
 import AppGradeBadge from '@/components/apps/AppGradeBadge'
+import AppIcon from '@/components/apps/AppIcon'
 
 export const Route = createFileRoute('/embedded-apps/catalog/$appId')({
   component: ApprovedAppPlaceholderRoute,
@@ -36,11 +37,11 @@ function ApprovedAppPlaceholderRoute() {
       <Container size="sm" py="xl">
         <Stack gap="lg">
           <Badge radius="xl" size="lg" variant="light" color="green">
-            Approved Apps Placeholder
+            Internal preview route
           </Badge>
 
           <Flex align="center" gap="md">
-            <Image src={app.icon} alt="" w={64} h={64} radius="xl" />
+            <AppIcon app={app} w={64} h={64} radius="xl" />
             <Stack gap={4}>
               <Title order={1} c="white">
                 {app.name}
@@ -66,15 +67,16 @@ function ApprovedAppPlaceholderRoute() {
           <div className="rounded-[1.75rem] border border-white/12 bg-white/6 p-6 backdrop-blur-sm">
             <Stack gap="sm">
               <Title order={3} c="white">
-                Ready for live vendor embed
+                Local embed harness
               </Title>
               <Text c="rgba(255,255,255,0.76)">
-                This placeholder route keeps the full Apps flow working end-to-end while real vendor launch URLs and
-                branded assets are finalized.
+                This route exists so the Apps workspace can be exercised end-to-end during local development or while
+                an approved embed target is still being finalized.
               </Text>
               <Text c="rgba(255,255,255,0.66)">
-                Replace this app&apos;s <code>launchUrl</code> in <code>src/renderer/data/approvedApps.ts</code> with
-                the approved iframe URL when the district-safe embed target is available.
+                The runtime source of truth is <code>src/renderer/data/approvedApps.ts</code>. Point an app&apos;s
+                <code>launchUrl</code> here only when you intentionally want a local preview surface instead of the
+                vendor launch target.
               </Text>
             </Stack>
           </div>

@@ -6,7 +6,7 @@ import { MantineProvider } from '@mantine/core'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import type { ReviewHarnessConfig } from '../-lib/review-harness'
+import type { ReviewHarnessConfig } from '@/packages/review-harness/review-harness'
 import { ReviewHarnessPage } from './ReviewHarnessPage'
 
 function renderHarness(jsx: ReactNode) {

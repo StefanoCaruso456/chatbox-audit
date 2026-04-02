@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
+import { buildReviewHarnessConfig } from '@/packages/review-harness/review-harness'
 import { ReviewHarnessPage } from './review-harness/-components/ReviewHarnessPage'
-import { buildReviewHarnessConfig } from './review-harness/-lib/review-harness'
 
 const searchSchema = z.object({
   appId: z.string().optional(),

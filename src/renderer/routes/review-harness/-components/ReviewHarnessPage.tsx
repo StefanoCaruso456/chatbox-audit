@@ -1,8 +1,11 @@
 import { Alert, Badge, Code, Divider, Group, Paper, ScrollArea, SimpleGrid, Stack, Text, Title } from '@mantine/core'
 import { IconAlertTriangle, IconShieldSearch } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  inspectReviewMessage,
+  type ReviewMessageInspectionResult,
+} from '@/packages/review-harness/review-message-inspector'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
-import type { ReviewHarnessConfig } from '../-lib/review-harness'
 import {
   appendCompletionEvent,
   appendHeartbeatTimeoutEvent,
@@ -12,12 +15,12 @@ import {
   appendReviewerNoteEvent,
   appendRuntimeErrorEvent,
   appendRuntimeStateEvent,
+  summarizeReviewHarnessLog,
   type ReviewHarnessEvent,
   type ReviewHarnessLog,
   type ReviewHarnessReviewSeverity,
-  summarizeReviewHarnessLog,
-} from '../-lib/review-harness-log'
-import { inspectReviewMessage, type ReviewMessageInspectionResult } from '../-lib/review-message-inspector'
+} from '@/packages/review-harness/review-harness-log'
+import type { ReviewHarnessConfig } from '@/packages/review-harness/review-harness'
 
 type LoggedRawMessagePayload = {
   inspection: ReviewMessageInspectionResult

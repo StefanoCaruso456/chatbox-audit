@@ -1,18 +1,4 @@
-import {
-  ActionIcon,
-  Badge,
-  Box,
-  Button,
-  Divider,
-  Drawer,
-  Flex,
-  Group,
-  Image,
-  Loader,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core'
+import { ActionIcon, Badge, Box, Button, Divider, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
 import { IconExternalLink, IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,8 +6,10 @@ import { getApprovedAppById } from '@/data/approvedApps'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
+import { type ApprovedApp, formatAppTagLabel } from '@/types/apps'
 import AppCategoryBadge from './AppCategoryBadge'
 import AppGradeBadge from './AppGradeBadge'
+import AppIcon from './AppIcon'
 
 const iframeSandbox = [
   'allow-downloads',
@@ -54,12 +42,72 @@ function resolveLaunchUrl(launchUrl: string) {
   return new URL(trimmed, window.location.origin).toString()
 }
 
-function AppIframeSurface() {
+function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
   const { t } = useTranslation()
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
+
+  return (
+    <Flex justify="space-between" align="start" gap="sm">
+      <Flex align="center" gap="sm" className="min-w-0">
+        <AppIcon app={app} w={42} h={42} radius="lg" />
+        <Stack gap={2} className="min-w-0">
+          <Group gap={8}>
+            <Title order={4} fz="lg" className="truncate">
+              {app.name}
+            </Title>
+            <Badge radius="xl" variant="light" color="chatbox-success">
+              {t('Approved Apps')}
+            </Badge>
+          </Group>
+          <Text size="sm" c="chatbox-secondary" className="line-clamp-2">
+            {app.shortSummary}
+          </Text>
+        </Stack>
+      </Flex>
+
+      <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
+        <IconX size={18} />
+      </ActionIcon>
+    </Flex>
+  )
+}
+
+function AppPanelBadges({ app }: { app: ApprovedApp }) {
+  return (
+    <Flex wrap="wrap" gap="xs">
+      <AppCategoryBadge category={app.category} />
+      {app.gradeRanges.map((gradeRange) => (
+        <AppGradeBadge key={`${app.id}:${gradeRange}`} gradeRange={gradeRange} />
+      ))}
+      {app.tags.slice(0, 2).map((tag) => (
+        <Badge key={`${app.id}:${tag}`} radius="xl" variant="outline" color="chatbox-secondary">
+          {formatAppTagLabel(tag)}
+        </Badge>
+      ))}
+    </Flex>
+  )
+}
+
+function AppTrustNotice() {
+  const { t } = useTranslation()
+
+  return (
+    <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/85 px-4 py-3">
+      <Stack gap={4}>
+        <Text size="sm" fw={600}>
+          {t('Curated for K-12 classrooms')}
+        </Text>
+        <Text size="sm" c="chatbox-secondary">
+          {t('This approved tool opens beside chat when the vendor supports secure classroom embedding.')}
+        </Text>
+      </Stack>
+    </div>
+  )
+}
+
+function AppIframeSurface({ app }: { app: ApprovedApp }) {
+  const { t } = useTranslation()
   const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
   const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
-  const app = activeApprovedAppId ? getApprovedAppById(activeApprovedAppId) : undefined
 
   const [reloadNonce, setReloadNonce] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -80,64 +128,19 @@ function AppIframeSurface() {
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [app, reloadNonce])
+  }, [app])
 
-  if (!app) {
-    return null
+  const handleReload = () => {
+    setIsLoading(true)
+    setShowLoadNotice(false)
+    setReloadNonce((value) => value + 1)
   }
 
   return (
     <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
-      <Flex justify="space-between" align="start" gap="sm">
-        <Flex align="center" gap="sm" className="min-w-0">
-          <Image src={app.icon} alt="" w={42} h={42} radius="lg" />
-          <Stack gap={2} className="min-w-0">
-            <Group gap={8}>
-              <Title order={4} fz="lg" className="truncate">
-                {app.name}
-              </Title>
-              <Badge radius="xl" variant="light" color="chatbox-success">
-                {t('Approved Apps')}
-              </Badge>
-            </Group>
-            <Text size="sm" c="chatbox-secondary" className="line-clamp-2">
-              {app.shortSummary}
-            </Text>
-          </Stack>
-        </Flex>
-
-        <ActionIcon
-          variant="subtle"
-          color="chatbox-secondary"
-          onClick={() => closeApprovedApp()}
-          aria-label={t('Close app')}
-        >
-          <IconX size={18} />
-        </ActionIcon>
-      </Flex>
-
-      <Flex wrap="wrap" gap="xs">
-        <AppCategoryBadge category={app.category} />
-        {app.gradeRanges.map((gradeRange) => (
-          <AppGradeBadge key={`${app.id}:${gradeRange}`} gradeRange={gradeRange} />
-        ))}
-        {app.tags.slice(0, 2).map((tag) => (
-          <Badge key={`${app.id}:${tag}`} radius="xl" variant="outline" color="chatbox-secondary">
-            {tag}
-          </Badge>
-        ))}
-      </Flex>
-
-      <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/85 px-4 py-3">
-        <Stack gap={4}>
-          <Text size="sm" fw={600}>
-            {t('Curated for K-12 classrooms')}
-          </Text>
-          <Text size="sm" c="chatbox-secondary">
-            {t('Launches inside the chat workspace so teachers and students can stay in one flow.')}
-          </Text>
-        </Stack>
-      </div>
+      <AppPanelHeader app={app} onClose={closeApprovedApp} />
+      <AppPanelBadges app={app} />
+      <AppTrustNotice />
 
       <Group gap="xs">
         <Button
@@ -156,12 +159,7 @@ function AppIframeSurface() {
         >
           {t('Open in new tab')}
         </Button>
-        <ActionIcon
-          variant="subtle"
-          color="chatbox-secondary"
-          onClick={() => setReloadNonce((value) => value + 1)}
-          aria-label={t('Reload app')}
-        >
+        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
           <IconReload size={17} />
         </ActionIcon>
       </Group>
@@ -225,6 +223,9 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
     return null
   }
 
+  const activeApp = getApprovedAppById(activeApprovedAppId)
+  const panelContent = activeApp ? <AppIframeSurface app={activeApp} /> : null
+
   if (isSmallScreen) {
     return (
       <Drawer
@@ -244,7 +245,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
           },
         }}
       >
-        <AppIframeSurface />
+        {panelContent}
       </Drawer>
     )
   }
@@ -256,7 +257,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
         className
       )}
     >
-      <AppIframeSurface />
+      {panelContent}
     </aside>
   )
 }
