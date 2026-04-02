@@ -15,7 +15,7 @@ Service failures now follow a common shape:
 ```ts
 {
   ok: false,
-  domain: 'registry' | 'conversation' | 'app-session' | 'tool-invocation' | 'api',
+  domain: 'registry' | 'conversation' | 'app-session' | 'tool-invocation' | 'app-context' | 'api',
   code: string,
   message: string,
   details?: string[],
@@ -29,7 +29,7 @@ API responses use the same fields under `error`:
 {
   ok: false,
   error: {
-    domain: 'api' | 'registry' | 'conversation' | 'app-session' | 'tool-invocation',
+    domain: 'api' | 'registry' | 'conversation' | 'app-session' | 'tool-invocation' | 'app-context',
     code: string,
     message: string,
     details?: string[],
