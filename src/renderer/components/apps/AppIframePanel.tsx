@@ -3,7 +3,7 @@ import { IconExternalLink, IconLayoutGrid, IconReload, IconX } from '@tabler/ico
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getApprovedAppById } from '@/data/approvedApps'
-import { useIsSmallScreen } from '@/hooks/useScreenChange'
+import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, formatAppTagLabel } from '@/types/apps'
@@ -215,7 +215,7 @@ type AppIframePanelProps = {
 
 export default function AppIframePanel({ className }: AppIframePanelProps) {
   const { t } = useTranslation()
-  const isSmallScreen = useIsSmallScreen()
+  const isCompactScreen = useScreenDownToMD()
   const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
   const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
 
@@ -226,7 +226,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
   const activeApp = getApprovedAppById(activeApprovedAppId)
   const panelContent = activeApp ? <AppIframeSurface app={activeApp} /> : null
 
-  if (isSmallScreen) {
+  if (isCompactScreen) {
     return (
       <Drawer
         opened={Boolean(activeApprovedAppId)}
@@ -253,7 +253,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
   return (
     <aside
       className={cn(
-        'hidden h-full min-h-0 w-[22rem] min-w-[22rem] max-w-[24rem] flex-col overflow-hidden rounded-[1.75rem] border border-chatbox-border-primary/70 bg-chatbox-background-secondary shadow-[0_18px_40px_rgba(15,23,42,0.22)] xl:flex',
+        'flex h-full min-h-0 w-[18rem] min-w-[18rem] max-w-[20rem] flex-col overflow-hidden rounded-[1.75rem] border border-chatbox-border-primary/70 bg-chatbox-background-secondary shadow-[0_18px_40px_rgba(15,23,42,0.22)] lg:w-[20rem] lg:min-w-[20rem] xl:w-[22rem] xl:min-w-[22rem] xl:max-w-[24rem]',
         className
       )}
     >
