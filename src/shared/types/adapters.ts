@@ -1,3 +1,4 @@
+import type { RemoteConfig } from '../types'
 import type { SentryAdapter } from '../utils/sentry_adapter'
 
 export interface ApiRequestOptions {
@@ -28,5 +29,5 @@ export interface ModelDependencies {
   request: RequestAdapter
   storage: StorageAdapter
   sentry: SentryAdapter
-  getRemoteConfig(): any
-} 
+  getRemoteConfig(): Partial<RemoteConfig>
+}
