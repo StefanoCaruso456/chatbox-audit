@@ -166,6 +166,21 @@ export const exampleConversationAppContext: ConversationAppContext = Conversatio
         },
       },
     },
+    {
+      appSessionId: 'app-session.weather.1',
+      appId: 'weather.public',
+      status: 'succeeded',
+      resultSummary: 'Forecast ready for discussion.',
+      completedAt: '2026-03-31T16:09:30.000Z',
+      followUpContext: {
+        summary: 'Use the forecast for classroom planning follow-up.',
+        userVisibleSummary: 'Forecast ready for discussion.',
+        stateDigest: {
+          location: 'Chicago, IL',
+          temperatureF: 68,
+        },
+      },
+    },
   ],
   sessionTimeline: [
     {
@@ -190,11 +205,23 @@ export const exampleConversationAppContext: ConversationAppContext = Conversatio
         winner: 'white',
       },
     },
+    {
+      appSessionId: 'app-session.weather.1',
+      appId: 'weather.public',
+      status: 'completed',
+      summary: 'Forecast ready for discussion.',
+      updatedAt: '2026-03-31T16:09:30.000Z',
+      latestSequence: 12,
+      latestStateDigest: {
+        location: 'Chicago, IL',
+        temperatureF: 68,
+      },
+    },
   ],
   selection: {
     strategy: 'active-plus-recent-completions',
-    includedSessionIds: ['app-session.chess.1', 'app-session.chess.2'],
+    includedSessionIds: ['app-session.chess.1', 'app-session.chess.2', 'app-session.weather.1'],
     omittedSessionCount: 0,
   },
-  notes: ['Prioritize the active chess board and the latest completed game summary for follow-up answers.'],
+  notes: ['Prioritize the active chess board and keep the completed weather forecast as secondary follow-up context.'],
 })

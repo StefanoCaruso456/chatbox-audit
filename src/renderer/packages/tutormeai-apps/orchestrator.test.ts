@@ -1,6 +1,6 @@
 import { createMessage } from '@shared/types'
 import { describe, expect, it } from 'vitest'
-import { routeTutorMeAiAppRequest } from './orchestrator'
+import { deriveConversationAppContext, routeTutorMeAiAppRequest } from './orchestrator'
 
 describe('routeTutorMeAiAppRequest', () => {
   it('launches chess for a clear play request', async () => {
@@ -117,5 +117,87 @@ describe('routeTutorMeAiAppRequest', () => {
     })
 
     expect(result.kind).toBe('pass-through')
+  })
+
+  it('keeps the latest unfinished app active when a later completed app exists', () => {
+    const activeChess = createMessage('assistant', 'Chess Tutor is active.')
+    activeChess.timestamp = Date.parse('2026-04-01T12:00:00.000Z')
+    activeChess.contentParts = [
+      {
+        type: 'embedded-app',
+        appId: 'chess.internal',
+        appName: 'Chess Tutor',
+        appSessionId: 'app-session.chess.1',
+        sourceUrl: 'http://localhost:1212/embedded-apps/chess',
+        title: 'Chess Tutor',
+        summary: 'White is evaluating the next move.',
+        status: 'ready',
+        allowedOrigin: 'http://localhost:1212',
+        bridge: {
+          expectedOrigin: 'http://localhost:1212',
+          conversationId: 'conversation.multi',
+          appSessionId: 'app-session.chess.1',
+          pendingInvocation: {
+            toolCallId: 'tool-call.chess.1',
+            toolName: 'chess.launch-game',
+          },
+          bootstrap: {
+            launchReason: 'chat-tool',
+            authState: 'connected',
+            availableTools: [],
+          },
+        },
+      },
+    ]
+
+    const completedWeather = createMessage('assistant', 'Weather Lookup finished.')
+    completedWeather.timestamp = Date.parse('2026-04-01T12:02:00.000Z')
+    completedWeather.contentParts = [
+      {
+        type: 'embedded-app',
+        appId: 'weather.public',
+        appName: 'Weather Lookup',
+        appSessionId: 'app-session.weather.1',
+        sourceUrl: 'http://localhost:1212/embedded-apps/weather',
+        title: 'Weather Lookup',
+        summary: 'Forecast ready for discussion.',
+        status: 'ready',
+        allowedOrigin: 'http://localhost:1212',
+        bridge: {
+          expectedOrigin: 'http://localhost:1212',
+          conversationId: 'conversation.multi',
+          appSessionId: 'app-session.weather.1',
+          bootstrap: {
+            launchReason: 'chat-tool',
+            authState: 'connected',
+            availableTools: [],
+          },
+          completion: {
+            status: 'succeeded',
+            resultSummary: 'Forecast ready for discussion.',
+            result: {
+              location: 'Austin, TX',
+            },
+          },
+        },
+      },
+    ]
+
+    const context = deriveConversationAppContext(
+      'conversation.multi',
+      [createMessage('user', 'launch chess'), activeChess, completedWeather],
+      '2026-04-01T12:03:00.000Z'
+    )
+
+    expect(context?.activeApp?.appId).toBe('chess.internal')
+    expect(context?.recentCompletions).toHaveLength(1)
+    expect(context?.recentCompletions[0]?.appId).toBe('weather.public')
+    expect(context?.sessionTimeline.map((session) => session.appSessionId)).toEqual([
+      'app-session.chess.1',
+      'app-session.weather.1',
+    ])
+    expect(context?.selection.strategy).toBe('active-plus-recent-completions')
+    expect(context?.selection.includedSessionIds).toEqual(['app-session.chess.1', 'app-session.weather.1'])
+    expect(context?.notes?.[0]).toContain('Multiple app sessions')
   })
 })

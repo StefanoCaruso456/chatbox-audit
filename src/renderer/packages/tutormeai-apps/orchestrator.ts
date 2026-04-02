@@ -17,6 +17,7 @@ import {
   ToolRoutingService,
 } from '../../../../backend/orchestration'
 import { type AppRegistryRecord, AppRegistryService, InMemoryAppRegistryRepository } from '../../../../backend/registry'
+import { selectConversationAppReference } from './conversation-state'
 
 type LocalAppCategory = 'games' | 'utilities' | 'productivity'
 
@@ -32,6 +33,25 @@ type LocalAppPlatform = {
   routing: ToolRoutingService
   apps: AppRegistryRecord[]
   appsById: Map<string, AppRegistryRecord>
+}
+
+type EmbeddedAppCompletionSnapshot = NonNullable<NonNullable<MessageEmbeddedAppPart['bridge']>['completion']>
+
+type EmbeddedAppSessionStatus = 'pending' | 'active' | 'waiting-auth' | 'waiting-user' | 'completed' | 'failed'
+
+type EmbeddedAppSessionSnapshot = {
+  appSessionId: string
+  appId: string
+  status: EmbeddedAppSessionStatus
+  summary: string
+  updatedAt: string
+  latestSequence: number
+  latestStateDigest?: JsonObject
+  authState: AppSessionAuthState
+  currentToolCallId?: string
+  resumableUntil?: string
+  availableToolNames?: string[]
+  completion?: EmbeddedAppCompletionSnapshot
 }
 
 export type TutorMeAiInterceptionResult =
@@ -253,90 +273,203 @@ function inferPartAuthState(part: MessageEmbeddedAppPart): AppSessionAuthState {
   return 'not-required'
 }
 
-function partToActiveContext(
-  conversationId: string,
+function getMessageTimestampIso(message: Message, fallbackIso: string): string {
+  const timestamp = message.updatedAt ?? message.timestamp
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+    return fallbackIso
+  }
+
+  return new Date(timestamp).toISOString()
+}
+
+function classifyEmbeddedAppSession(part: MessageEmbeddedAppPart): EmbeddedAppSessionStatus {
+  if (part.bridge?.completion) {
+    return 'completed'
+  }
+
+  if (part.status === 'error') {
+    return 'failed'
+  }
+
+  const authState = part.bridge?.bootstrap?.authState
+  if (authState === 'required' || authState === 'expired') {
+    return 'waiting-auth'
+  }
+
+  if (part.bridge?.pendingInvocation) {
+    return part.status === 'loading' ? 'pending' : 'active'
+  }
+
+  return 'waiting-user'
+}
+
+function buildEmbeddedAppSessionSnapshot(
   part: MessageEmbeddedAppPart,
-  generatedAt: string
-): ConversationAppContext | null {
-  const completion = part.bridge?.completion
-  const summary = part.summary ?? completion?.resultSummary ?? `${part.appName} is active in chat.`
-  const latestStateDigest = completion?.result ?? part.bridge?.bootstrap?.initialState ?? undefined
-  const authState = inferPartAuthState(part)
-  const availableToolNames = part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name)
+  updatedAt: string,
+  latestSequence: number
+): EmbeddedAppSessionSnapshot | null {
   const appSessionId = part.bridge?.appSessionId ?? part.appSessionId
   if (!appSessionId) {
     return null
   }
 
-  const sessionTimeline = [
-    {
-      appSessionId,
-      appId: part.appId,
-      status: completion ? 'completed' : part.status === 'loading' ? 'pending' : 'active',
-      summary,
-      updatedAt: generatedAt,
-      latestSequence: completion ? 2 : 1,
-      latestStateDigest,
-    },
-  ]
+  const completion = part.bridge?.completion
+  const summary = part.summary ?? completion?.resultSummary ?? `${part.appName} is active in chat.`
+  const latestStateDigest = completion?.result ?? part.bridge?.bootstrap?.initialState ?? undefined
+  const authState = inferPartAuthState(part)
+  const status = classifyEmbeddedAppSession(part)
+
+  return {
+    appSessionId,
+    appId: part.appId,
+    status,
+    summary,
+    updatedAt,
+    latestSequence,
+    latestStateDigest,
+    authState,
+    currentToolCallId: part.bridge?.pendingInvocation?.toolCallId,
+    resumableUntil: undefined,
+    availableToolNames: part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
+    completion,
+  }
+}
+
+function collectEmbeddedAppSessions(previousMessages: Message[], generatedAt: string): EmbeddedAppSessionSnapshot[] {
+  const sessions = new Map<string, EmbeddedAppSessionSnapshot>()
+  let latestSequence = 0
+
+  for (const message of previousMessages) {
+    const updatedAt = getMessageTimestampIso(message, generatedAt)
+
+    for (const part of message.contentParts ?? []) {
+      if (part.type !== 'embedded-app') {
+        continue
+      }
+
+      const snapshot = buildEmbeddedAppSessionSnapshot(part, updatedAt, ++latestSequence)
+      if (!snapshot) {
+        continue
+      }
+
+      sessions.delete(snapshot.appSessionId)
+      sessions.set(snapshot.appSessionId, snapshot)
+    }
+  }
+
+  return [...sessions.values()]
+}
+
+function toConversationAppContext(
+  conversationId: string,
+  sessions: EmbeddedAppSessionSnapshot[],
+  generatedAt: string,
+  preferredAppSessionId?: string | null
+): ConversationAppContext | null {
+  if (sessions.length === 0) {
+    return null
+  }
+
+  const preferredSession = preferredAppSessionId
+    ? (sessions.find((session) => session.appSessionId === preferredAppSessionId) ?? null)
+    : null
+  const activeSession =
+    (preferredSession && preferredSession.status !== 'completed' && preferredSession.status !== 'failed'
+      ? preferredSession
+      : null) ??
+    [...sessions].reverse().find((session) => session.status !== 'completed' && session.status !== 'failed')
+  let sessionTimeline = sessions.slice(-20)
+  if (activeSession && !sessionTimeline.some((session) => session.appSessionId === activeSession.appSessionId)) {
+    sessionTimeline = [...sessionTimeline.slice(-19), activeSession]
+  }
+  sessionTimeline = sessionTimeline.slice(-20).sort((left, right) => left.latestSequence - right.latestSequence)
+  const timelineIds = sessionTimeline.map((session) => session.appSessionId)
+
+  const timeline = sessionTimeline.map((session) => ({
+    appSessionId: session.appSessionId,
+    appId: session.appId,
+    status: session.status,
+    summary: session.summary,
+    updatedAt: session.updatedAt,
+    latestSequence: session.latestSequence,
+    latestStateDigest: session.latestStateDigest,
+  }))
+
+  const recentCompletions = [...sessions]
+    .reverse()
+    .filter((session) => session.completion || session.status === 'failed')
+    .slice(0, 10)
+    .map((session) => {
+      const completion = session.completion as EmbeddedAppCompletionSnapshot | undefined
+      return {
+        appSessionId: session.appSessionId,
+        appId: session.appId,
+        status: completion?.status ?? ('failed' as const),
+        resultSummary: completion?.resultSummary ?? session.summary,
+        completedAt: session.updatedAt,
+        followUpContext: {
+          summary: completion?.resultSummary ?? session.summary,
+          userVisibleSummary: session.summary,
+          stateDigest: completion?.result ?? session.latestStateDigest,
+        },
+      }
+    })
+
+  const includedSessionIds = [
+    ...(activeSession ? [activeSession.appSessionId] : []),
+    ...recentCompletions.map((completion) => completion.appSessionId),
+    ...timelineIds,
+  ].filter((sessionId, index, all) => all.indexOf(sessionId) === index)
 
   return parseConversationAppContext({
     version: 'v1',
     conversationId,
     generatedAt,
-    activeApp: completion
-      ? null
-      : {
-          ...sessionTimeline[0],
-          authState,
-          currentToolCallId: part.bridge?.pendingInvocation?.toolCallId,
-          resumableUntil: undefined,
-          availableToolNames,
-        },
-    recentCompletions: completion
-      ? [
-          {
-            appSessionId,
-            appId: part.appId,
-            status: completion.status,
-            resultSummary: completion.resultSummary ?? summary,
-            completedAt: generatedAt,
-            followUpContext: {
-              summary: completion.resultSummary ?? summary,
-              userVisibleSummary: part.summary,
-              stateDigest: completion.result,
-            },
-          },
-        ]
-      : [],
-    sessionTimeline,
+    activeApp: activeSession
+      ? {
+          appSessionId: activeSession.appSessionId,
+          appId: activeSession.appId,
+          status: activeSession.status,
+          summary: activeSession.summary,
+          updatedAt: activeSession.updatedAt,
+          latestSequence: activeSession.latestSequence,
+          latestStateDigest: activeSession.latestStateDigest,
+          authState: activeSession.authState,
+          currentToolCallId: activeSession.currentToolCallId,
+          resumableUntil: activeSession.resumableUntil,
+          availableToolNames: activeSession.availableToolNames,
+        }
+      : null,
+    recentCompletions,
+    sessionTimeline: timeline,
     selection: {
-      strategy: completion ? 'recent-completions-only' : 'active-plus-recent-completions',
-      includedSessionIds: [appSessionId],
+      strategy: activeSession ? 'active-plus-recent-completions' : 'recent-completions-only',
+      includedSessionIds,
       omittedSessionCount: 0,
     },
+    notes:
+      sessions.length > 1
+        ? [
+            'Multiple app sessions were used in this conversation. Keep the active session first and preserve completed sessions as follow-up context.',
+            ...(preferredSession
+              ? [
+                  `The latest user turn explicitly referenced ${preferredSession.appId}, so that session should be prioritized.`,
+                ]
+              : []),
+          ]
+        : undefined,
   })
 }
 
-function deriveConversationAppContext(
+export function deriveConversationAppContext(
   conversationId: string,
   previousMessages: Message[],
-  generatedAt: string
+  generatedAt: string,
+  userRequest?: string
 ): ConversationAppContext | null {
-  for (let index = previousMessages.length - 1; index >= 0; index -= 1) {
-    const message = previousMessages[index]
-    const parts = message.contentParts ?? []
-    for (let partIndex = parts.length - 1; partIndex >= 0; partIndex -= 1) {
-      const part = parts[partIndex]
-      if (part.type !== 'embedded-app') {
-        continue
-      }
-
-      return partToActiveContext(conversationId, part, generatedAt)
-    }
-  }
-
-  return null
+  const sessions = collectEmbeddedAppSessions(previousMessages, generatedAt)
+  const selectedReference = userRequest ? selectConversationAppReference(previousMessages, userRequest) : null
+  return toConversationAppContext(conversationId, sessions, generatedAt, selectedReference?.appSessionId)
 }
 
 function deriveAppOAuthStates(previousMessages: Message[]): Record<string, 'connected' | 'expired' | 'missing'> {
@@ -497,7 +630,12 @@ export async function routeTutorMeAiAppRequest(
 
   const platform = await getLocalAppPlatform(input.origin)
   const generatedAt = new Date().toISOString()
-  const activeAppContext = deriveConversationAppContext(input.conversationId, input.previousMessages, generatedAt)
+  const activeAppContext = deriveConversationAppContext(
+    input.conversationId,
+    input.previousMessages,
+    generatedAt,
+    input.userRequest
+  )
   const appOAuthStates = deriveAppOAuthStates(input.previousMessages)
 
   const discoveryResult = await platform.discovery.discoverAvailableTools({

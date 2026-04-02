@@ -40,6 +40,7 @@ export interface EmbeddedAppHostRuntimeConfig {
   conversationId: string
   appSessionId?: string
   handshakeToken?: string
+  restartNonce?: string
   heartbeatTimeoutMs?: number
   bootstrap?: EmbeddedAppHostBootstrapConfig
   pendingInvocation?: EmbeddedAppHostPendingInvocation
