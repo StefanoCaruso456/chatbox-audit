@@ -80,9 +80,7 @@ export default function AppsModal() {
             {t('Apps')}
           </Title>
           <Text size="sm" c="chatbox-secondary">
-            {t(
-              'Approved education tools curated for K-12. Select any app to open it in the companion panel beside chat.'
-            )}
+            {t('TutorMeAI app library for approved and integrated K-12 tools. Select any app to open it beside chat.')}
           </Text>
         </Stack>
       }
@@ -110,13 +108,13 @@ export default function AppsModal() {
         <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/80 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge radius="xl" variant="light" color="chatbox-brand">
-              {t('Approved Apps')}
+              {t('TutorMeAI App Library')}
             </Badge>
             <Badge radius="xl" variant="light" color="chatbox-success">
               {t('Curated for K-12')}
             </Badge>
             <Text size="sm" c="chatbox-tertiary">
-              {t('{{count}} approved tools', { count: approvedApps.length })}
+              {t('{{count}} apps in one library', { count: approvedApps.length })}
             </Text>
           </div>
         </div>

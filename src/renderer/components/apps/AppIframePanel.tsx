@@ -41,6 +41,8 @@ function resolveLaunchUrl(launchUrl: string) {
 }
 
 function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
+  const { t } = useTranslation()
+
   return (
     <Flex justify="space-between" align="center" gap="sm">
       <Flex align="center" gap="sm" className="min-w-0">
@@ -50,7 +52,7 @@ function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => voi
         </Title>
       </Flex>
 
-      <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label="Close app">
+      <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
         <IconX size={18} />
       </ActionIcon>
     </Flex>
@@ -66,6 +68,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const [isLoading, setIsLoading] = useState(true)
   const [showLoadNotice, setShowLoadNotice] = useState(false)
   const resolvedLaunchUrl = useMemo(() => (app ? resolveLaunchUrl(app.launchUrl) : ''), [app])
+  const resolvedVendorUrl = useMemo(() => resolveLaunchUrl(app.vendorUrl ?? app.launchUrl), [app])
 
   useEffect(() => {
     if (!app) {
@@ -106,7 +109,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           variant="subtle"
           color="chatbox-secondary"
           leftSection={<IconExternalLink size={16} />}
-          onClick={() => window.open(resolvedLaunchUrl, '_blank', 'noopener,noreferrer')}
+          onClick={() => window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')}
         >
           {t('Open in new tab')}
         </Button>
@@ -146,9 +149,13 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
                 {t('Still loading?')}
               </Text>
               <Text size="xs" c="rgba(255,255,255,0.72)">
-                {t(
-                  'Some approved tools need vendor iframe access enabled. You can keep waiting or open this app in a new tab while the district embed URL is finalized.'
-                )}
+                {app.experience === 'tutormeai-runtime'
+                  ? t(
+                      'This TutorMeAI runtime is still booting. You can keep waiting or open it in a new tab while the embedded session finishes loading.'
+                    )
+                  : t(
+                      'Some approved tools need vendor iframe access enabled. You can keep waiting or open this app in a new tab while the district embed URL is finalized.'
+                    )}
               </Text>
             </Stack>
           </div>
