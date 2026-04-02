@@ -23,6 +23,11 @@ export interface ApprovedApp {
   tags: string[]
   vendorUrl?: string
   experience?: AppExperience
+  loadingFallback?: {
+    title: string
+    body: string
+    actionLabel?: string
+  }
 }
 
 export const GRADE_RANGE_OPTIONS: GradeRange[] = ['Pre-K-2', '3-5', '6-8', '9-12', 'Multi-level']

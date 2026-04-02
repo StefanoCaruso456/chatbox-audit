@@ -120,6 +120,62 @@ function AppTrustNotice({ app }: { app: ApprovedApp }) {
   )
 }
 
+function AppLoadingFallback({
+  app,
+  onOpenVendor,
+  onSwitchApps,
+}: {
+  app: ApprovedApp
+  onOpenVendor: () => void
+  onSwitchApps: () => void
+}) {
+  const { t } = useTranslation()
+  const fallbackTitle = app.loadingFallback?.title ?? t('Still loading?')
+  const fallbackBody =
+    app.loadingFallback?.body ??
+    (app.experience === 'tutormeai-runtime'
+      ? t(
+          'This TutorMeAI runtime is still booting. You can keep waiting or open it in a new tab while the embedded session finishes loading.'
+        )
+      : t(
+          'Some approved tools need vendor iframe access enabled. You can keep waiting or open this app in a new tab while the district embed URL is finalized.'
+        ))
+  const vendorActionLabel = app.loadingFallback?.actionLabel ?? t('Open in new tab')
+
+  return (
+    <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/12 bg-slate-950/88 p-3 shadow-xl">
+      <Stack gap={6}>
+        <Text size="sm" fw={600} c="white">
+          {fallbackTitle}
+        </Text>
+        <Text size="xs" c="rgba(255,255,255,0.72)">
+          {fallbackBody}
+        </Text>
+        <Group gap="xs" mt={4}>
+          <Button
+            size="xs"
+            variant="light"
+            color="chatbox-brand"
+            leftSection={<IconExternalLink size={14} />}
+            onClick={onOpenVendor}
+          >
+            {vendorActionLabel}
+          </Button>
+          <Button
+            size="xs"
+            variant="subtle"
+            color="chatbox-secondary"
+            leftSection={<IconLayoutGrid size={14} />}
+            onClick={onSwitchApps}
+          >
+            {t('Switch apps')}
+          </Button>
+        </Group>
+      </Stack>
+    </div>
+  )
+}
+
 function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const { t } = useTranslation()
   const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
@@ -153,6 +209,14 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     setReloadNonce((value) => value + 1)
   }
 
+  const handleOpenVendor = () => {
+    window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleSwitchApps = () => {
+    setApprovedAppsModalOpen(true)
+  }
+
   return (
     <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
       <AppPanelHeader app={app} onClose={closeApprovedApp} />
@@ -164,7 +228,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           variant="light"
           color="chatbox-brand"
           leftSection={<IconLayoutGrid size={16} />}
-          onClick={() => setApprovedAppsModalOpen(true)}
+          onClick={handleSwitchApps}
         >
           {t('Switch apps')}
         </Button>
@@ -172,7 +236,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           variant="subtle"
           color="chatbox-secondary"
           leftSection={<IconExternalLink size={16} />}
-          onClick={() => window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')}
+          onClick={handleOpenVendor}
         >
           {t('Open in new tab')}
         </Button>
@@ -208,22 +272,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         ) : null}
 
         {showLoadNotice ? (
-          <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/12 bg-slate-950/88 p-3 shadow-xl">
-            <Stack gap={6}>
-              <Text size="sm" fw={600} c="white">
-                {t('Still loading?')}
-              </Text>
-              <Text size="xs" c="rgba(255,255,255,0.72)">
-                {app.experience === 'tutormeai-runtime'
-                  ? t(
-                      'This TutorMeAI runtime is still booting. You can keep waiting or open it in a new tab while the embedded session finishes loading.'
-                    )
-                  : t(
-                      'Some approved tools need vendor iframe access enabled. You can keep waiting or open this app in a new tab while the district embed URL is finalized.'
-                    )}
-              </Text>
-            </Stack>
-          </div>
+          <AppLoadingFallback app={app} onOpenVendor={handleOpenVendor} onSwitchApps={handleSwitchApps} />
         ) : null}
       </Box>
     </Stack>

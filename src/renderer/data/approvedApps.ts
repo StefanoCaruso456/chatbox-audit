@@ -37,6 +37,12 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     launchMode: 'iframe',
     isApproved: true,
     tags: ['lms', 'secondary', 'assignments', 'course-management'],
+    vendorUrl: 'https://www.instructure.com/canvas/login',
+    loadingFallback: {
+      title: 'This app needs a school-specific launch link',
+      body: 'Canvas and similar district-managed tools often need a verified school launch URL before they can open beside chat. Open the Canvas login finder in a new tab, then sign in through your school portal.',
+      actionLabel: 'Open Canvas login',
+    },
   },
   {
     id: 'seesaw',
@@ -358,7 +364,7 @@ export const approvedApps: ApprovedApp[] = [
   ...curatedApprovedAppCatalog.map((app) => ({
     ...app,
     launchUrl: `/embedded-apps/catalog/${app.id}`,
-    vendorUrl: app.launchUrl,
+    vendorUrl: app.vendorUrl ?? app.launchUrl,
     experience: 'approved-library' as const,
   })),
 ]

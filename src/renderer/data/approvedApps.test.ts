@@ -26,4 +26,16 @@ describe('approvedApps', () => {
       vendorUrl: 'https://classroom.google.com/',
     })
   })
+
+  it('preserves Canvas-specific login guidance for district-managed access', () => {
+    expect(getApprovedAppById('canvas-student')).toMatchObject({
+      experience: 'approved-library',
+      launchUrl: '/embedded-apps/catalog/canvas-student',
+      vendorUrl: 'https://www.instructure.com/canvas/login',
+      loadingFallback: {
+        title: 'This app needs a school-specific launch link',
+        actionLabel: 'Open Canvas login',
+      },
+    })
+  })
 })
