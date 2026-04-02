@@ -2,7 +2,13 @@ import { Badge, Button, Modal, ScrollArea, Stack, Text, Title } from '@mantine/c
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { approvedApps } from '@/data/approvedApps'
-import { isMultiLevelApp, type AppCategory, type GradeRange } from '@/types/apps'
+import {
+  APP_CATEGORY_OPTIONS,
+  gradeRangeMeta,
+  isMultiLevelApp,
+  type AppCategory,
+  type GradeRange,
+} from '@/types/apps'
 import { useUIStore } from '@/stores/uiStore'
 import AppCard from './AppCard'
 import AppFilters from './AppFilters'
@@ -42,6 +48,15 @@ export default function AppsModal() {
           !normalizedSearch ||
           app.name.toLowerCase().includes(normalizedSearch) ||
           app.shortSummary.toLowerCase().includes(normalizedSearch) ||
+          app.category.toLowerCase().includes(normalizedSearch) ||
+          app.gradeRanges.some((range) => {
+            const meta = gradeRangeMeta[range]
+            return (
+              range.toLowerCase().includes(normalizedSearch) ||
+              meta.label.toLowerCase().includes(normalizedSearch) ||
+              meta.description.toLowerCase().includes(normalizedSearch)
+            )
+          }) ||
           app.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch))
 
         const matchesCategory = category === 'all' || app.category === category
@@ -52,6 +67,10 @@ export default function AppsModal() {
         const rightIsActive = right.id === activeApprovedAppId ? 1 : 0
         if (leftIsActive !== rightIsActive) {
           return rightIsActive - leftIsActive
+        }
+        const categoryDelta = APP_CATEGORY_OPTIONS.indexOf(left.category) - APP_CATEGORY_OPTIONS.indexOf(right.category)
+        if (categoryDelta !== 0) {
+          return categoryDelta
         }
         return left.name.localeCompare(right.name)
       })
@@ -67,7 +86,9 @@ export default function AppsModal() {
             {t('Apps')}
           </Title>
           <Text size="sm" c="chatbox-secondary">
-            {t('Approved education tools that launch beside the chat so students and teachers stay in context.')}
+            {t(
+              'Approved education tools curated for K-12. Apps open beside chat when embedding is supported, or in a trusted new tab when vendors require it.'
+            )}
           </Text>
         </Stack>
       }

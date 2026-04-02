@@ -7,7 +7,6 @@ import {
   Drawer,
   Flex,
   Group,
-  Image,
   Loader,
   Stack,
   Text,
@@ -20,8 +19,10 @@ import { getApprovedAppById } from '@/data/approvedApps'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
+import { formatAppTagLabel, type ApprovedApp } from '@/types/apps'
 import AppCategoryBadge from './AppCategoryBadge'
 import AppGradeBadge from './AppGradeBadge'
+import AppIcon from './AppIcon'
 
 const iframeSandbox = [
   'allow-downloads',
@@ -54,12 +55,134 @@ function resolveLaunchUrl(launchUrl: string) {
   return new URL(trimmed, window.location.origin).toString()
 }
 
-function AppIframeSurface() {
+function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
   const { t } = useTranslation()
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
+
+  return (
+    <Flex justify="space-between" align="start" gap="sm">
+      <Flex align="center" gap="sm" className="min-w-0">
+        <AppIcon app={app} w={42} h={42} radius="lg" />
+        <Stack gap={2} className="min-w-0">
+          <Group gap={8}>
+            <Title order={4} fz="lg" className="truncate">
+              {app.name}
+            </Title>
+            <Badge radius="xl" variant="light" color="chatbox-success">
+              {t('Approved Apps')}
+            </Badge>
+          </Group>
+          <Text size="sm" c="chatbox-secondary" className="line-clamp-2">
+            {app.shortSummary}
+          </Text>
+        </Stack>
+      </Flex>
+
+      <ActionIcon
+        variant="subtle"
+        color="chatbox-secondary"
+        onClick={onClose}
+        aria-label={t('Close app')}
+      >
+        <IconX size={18} />
+      </ActionIcon>
+    </Flex>
+  )
+}
+
+function AppPanelBadges({ app }: { app: ApprovedApp }) {
+  return (
+    <Flex wrap="wrap" gap="xs">
+      <AppCategoryBadge category={app.category} />
+      {app.gradeRanges.map((gradeRange) => (
+        <AppGradeBadge key={`${app.id}:${gradeRange}`} gradeRange={gradeRange} />
+      ))}
+      {app.tags.slice(0, 2).map((tag) => (
+        <Badge key={`${app.id}:${tag}`} radius="xl" variant="outline" color="chatbox-secondary">
+          {formatAppTagLabel(tag)}
+        </Badge>
+      ))}
+    </Flex>
+  )
+}
+
+function AppTrustNotice({ app }: { app: ApprovedApp }) {
+  const { t } = useTranslation()
+
+  const copy =
+    app.launchMode === 'iframe'
+      ? t('This approved tool opens beside chat when the vendor supports secure classroom embedding.')
+      : t('This approved tool opens in a new tab because the vendor keeps sign-in and learning activity on its own site.')
+
+  return (
+    <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/85 px-4 py-3">
+      <Stack gap={4}>
+        <Text size="sm" fw={600}>
+          {t('Curated for K-12 classrooms')}
+        </Text>
+        <Text size="sm" c="chatbox-secondary">
+          {copy}
+        </Text>
+      </Stack>
+    </div>
+  )
+}
+
+function ExternalLaunchSurface({ app }: { app: ApprovedApp }) {
+  const { t } = useTranslation()
   const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
   const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
-  const app = activeApprovedAppId ? getApprovedAppById(activeApprovedAppId) : undefined
+
+  const resolvedLaunchUrl = useMemo(() => (app ? resolveLaunchUrl(app.launchUrl) : ''), [app])
+
+  return (
+    <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
+      <AppPanelHeader app={app} onClose={closeApprovedApp} />
+      <AppPanelBadges app={app} />
+      <AppTrustNotice app={app} />
+
+      <div className="rounded-[1.5rem] border border-chatbox-border-primary/70 bg-chatbox-background-primary/80 p-5">
+        <Stack gap="md">
+          <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-secondary/70 p-4">
+            <Stack gap={6}>
+              <Text size="sm" fw={700}>
+                {t('External launch')}
+              </Text>
+              <Text size="sm" c="chatbox-secondary">
+                {t('Chat stays open while you launch the approved tool in a separate tab.')}
+              </Text>
+              <Text size="sm" c="chatbox-tertiary" className="break-all">
+                {resolvedLaunchUrl}
+              </Text>
+            </Stack>
+          </div>
+
+          <Group gap="xs">
+            <Button
+              color="chatbox-brand"
+              leftSection={<IconExternalLink size={16} />}
+              onClick={() => window.open(resolvedLaunchUrl, '_blank', 'noopener,noreferrer')}
+            >
+              {t('Open vendor site')}
+            </Button>
+            <Button
+              variant="light"
+              color="chatbox-brand"
+              leftSection={<IconLayoutGrid size={16} />}
+              onClick={() => setApprovedAppsModalOpen(true)}
+            >
+              {t('Switch apps')}
+            </Button>
+          </Group>
+        </Stack>
+      </div>
+    </Stack>
+  )
+}
+
+function AppIframeSurface({ app }: { app: ApprovedApp }) {
+  const { t } = useTranslation()
+  const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
+  const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
 
   const [reloadNonce, setReloadNonce] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -82,62 +205,11 @@ function AppIframeSurface() {
     }
   }, [app, reloadNonce])
 
-  if (!app) {
-    return null
-  }
-
   return (
     <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
-      <Flex justify="space-between" align="start" gap="sm">
-        <Flex align="center" gap="sm" className="min-w-0">
-          <Image src={app.icon} alt="" w={42} h={42} radius="lg" />
-          <Stack gap={2} className="min-w-0">
-            <Group gap={8}>
-              <Title order={4} fz="lg" className="truncate">
-                {app.name}
-              </Title>
-              <Badge radius="xl" variant="light" color="chatbox-success">
-                {t('Approved Apps')}
-              </Badge>
-            </Group>
-            <Text size="sm" c="chatbox-secondary" className="line-clamp-2">
-              {app.shortSummary}
-            </Text>
-          </Stack>
-        </Flex>
-
-        <ActionIcon
-          variant="subtle"
-          color="chatbox-secondary"
-          onClick={() => closeApprovedApp()}
-          aria-label={t('Close app')}
-        >
-          <IconX size={18} />
-        </ActionIcon>
-      </Flex>
-
-      <Flex wrap="wrap" gap="xs">
-        <AppCategoryBadge category={app.category} />
-        {app.gradeRanges.map((gradeRange) => (
-          <AppGradeBadge key={`${app.id}:${gradeRange}`} gradeRange={gradeRange} />
-        ))}
-        {app.tags.slice(0, 2).map((tag) => (
-          <Badge key={`${app.id}:${tag}`} radius="xl" variant="outline" color="chatbox-secondary">
-            {tag}
-          </Badge>
-        ))}
-      </Flex>
-
-      <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/85 px-4 py-3">
-        <Stack gap={4}>
-          <Text size="sm" fw={600}>
-            {t('Curated for K-12 classrooms')}
-          </Text>
-          <Text size="sm" c="chatbox-secondary">
-            {t('Launches inside the chat workspace so teachers and students can stay in one flow.')}
-          </Text>
-        </Stack>
-      </div>
+      <AppPanelHeader app={app} onClose={closeApprovedApp} />
+      <AppPanelBadges app={app} />
+      <AppTrustNotice app={app} />
 
       <Group gap="xs">
         <Button
@@ -225,6 +297,13 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
     return null
   }
 
+  const activeApp = getApprovedAppById(activeApprovedAppId)
+  const panelContent = activeApp
+    ? activeApp.launchMode === 'external'
+      ? <ExternalLaunchSurface app={activeApp} />
+      : <AppIframeSurface app={activeApp} />
+    : null
+
   if (isSmallScreen) {
     return (
       <Drawer
@@ -244,7 +323,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
           },
         }}
       >
-        <AppIframeSurface />
+        {panelContent}
       </Drawer>
     )
   }
@@ -256,7 +335,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
         className
       )}
     >
-      <AppIframeSurface />
+      {panelContent}
     </aside>
   )
 }

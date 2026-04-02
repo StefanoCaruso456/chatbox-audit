@@ -1,11 +1,12 @@
-import { Badge, Flex, Image, Stack, Text, UnstyledButton } from '@mantine/core'
-import { IconArrowUpRight } from '@tabler/icons-react'
+import { Flex, Stack, Text, UnstyledButton } from '@mantine/core'
+import { IconArrowUpRight, IconExternalLink } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import { cn } from '@/lib/utils'
 import { isMultiLevelApp, type ApprovedApp } from '@/types/apps'
 import AppCategoryBadge from './AppCategoryBadge'
 import AppGradeBadge from './AppGradeBadge'
+import AppIcon from './AppIcon'
 
 type AppCardProps = {
   app: ApprovedApp
@@ -15,8 +16,9 @@ type AppCardProps = {
 
 export default function AppCard({ app, isActive = false, onOpen }: AppCardProps) {
   const { t } = useTranslation()
-  const trustTag = app.tags.find((tag) => tag === 'Teacher Favorite' || tag === 'District Approved')
   const visibleGradeRanges: ApprovedApp['gradeRanges'] = isMultiLevelApp(app) ? ['Multi-level'] : app.gradeRanges
+  const launchModeLabel = app.launchMode === 'iframe' ? t('Opens in panel') : t('Opens in new tab')
+  const LaunchIcon = app.launchMode === 'iframe' ? IconArrowUpRight : IconExternalLink
 
   return (
     <UnstyledButton
@@ -34,27 +36,14 @@ export default function AppCard({ app, isActive = false, onOpen }: AppCardProps)
       <Stack gap="sm" className="h-full">
         <Flex align="start" justify="space-between" gap="sm">
           <Flex align="center" gap="sm" className="min-w-0">
-            <Image src={app.icon} alt="" w={48} h={48} radius="lg" />
+            <AppIcon app={app} w={48} h={48} radius="lg" />
             <Stack gap={2} className="min-w-0">
               <Text fw={700} size="md" className="truncate">
                 {app.name}
               </Text>
-              {trustTag ? (
-                <Badge
-                  size="sm"
-                  radius="xl"
-                  variant="light"
-                  styles={{
-                    root: {
-                      backgroundColor: 'rgba(16, 185, 129, 0.14)',
-                      border: '1px solid rgba(16, 185, 129, 0.22)',
-                      color: 'var(--chatbox-tint-primary)',
-                    },
-                  }}
-                >
-                  {trustTag}
-                </Badge>
-              ) : null}
+              <Text size="xs" c="chatbox-secondary">
+                {launchModeLabel}
+              </Text>
             </Stack>
           </Flex>
 
@@ -68,7 +57,7 @@ export default function AppCard({ app, isActive = false, onOpen }: AppCardProps)
                 : 'border-chatbox-border-primary/70 text-chatbox-tint-secondary group-hover:border-chatbox-tint-brand/40 group-hover:text-chatbox-tint-brand'
             )}
           >
-            <ScalableIcon icon={IconArrowUpRight} size={18} />
+            <ScalableIcon icon={LaunchIcon} size={18} />
           </Flex>
         </Flex>
 
@@ -88,7 +77,7 @@ export default function AppCard({ app, isActive = false, onOpen }: AppCardProps)
             {isActive ? t('Active') : t('Open')}
           </Text>
           <Text size="xs" c="chatbox-tertiary">
-            {app.tags.slice(0, 2).join(' · ')}
+            {launchModeLabel}
           </Text>
         </Flex>
       </Stack>
