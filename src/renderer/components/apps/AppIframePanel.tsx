@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Box, Button, Divider, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
+import { ActionIcon, Box, Button, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
 import { IconExternalLink, IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -6,9 +6,7 @@ import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
-import { type ApprovedApp, formatAppTagLabel } from '@/types/apps'
-import AppCategoryBadge from './AppCategoryBadge'
-import AppGradeBadge from './AppGradeBadge'
+import type { ApprovedApp } from '@/types/apps'
 import AppIcon from './AppIcon'
 
 const iframeSandbox = [
@@ -20,6 +18,7 @@ const iframeSandbox = [
   'allow-same-origin',
   'allow-scripts',
 ].join(' ')
+
 const APP_LOAD_TIMEOUT_MS = 7000
 
 type AppLoadState = 'loading' | 'ready' | 'blocked'
@@ -50,103 +49,44 @@ function getFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>[
     return {
       title: t('This app needs a school-specific launch link'),
       description: t(
-        'Canvas and similar district-managed tools often need a verified school launch URL before they can open beside chat.'
+        'Canvas and similar district-managed tools often need a verified school launch URL before they can open beside chat. You can open it in a new tab for now or switch to a different app.'
       ),
     }
   }
 
   if (app.experience === 'tutormeai-runtime') {
     return {
-      title: t('TutorMeAI Runtime'),
+      title: t('Need to open {{name}} outside the panel?', { name: app.name }),
       description: t(
-        'This TutorMeAI runtime is still booting. You can keep waiting or open it in a new tab while the embedded session finishes loading.'
+        'This TutorMeAI runtime is still booting. You can reload the panel, switch tools, or open it in a new tab while the embedded session finishes loading.'
       ),
     }
   }
 
   return {
-    title: t('This app could not open beside chat'),
+    title: t('Need to open {{name}} outside the panel?', { name: app.name }),
     description: t(
-      'The selected site is blocking iframe embedding or took too long to load. Open it in a new tab or try again after the district embed link is finalized.'
+      'Some approved tools block iframe embedding or take longer to initialize. You can reload the panel, switch tools, or open this app in a new tab right now.'
     ),
   }
 }
 
 function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
   const { t } = useTranslation()
-  const badgeLabel = app.experience === 'tutormeai-runtime' ? t('TutorMeAI Runtime') : t('Approved Apps')
-  const badgeColor = app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'chatbox-success'
 
   return (
-    <Flex justify="space-between" align="start" gap="sm">
+    <Flex justify="space-between" align="center" gap="sm">
       <Flex align="center" gap="sm" className="min-w-0">
-        <AppIcon app={app} w={42} h={42} radius="lg" />
-        <Stack gap={2} className="min-w-0">
-          <Group gap={8}>
-            <Title order={4} fz="lg" className="truncate">
-              {app.name}
-            </Title>
-            <Badge radius="xl" variant="light" color={badgeColor}>
-              {badgeLabel}
-            </Badge>
-          </Group>
-          <Text size="sm" c="chatbox-secondary" className="line-clamp-2">
-            {app.shortSummary}
-          </Text>
-        </Stack>
+        <AppIcon app={app} w={34} h={34} radius="lg" />
+        <Title order={4} fz="md" className="truncate">
+          {app.name}
+        </Title>
       </Flex>
 
       <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
         <IconX size={18} />
       </ActionIcon>
     </Flex>
-  )
-}
-
-function AppPanelBadges({ app }: { app: ApprovedApp }) {
-  return (
-    <Flex wrap="wrap" gap="xs">
-      <AppCategoryBadge category={app.category} />
-      <Badge radius="xl" variant="outline" color={app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'gray'}>
-        {app.experience === 'tutormeai-runtime' ? 'Chat-aware runtime' : 'Approved library'}
-      </Badge>
-      {app.gradeRanges.map((gradeRange) => (
-        <AppGradeBadge key={`${app.id}:${gradeRange}`} gradeRange={gradeRange} />
-      ))}
-      {app.tags.slice(0, 2).map((tag) => (
-        <Badge key={`${app.id}:${tag}`} radius="xl" variant="outline" color="chatbox-secondary">
-          {formatAppTagLabel(tag)}
-        </Badge>
-      ))}
-    </Flex>
-  )
-}
-
-function AppTrustNotice({ app }: { app: ApprovedApp }) {
-  const { t } = useTranslation()
-
-  const title =
-    app.experience === 'tutormeai-runtime' ? t('Governed TutorMeAI runtime') : t('Curated for K-12 classrooms')
-  const body =
-    app.experience === 'tutormeai-runtime'
-      ? t(
-          'This app runs inside the TutorMeAI embedded runtime with chat context, lifecycle events, and governed launch behavior.'
-        )
-      : t(
-          'This approved tool opens through the TutorMeAI app library shell so it stays in the same governed sidebar ecosystem.'
-        )
-
-  return (
-    <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/85 px-4 py-3">
-      <Stack gap={4}>
-        <Text size="sm" fw={600}>
-          {title}
-        </Text>
-        <Text size="sm" c="chatbox-secondary">
-          {body}
-        </Text>
-      </Stack>
-    </div>
   )
 }
 
@@ -161,10 +101,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const [loadState, setLoadState] = useState<AppLoadState>(
     app.embedStatus === 'needs-district-url' ? 'blocked' : 'loading'
   )
+
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
-  const resolvedLaunchUrl = useMemo(() => (app ? resolveLaunchUrl(app.launchUrl) : ''), [app])
-  const fallbackCopy = useMemo(() => getFallbackCopy(app, t), [app, t])
+  const resolvedLaunchUrl = useMemo(() => resolveLaunchUrl(app.launchUrl), [app])
   const resolvedVendorUrl = useMemo(() => resolveLaunchUrl(app.vendorUrl ?? app.launchUrl), [app])
+  const fallbackCopy = useMemo(() => getFallbackCopy(app, t), [app, t])
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current !== null) {
@@ -190,6 +131,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
   useEffect(() => {
     startLoadingAttempt()
+
     return () => {
       clearLoadTimeout()
     }
@@ -198,6 +140,14 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const handleReload = () => {
     setReloadNonce((value) => value + 1)
     startLoadingAttempt()
+  }
+
+  const handleOpenInNewTab = () => {
+    window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleSwitchApps = () => {
+    setApprovedAppsModalOpen(true)
   }
 
   const handleIframeLoad = () => {
@@ -217,7 +167,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         return
       }
     } catch {
-      // Cross-origin frames are expected for vendor apps. If access throws, treat the iframe as loaded.
+      // Cross-origin vendor frames are expected. If we cannot inspect the frame, assume it loaded.
     }
 
     setLoadState('ready')
@@ -229,36 +179,40 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }
 
   return (
-    <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
+    <Stack gap="xs" className="h-full min-h-0 p-2.5 sm:p-3">
       <AppPanelHeader app={app} onClose={closeApprovedApp} />
-      <AppPanelBadges app={app} />
-      <AppTrustNotice app={app} />
 
-      <Group gap="xs">
+      <Group gap={6} wrap="wrap">
         <Button
+          size="xs"
           variant="light"
           color="chatbox-brand"
           leftSection={<IconLayoutGrid size={16} />}
-          onClick={() => setApprovedAppsModalOpen(true)}
+          onClick={handleSwitchApps}
         >
           {t('Switch apps')}
         </Button>
         <Button
+          size="xs"
           variant="subtle"
           color="chatbox-secondary"
           leftSection={<IconExternalLink size={16} />}
-          onClick={() => window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')}
+          onClick={handleOpenInNewTab}
         >
           {t('Open in new tab')}
         </Button>
-        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
+        <ActionIcon
+          size="md"
+          variant="subtle"
+          color="chatbox-secondary"
+          onClick={handleReload}
+          aria-label={t('Reload app')}
+        >
           <IconReload size={17} />
         </ActionIcon>
       </Group>
 
-      <Divider />
-
-      <Box className="relative min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-chatbox-border-primary/70 bg-[#0f172a]">
+      <Box className="relative min-h-0 flex-1 overflow-hidden rounded-[1.25rem] border border-chatbox-border-primary/70 bg-[#0f172a]">
         {app.embedStatus !== 'needs-district-url' ? (
           <iframe
             key={iframeInstanceKey}
@@ -283,36 +237,57 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
             <Text size="sm" c="white">
               {t('Loading {{name}}...', { name: app.name })}
             </Text>
+            <Text size="xs" c="rgba(255,255,255,0.68)">
+              {t('This can take a moment while the tool initializes in the panel.')}
+            </Text>
           </div>
         ) : null}
 
         {loadState === 'blocked' ? (
           <div
             data-testid="app-iframe-panel-fallback"
-            className="absolute inset-0 flex items-center justify-center bg-slate-950/88 p-5 backdrop-blur-sm"
+            className="absolute inset-0 flex items-end justify-center bg-slate-950/52 p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
           >
-            <Stack gap="md" align="center" maw={260} ta="center">
+            <Stack
+              gap="sm"
+              className="w-full max-w-sm rounded-[1.25rem] border border-white/12 bg-slate-950/92 p-4 shadow-[0_24px_60px_rgba(15,23,42,0.4)]"
+            >
               <Text size="sm" fw={700} c="white">
                 {fallbackCopy.title}
               </Text>
-              <Text size="sm" c="rgba(255,255,255,0.78)">
+              <Text size="xs" c="rgba(255,255,255,0.74)">
                 {fallbackCopy.description}
               </Text>
-              <Group gap="xs" justify="center">
+              <Group gap={6} wrap="wrap">
                 <Button
                   size="xs"
                   variant="light"
                   color="chatbox-brand"
                   leftSection={<IconExternalLink size={14} />}
-                  onClick={() => window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')}
+                  onClick={handleOpenInNewTab}
                 >
                   {t('Open in new tab')}
                 </Button>
                 {app.embedStatus !== 'needs-district-url' ? (
-                  <Button size="xs" variant="subtle" color="chatbox-secondary" onClick={handleReload}>
-                    {t('Try loading again')}
+                  <Button
+                    size="xs"
+                    variant="default"
+                    color="gray"
+                    leftSection={<IconReload size={14} />}
+                    onClick={handleReload}
+                  >
+                    {t('Reload panel')}
                   </Button>
                 ) : null}
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="chatbox-secondary"
+                  leftSection={<IconLayoutGrid size={14} />}
+                  onClick={handleSwitchApps}
+                >
+                  {t('Switch apps')}
+                </Button>
               </Group>
             </Stack>
           </div>
@@ -366,7 +341,7 @@ export default function AppIframePanel({ className }: AppIframePanelProps) {
   return (
     <aside
       className={cn(
-        'flex h-full min-h-0 w-[18rem] min-w-[18rem] max-w-[20rem] flex-col overflow-hidden rounded-[1.75rem] border border-chatbox-border-primary/70 bg-chatbox-background-secondary shadow-[0_18px_40px_rgba(15,23,42,0.22)] lg:w-[20rem] lg:min-w-[20rem] xl:w-[22rem] xl:min-w-[22rem] xl:max-w-[24rem]',
+        'flex h-full min-h-0 w-[20rem] min-w-[20rem] max-w-[22rem] flex-col overflow-hidden rounded-[1.75rem] border border-chatbox-border-primary/70 bg-chatbox-background-secondary shadow-[0_18px_40px_rgba(15,23,42,0.22)] lg:w-[22rem] lg:min-w-[22rem] lg:max-w-[24rem] xl:w-[24rem] xl:min-w-[24rem] xl:max-w-[26rem] 2xl:w-[26rem] 2xl:min-w-[26rem] 2xl:max-w-[28rem]',
         className
       )}
     >
