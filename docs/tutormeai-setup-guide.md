@@ -119,7 +119,7 @@ The current case-study implementation proves:
 - embedded app launch and `postMessage` runtime flow
 - three example app patterns:
   - internal chess app
-  - public weather app
+  - public flashcards app
   - authenticated planner app
 - multi-app context retention and failure recovery
 

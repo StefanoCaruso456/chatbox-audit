@@ -2,7 +2,7 @@ import {
   exampleAuthenticatedPlannerManifest,
   exampleConversationAppContext,
   exampleInternalChessManifest,
-  examplePublicWeatherManifest,
+  examplePublicFlashcardsManifest,
 } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
 import { AppRegistryService, InMemoryAppRegistryRepository } from '../../registry'
@@ -19,8 +19,8 @@ async function createEligibleTools() {
     category: 'games',
   })
   await registry.registerApp({
-    manifest: examplePublicWeatherManifest,
-    category: 'weather',
+    manifest: examplePublicFlashcardsManifest,
+    category: 'study',
   })
   await registry.registerApp({
     manifest: exampleAuthenticatedPlannerManifest,
@@ -72,9 +72,9 @@ describe('ToolInjectionService', () => {
       ...exampleConversationAppContext,
       activeApp: {
         ...exampleConversationAppContext.activeApp!,
-        appId: examplePublicWeatherManifest.appId,
-        appSessionId: 'app-session.weather.active',
-        availableToolNames: ['weather.lookup'],
+        appId: examplePublicFlashcardsManifest.appId,
+        appSessionId: 'app-session.flashcards.active',
+        availableToolNames: ['flashcards.start-session'],
       },
     }
 
@@ -88,8 +88,8 @@ describe('ToolInjectionService', () => {
       return
     }
 
-    expect(result.value.activeAppId).toBe(examplePublicWeatherManifest.appId)
-    expect(result.value.toolDeclarations[0].appId).toBe(examplePublicWeatherManifest.appId)
+    expect(result.value.activeAppId).toBe(examplePublicFlashcardsManifest.appId)
+    expect(result.value.toolDeclarations[0].appId).toBe(examplePublicFlashcardsManifest.appId)
     expect(result.value.toolDeclarations[0].isPreferredByContext).toBe(true)
   })
 

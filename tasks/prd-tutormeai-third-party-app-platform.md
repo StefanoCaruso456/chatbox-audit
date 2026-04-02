@@ -11,7 +11,7 @@
 
 TutorMeAI has built strong adoption in K-12 by offering a highly configurable AI chatbot that teachers can tailor to classroom needs. To maintain differentiation and expand product value, the platform must evolve from a configurable chatbot into a secure, extensible AI chat platform that can integrate and orchestrate third-party educational apps directly inside the chat experience.
 
-The goal of this initiative is to enable students and teachers to access interactive tools such as chess, flashcards, games, weather tools, or authenticated external services without leaving the chat interface, while preserving conversation continuity, teacher control, platform safety, and system reliability. The platform must support app registration, tool discovery, structured tool invocation, embedded UI rendering, secure bidirectional communication, completion signaling, and state-aware follow-up by the chatbot.
+The goal of this initiative is to enable students and teachers to access interactive tools such as chess, flashcards, quizzes, games, or authenticated external services without leaving the chat interface, while preserving conversation continuity, teacher control, platform safety, and system reliability. The platform must support app registration, tool discovery, structured tool invocation, embedded UI rendering, secure bidirectional communication, completion signaling, and state-aware follow-up by the chatbot.
 
 This PRD defines the business need, product vision, user needs, scope, requirements, risks, success metrics, and launch plan for the TutorMeAI app platform.
 
@@ -129,7 +129,7 @@ Need confidence in privacy, safety, reliability, and controlled rollout.
 
 ### App Invocation
 
-User asks chatbot to use a tool such as chess or weather. The chatbot identifies the appropriate app and initiates it.
+User asks chatbot to use a tool such as chess or flashcards. The chatbot identifies the appropriate app and initiates it.
 
 ### UI Rendering
 

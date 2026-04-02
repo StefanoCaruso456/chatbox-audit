@@ -21,7 +21,7 @@ Tickets 18, 20, and 21 define the deterministic routing layer that selects betwe
 - exact app/tool name matches outrank token overlap
 - active apps receive a small deterministic bonus
 - follow-up intent words such as `again`, `continue`, or `resume` can increase the score for the active app
-- explicit multi-app requests such as `chess or weather` return `clarify` instead of auto-firing
+- explicit multi-app requests such as `chess or flashcards` return `clarify` instead of auto-firing
 - generic actions such as `open` return `clarify` when more than one app is plausible
 - weak or unrelated requests return `plain-chat` with explicit refusal reason codes
 - follow-up phrasing without an active app session returns `plain-chat` instead of guessing

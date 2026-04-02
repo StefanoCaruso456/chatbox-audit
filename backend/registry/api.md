@@ -105,8 +105,8 @@ Success response: `200`
   "ok": true,
   "data": {
     "app": {
-      "appId": "weather.public",
-      "slug": "weather"
+      "appId": "flashcards.public",
+      "slug": "flashcards"
     }
   }
 }

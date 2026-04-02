@@ -66,7 +66,7 @@ describe('TutorMeAI routing scenarios', () => {
 
     const messageText = getMessageText(result.message)
     expect(messageText).toContain('Chess Tutor')
-    expect(messageText).toContain('Weather Lookup')
+    expect(messageText).toContain('Flashcards Coach')
     expect(messageText).toContain('Planner Connect')
   })
 
@@ -75,7 +75,7 @@ describe('TutorMeAI routing scenarios', () => {
       origin: localOrigin,
       conversationId: 'conversation.routing.3',
       userId: 'user.routing.3',
-      userRequest: 'Should I use chess or weather?',
+      userRequest: 'Should I use chess or flashcards?',
       requestMessageId: 'message.routing.4',
       previousMessages: [createMessage('user', 'hello')],
     })
@@ -87,7 +87,7 @@ describe('TutorMeAI routing scenarios', () => {
 
     const messageText = getMessageText(result.message).toLowerCase()
     expect(messageText).toContain('chess')
-    expect(messageText).toContain('weather')
+    expect(messageText).toContain('flashcards')
   })
 
   it('treats the planner app as already connected once a prior connected session exists', async () => {

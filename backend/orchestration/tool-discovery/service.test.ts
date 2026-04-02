@@ -1,7 +1,7 @@
 import {
   exampleAuthenticatedPlannerManifest,
   exampleInternalChessManifest,
-  examplePublicWeatherManifest,
+  examplePublicFlashcardsManifest,
 } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
 import { InMemoryAppRegistryRepository } from '../../registry'
@@ -18,8 +18,8 @@ async function createDiscoveryService() {
     category: 'games',
   })
   await registry.registerApp({
-    manifest: examplePublicWeatherManifest,
-    category: 'weather',
+    manifest: examplePublicFlashcardsManifest,
+    category: 'study',
   })
   await registry.registerApp({
     manifest: exampleAuthenticatedPlannerManifest,
@@ -38,10 +38,10 @@ describe('AvailableToolDiscoveryService', () => {
       appOAuthStates: {},
     })
 
-    expect(result.tools.map((tool) => tool.toolName)).toEqual(['weather.lookup'])
+    expect(result.tools.map((tool) => tool.toolName)).toEqual(['flashcards.start-session'])
     expect(result.selection.includedAppIds).toEqual([
       exampleInternalChessManifest.appId,
-      examplePublicWeatherManifest.appId,
+      examplePublicFlashcardsManifest.appId,
     ])
   })
 
@@ -58,13 +58,13 @@ describe('AvailableToolDiscoveryService', () => {
 
     expect(result.tools.map((tool) => tool.toolName)).toEqual([
       'chess.launch-game',
+      'flashcards.start-session',
       'planner.open-dashboard',
-      'weather.lookup',
     ])
     expect(result.tools.map((tool) => tool.availabilityReason)).toEqual([
       'platform-authenticated',
-      'app-oauth-connected',
       'none-required',
+      'app-oauth-connected',
     ])
   })
 
@@ -76,11 +76,11 @@ describe('AvailableToolDiscoveryService', () => {
       appOAuthStates: {
         [exampleAuthenticatedPlannerManifest.appId]: 'connected',
       },
-      activeAppId: examplePublicWeatherManifest.appId,
+      activeAppId: examplePublicFlashcardsManifest.appId,
       preferActiveApp: true,
     })
 
-    expect(result.tools[0].appId).toBe(examplePublicWeatherManifest.appId)
+    expect(result.tools[0].appId).toBe(examplePublicFlashcardsManifest.appId)
     expect(result.tools[0].isFromActiveApp).toBe(true)
   })
 
@@ -89,12 +89,12 @@ describe('AvailableToolDiscoveryService', () => {
 
     const result = await service.discoverAvailableTools({
       platformAuthenticated: true,
-      includeAppIds: [exampleInternalChessManifest.appId, examplePublicWeatherManifest.appId],
+      includeAppIds: [exampleInternalChessManifest.appId, examplePublicFlashcardsManifest.appId],
       excludeAppIds: [exampleInternalChessManifest.appId],
     })
 
-    expect(result.tools.map((tool) => tool.appId)).toEqual([examplePublicWeatherManifest.appId])
-    expect(result.selection.includedAppIds).toEqual([examplePublicWeatherManifest.appId])
+    expect(result.tools.map((tool) => tool.appId)).toEqual([examplePublicFlashcardsManifest.appId])
+    expect(result.selection.includedAppIds).toEqual([examplePublicFlashcardsManifest.appId])
     expect(result.selection.omittedAppIds).toEqual([
       exampleInternalChessManifest.appId,
     ])
@@ -109,6 +109,6 @@ describe('AvailableToolDiscoveryService', () => {
       distribution: 'public-external',
     })
 
-    expect(result.tools.map((tool) => tool.toolName)).toEqual(['weather.lookup'])
+    expect(result.tools.map((tool) => tool.toolName)).toEqual(['flashcards.start-session'])
   })
 })

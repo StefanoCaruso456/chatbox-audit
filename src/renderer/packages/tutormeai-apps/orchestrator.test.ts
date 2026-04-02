@@ -23,12 +23,12 @@ describe('routeTutorMeAiAppRequest', () => {
     ).toBe(true)
   })
 
-  it('launches weather for explicit forecast requests', async () => {
+  it('launches flashcards for explicit study requests', async () => {
     const result = await routeTutorMeAiAppRequest({
       origin: 'http://localhost:1212',
       conversationId: 'conversation.2',
       userId: 'user.2',
-      userRequest: 'show me the weather in Austin, TX',
+      userRequest: 'start flashcards on fractions',
       requestMessageId: 'message.2',
       previousMessages: [createMessage('user', 'Hello')],
     })
@@ -39,7 +39,7 @@ describe('routeTutorMeAiAppRequest', () => {
     }
 
     expect(
-      result.message.contentParts.some((part) => part.type === 'embedded-app' && part.appId === 'weather.public')
+      result.message.contentParts.some((part) => part.type === 'embedded-app' && part.appId === 'flashcards.public')
     ).toBe(true)
   })
 
@@ -150,23 +150,23 @@ describe('routeTutorMeAiAppRequest', () => {
       },
     ]
 
-    const completedWeather = createMessage('assistant', 'Weather Lookup finished.')
-    completedWeather.timestamp = Date.parse('2026-04-01T12:02:00.000Z')
-    completedWeather.contentParts = [
+    const completedFlashcards = createMessage('assistant', 'Flashcards Coach finished.')
+    completedFlashcards.timestamp = Date.parse('2026-04-01T12:02:00.000Z')
+    completedFlashcards.contentParts = [
       {
         type: 'embedded-app',
-        appId: 'weather.public',
-        appName: 'Weather Lookup',
-        appSessionId: 'app-session.weather.1',
-        sourceUrl: 'http://localhost:1212/embedded-apps/weather',
-        title: 'Weather Lookup',
-        summary: 'Forecast ready for discussion.',
+        appId: 'flashcards.public',
+        appName: 'Flashcards Coach',
+        appSessionId: 'app-session.flashcards.1',
+        sourceUrl: 'http://localhost:1212/embedded-apps/flashcards',
+        title: 'Flashcards Coach',
+        summary: 'Flashcard deck ready for discussion.',
         status: 'ready',
         allowedOrigin: 'http://localhost:1212',
         bridge: {
           expectedOrigin: 'http://localhost:1212',
           conversationId: 'conversation.multi',
-          appSessionId: 'app-session.weather.1',
+          appSessionId: 'app-session.flashcards.1',
           bootstrap: {
             launchReason: 'chat-tool',
             authState: 'connected',
@@ -174,9 +174,9 @@ describe('routeTutorMeAiAppRequest', () => {
           },
           completion: {
             status: 'succeeded',
-            resultSummary: 'Forecast ready for discussion.',
+            resultSummary: 'Flashcard deck ready for discussion.',
             result: {
-              location: 'Austin, TX',
+              topic: 'fractions',
             },
           },
         },
@@ -185,39 +185,39 @@ describe('routeTutorMeAiAppRequest', () => {
 
     const context = deriveConversationAppContext(
       'conversation.multi',
-      [createMessage('user', 'launch chess'), activeChess, completedWeather],
+      [createMessage('user', 'launch chess'), activeChess, completedFlashcards],
       '2026-04-01T12:03:00.000Z'
     )
 
     expect(context?.activeApp?.appId).toBe('chess.internal')
     expect(context?.recentCompletions).toHaveLength(1)
-    expect(context?.recentCompletions[0]?.appId).toBe('weather.public')
+    expect(context?.recentCompletions[0]?.appId).toBe('flashcards.public')
     expect(context?.sessionTimeline.map((session) => session.appSessionId)).toEqual([
       'app-session.chess.1',
-      'app-session.weather.1',
+      'app-session.flashcards.1',
     ])
     expect(context?.selection.strategy).toBe('active-plus-recent-completions')
-    expect(context?.selection.includedSessionIds).toEqual(['app-session.chess.1', 'app-session.weather.1'])
+    expect(context?.selection.includedSessionIds).toEqual(['app-session.chess.1', 'app-session.flashcards.1'])
     expect(context?.notes?.[0]).toContain('Multiple app sessions')
   })
 
   it('prioritizes an explicitly referenced app over a newer active app', () => {
-    const completedWeather = createMessage('assistant', 'Weather Lookup finished.')
-    completedWeather.timestamp = Date.parse('2026-04-01T12:02:00.000Z')
-    completedWeather.contentParts = [
+    const completedFlashcards = createMessage('assistant', 'Flashcards Coach finished.')
+    completedFlashcards.timestamp = Date.parse('2026-04-01T12:02:00.000Z')
+    completedFlashcards.contentParts = [
       {
         type: 'embedded-app',
-        appId: 'weather.public',
-        appName: 'Weather Lookup',
-        appSessionId: 'app-session.weather.2',
-        sourceUrl: 'http://localhost:1212/embedded-apps/weather',
-        title: 'Weather Lookup',
-        summary: 'Forecast ready for discussion.',
+        appId: 'flashcards.public',
+        appName: 'Flashcards Coach',
+        appSessionId: 'app-session.flashcards.2',
+        sourceUrl: 'http://localhost:1212/embedded-apps/flashcards',
+        title: 'Flashcards Coach',
+        summary: 'Flashcard deck ready for discussion.',
         status: 'ready',
         bridge: {
           expectedOrigin: 'http://localhost:1212',
           conversationId: 'conversation.multi.2',
-          appSessionId: 'app-session.weather.2',
+          appSessionId: 'app-session.flashcards.2',
           bootstrap: {
             launchReason: 'chat-tool',
             authState: 'connected',
@@ -225,9 +225,9 @@ describe('routeTutorMeAiAppRequest', () => {
           },
           completion: {
             status: 'succeeded',
-            resultSummary: 'Forecast ready for discussion.',
+            resultSummary: 'Flashcard deck ready for discussion.',
             result: {
-              location: 'Austin, TX',
+              topic: 'fractions',
             },
           },
         },
@@ -265,13 +265,13 @@ describe('routeTutorMeAiAppRequest', () => {
 
     const context = deriveConversationAppContext(
       'conversation.multi.2',
-      [createMessage('user', 'open weather'), completedWeather, activePlanner],
+      [createMessage('user', 'open flashcards'), completedFlashcards, activePlanner],
       '2026-04-01T12:05:00.000Z',
-      'What did the weather app say about jackets?'
+      'What did the flashcards app say about fractions?'
     )
 
     expect(context?.activeApp?.appId).toBe('planner.oauth')
-    expect(context?.recentCompletions[0]?.appId).toBe('weather.public')
-    expect(context?.notes?.some((note) => note.includes('weather.public'))).toBe(true)
+    expect(context?.recentCompletions[0]?.appId).toBe('flashcards.public')
+    expect(context?.notes?.some((note) => note.includes('flashcards.public'))).toBe(true)
   })
 })

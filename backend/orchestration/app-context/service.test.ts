@@ -1,4 +1,4 @@
-import { exampleChessCompletionSignal, examplePublicWeatherManifest } from '@shared/contracts/v1'
+import { exampleFlashcardsCompletionSignal, examplePublicFlashcardsManifest } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
 import { AppSessionService, InMemoryAppSessionRepository } from '../../app-sessions'
 import { ConversationService, InMemoryConversationRepository } from '../../conversations'
@@ -71,9 +71,9 @@ describe('ConversationAppContextAssembler', () => {
     })
 
     await appSessions.createSession({
-      appSessionId: 'app-session.weather.1',
+      appSessionId: 'app-session.flashcards.1',
       conversationId: 'conversation.1',
-      appId: examplePublicWeatherManifest.appId,
+      appId: examplePublicFlashcardsManifest.appId,
       launchReason: 'manual-open',
       authState: 'not-required',
       status: 'completed',
@@ -83,17 +83,18 @@ describe('ConversationAppContextAssembler', () => {
         sequence: 2,
         capturedAt: '2026-04-01T12:03:00.000Z',
         status: 'completed',
-        summary: 'Weather app finished loading the Chicago forecast.',
+        summary: 'Flashcards session on fractions finished and is ready for follow-up.',
         stateDigest: {
-          location: 'Chicago, IL',
+          topic: 'fractions',
+          reviewedCount: 3,
         },
       },
       completion: {
-        ...exampleChessCompletionSignal,
-        appSessionId: 'app-session.weather.1',
-        appId: examplePublicWeatherManifest.appId,
+        ...exampleFlashcardsCompletionSignal,
+        appSessionId: 'app-session.flashcards.1',
+        appId: examplePublicFlashcardsManifest.appId,
         conversationId: 'conversation.1',
-        resultSummary: 'Chicago forecast loaded successfully.',
+        resultSummary: 'Flashcards on fractions are ready for review.',
         startedAt: '2026-04-01T12:02:00.000Z',
         completedAt: '2026-04-01T12:03:00.000Z',
       },
@@ -127,10 +128,10 @@ describe('ConversationAppContextAssembler', () => {
 
     expect(result.value.activeApp?.appSessionId).toBe('app-session.chess.1')
     expect(result.value.activeApp?.availableToolNames).toEqual(['chess.launch-game'])
-    expect(result.value.recentCompletions[0].appSessionId).toBe('app-session.weather.1')
+    expect(result.value.recentCompletions[0].appSessionId).toBe('app-session.flashcards.1')
     expect(result.value.sessionTimeline.map((session) => session.appSessionId)).toEqual([
       'app-session.chess.1',
-      'app-session.weather.1',
+      'app-session.flashcards.1',
     ])
     expect(result.value.notes).toContain('Active app tool "chess.launch-game" is currently "queued".')
   })
@@ -166,7 +167,7 @@ describe('ConversationAppContextAssembler', () => {
           sessionId === '4'
             ? undefined
             : {
-                ...exampleChessCompletionSignal,
+                ...exampleFlashcardsCompletionSignal,
                 appSessionId: `app-session.${sessionId}`,
                 appId: `app.${sessionId}`,
                 conversationId: 'conversation.2',

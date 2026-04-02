@@ -205,7 +205,7 @@ Important:
 The repo already includes embedded app examples you can model against:
 
 - `src/renderer/routes/embedded-apps/chess.tsx`
-- `src/renderer/routes/embedded-apps/weather.tsx`
+- `src/renderer/routes/embedded-apps/flashcards.tsx`
 - `src/renderer/routes/embedded-apps/planner.tsx`
 
 Phase 6 integration coverage lives in:

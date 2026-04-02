@@ -1,10 +1,10 @@
 import {
   exampleChessLaunchToolSchema,
   exampleConversationAppContext,
+  exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
   examplePlannerDashboardToolSchema,
-  examplePublicWeatherManifest,
-  exampleWeatherLookupToolSchema,
+  examplePublicFlashcardsManifest,
 } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
 import type { AvailableToolRecord } from '../tool-discovery'
@@ -48,17 +48,17 @@ describe('ToolRoutingService', () => {
           availabilityReason: 'platform-authenticated',
         }),
         createToolRecord({
-          appId: examplePublicWeatherManifest.appId,
-          appName: examplePublicWeatherManifest.name,
-          appSlug: examplePublicWeatherManifest.slug,
-          appVersionId: `${examplePublicWeatherManifest.appId}@${examplePublicWeatherManifest.appVersion}`,
-          appVersion: examplePublicWeatherManifest.appVersion,
-          category: 'weather',
-          distribution: examplePublicWeatherManifest.distribution,
-          authType: examplePublicWeatherManifest.authType,
-          toolName: exampleWeatherLookupToolSchema.name,
-          tool: exampleWeatherLookupToolSchema,
-          authRequirement: exampleWeatherLookupToolSchema.authRequirement,
+          appId: examplePublicFlashcardsManifest.appId,
+          appName: examplePublicFlashcardsManifest.name,
+          appSlug: examplePublicFlashcardsManifest.slug,
+          appVersionId: `${examplePublicFlashcardsManifest.appId}@${examplePublicFlashcardsManifest.appVersion}`,
+          appVersion: examplePublicFlashcardsManifest.appVersion,
+          category: 'study',
+          distribution: examplePublicFlashcardsManifest.distribution,
+          authType: examplePublicFlashcardsManifest.authType,
+          toolName: exampleFlashcardsStartToolSchema.name,
+          tool: exampleFlashcardsStartToolSchema,
+          authRequirement: exampleFlashcardsStartToolSchema.authRequirement,
           availabilityReason: 'none-required',
         }),
       ],
@@ -135,17 +135,17 @@ describe('ToolRoutingService', () => {
       userRequest: 'Tell me a joke about penguins.',
       availableTools: [
         createToolRecord({
-          appId: examplePublicWeatherManifest.appId,
-          appName: examplePublicWeatherManifest.name,
-          appSlug: examplePublicWeatherManifest.slug,
-          appVersionId: `${examplePublicWeatherManifest.appId}@${examplePublicWeatherManifest.appVersion}`,
-          appVersion: examplePublicWeatherManifest.appVersion,
-          category: 'weather',
-          distribution: examplePublicWeatherManifest.distribution,
-          authType: examplePublicWeatherManifest.authType,
-          toolName: exampleWeatherLookupToolSchema.name,
-          tool: exampleWeatherLookupToolSchema,
-          authRequirement: exampleWeatherLookupToolSchema.authRequirement,
+          appId: examplePublicFlashcardsManifest.appId,
+          appName: examplePublicFlashcardsManifest.name,
+          appSlug: examplePublicFlashcardsManifest.slug,
+          appVersionId: `${examplePublicFlashcardsManifest.appId}@${examplePublicFlashcardsManifest.appVersion}`,
+          appVersion: examplePublicFlashcardsManifest.appVersion,
+          category: 'study',
+          distribution: examplePublicFlashcardsManifest.distribution,
+          authType: examplePublicFlashcardsManifest.authType,
+          toolName: exampleFlashcardsStartToolSchema.name,
+          tool: exampleFlashcardsStartToolSchema,
+          authRequirement: exampleFlashcardsStartToolSchema.authRequirement,
           availabilityReason: 'none-required',
         }),
       ],
@@ -201,20 +201,20 @@ describe('ToolRoutingService', () => {
     const decision = service.routeToolRequest({
       conversationId: 'conversation.5',
       userId: 'user.5',
-      userRequest: 'weather in Chicago',
+      userRequest: 'start flashcards on fractions',
       availableTools: [
         createToolRecord({
-          appId: examplePublicWeatherManifest.appId,
-          appName: examplePublicWeatherManifest.name,
-          appSlug: examplePublicWeatherManifest.slug,
-          appVersionId: `${examplePublicWeatherManifest.appId}@${examplePublicWeatherManifest.appVersion}`,
-          appVersion: examplePublicWeatherManifest.appVersion,
-          category: 'weather',
-          distribution: examplePublicWeatherManifest.distribution,
-          authType: examplePublicWeatherManifest.authType,
-          toolName: exampleWeatherLookupToolSchema.name,
-          tool: exampleWeatherLookupToolSchema,
-          authRequirement: exampleWeatherLookupToolSchema.authRequirement,
+          appId: examplePublicFlashcardsManifest.appId,
+          appName: examplePublicFlashcardsManifest.name,
+          appSlug: examplePublicFlashcardsManifest.slug,
+          appVersionId: `${examplePublicFlashcardsManifest.appId}@${examplePublicFlashcardsManifest.appVersion}`,
+          appVersion: examplePublicFlashcardsManifest.appVersion,
+          category: 'study',
+          distribution: examplePublicFlashcardsManifest.distribution,
+          authType: examplePublicFlashcardsManifest.authType,
+          toolName: exampleFlashcardsStartToolSchema.name,
+          tool: exampleFlashcardsStartToolSchema,
+          authRequirement: exampleFlashcardsStartToolSchema.authRequirement,
           availabilityReason: 'none-required',
         }),
       ],
@@ -226,17 +226,17 @@ describe('ToolRoutingService', () => {
     }
 
     const invocation = service.buildToolInvocationRequest(decision, {
-      toolCallId: 'tool-call.weather.1',
+      toolCallId: 'tool-call.flashcards.1',
       requestPayloadJson: {
-        location: 'Chicago, IL',
+        topic: 'fractions',
       },
       correlationId: 'correlation.1',
       requestMessageId: 'message.1',
     })
 
-    expect(invocation.toolCallId).toBe('tool-call.weather.1')
-    expect(invocation.appId).toBe(examplePublicWeatherManifest.appId)
-    expect(invocation.toolName).toBe(exampleWeatherLookupToolSchema.name)
+    expect(invocation.toolCallId).toBe('tool-call.flashcards.1')
+    expect(invocation.appId).toBe(examplePublicFlashcardsManifest.appId)
+    expect(invocation.toolName).toBe(exampleFlashcardsStartToolSchema.name)
     expect(invocation.routing.decisionKind).toBe('invoke-tool')
     expect(invocation.metadata).toBeDefined()
     const metadata = invocation.metadata
@@ -256,7 +256,7 @@ describe('ToolRoutingService', () => {
     const decision = service.routeToolRequest({
       conversationId: 'conversation.6',
       userId: 'user.6',
-      userRequest: 'Should I use chess or weather?',
+      userRequest: 'Should I use chess or flashcards?',
       availableTools: [
         createToolRecord({
           appId: exampleInternalChessManifest.appId,
@@ -273,17 +273,17 @@ describe('ToolRoutingService', () => {
           availabilityReason: 'platform-authenticated',
         }),
         createToolRecord({
-          appId: examplePublicWeatherManifest.appId,
-          appName: examplePublicWeatherManifest.name,
-          appSlug: examplePublicWeatherManifest.slug,
-          appVersionId: `${examplePublicWeatherManifest.appId}@${examplePublicWeatherManifest.appVersion}`,
-          appVersion: examplePublicWeatherManifest.appVersion,
-          category: 'weather',
-          distribution: examplePublicWeatherManifest.distribution,
-          authType: examplePublicWeatherManifest.authType,
-          toolName: exampleWeatherLookupToolSchema.name,
-          tool: exampleWeatherLookupToolSchema,
-          authRequirement: exampleWeatherLookupToolSchema.authRequirement,
+          appId: examplePublicFlashcardsManifest.appId,
+          appName: examplePublicFlashcardsManifest.name,
+          appSlug: examplePublicFlashcardsManifest.slug,
+          appVersionId: `${examplePublicFlashcardsManifest.appId}@${examplePublicFlashcardsManifest.appVersion}`,
+          appVersion: examplePublicFlashcardsManifest.appVersion,
+          category: 'study',
+          distribution: examplePublicFlashcardsManifest.distribution,
+          authType: examplePublicFlashcardsManifest.authType,
+          toolName: exampleFlashcardsStartToolSchema.name,
+          tool: exampleFlashcardsStartToolSchema,
+          authRequirement: exampleFlashcardsStartToolSchema.authRequirement,
           availabilityReason: 'none-required',
         }),
       ],
@@ -297,7 +297,7 @@ describe('ToolRoutingService', () => {
     expect(decision.reason).toBe('explicit-app-conflict')
     expect(decision.routingSignals).toContain('explicit-app-conflict')
     expect(decision.options.map((option) => option.appSlug)).toEqual(
-      expect.arrayContaining([exampleInternalChessManifest.slug, examplePublicWeatherManifest.slug])
+      expect.arrayContaining([exampleInternalChessManifest.slug, examplePublicFlashcardsManifest.slug])
     )
   })
 
@@ -309,17 +309,17 @@ describe('ToolRoutingService', () => {
       userRequest: 'continue with that one',
       availableTools: [
         createToolRecord({
-          appId: examplePublicWeatherManifest.appId,
-          appName: examplePublicWeatherManifest.name,
-          appSlug: examplePublicWeatherManifest.slug,
-          appVersionId: `${examplePublicWeatherManifest.appId}@${examplePublicWeatherManifest.appVersion}`,
-          appVersion: examplePublicWeatherManifest.appVersion,
-          category: 'weather',
-          distribution: examplePublicWeatherManifest.distribution,
-          authType: examplePublicWeatherManifest.authType,
-          toolName: exampleWeatherLookupToolSchema.name,
-          tool: exampleWeatherLookupToolSchema,
-          authRequirement: exampleWeatherLookupToolSchema.authRequirement,
+          appId: examplePublicFlashcardsManifest.appId,
+          appName: examplePublicFlashcardsManifest.name,
+          appSlug: examplePublicFlashcardsManifest.slug,
+          appVersionId: `${examplePublicFlashcardsManifest.appId}@${examplePublicFlashcardsManifest.appVersion}`,
+          appVersion: examplePublicFlashcardsManifest.appVersion,
+          category: 'study',
+          distribution: examplePublicFlashcardsManifest.distribution,
+          authType: examplePublicFlashcardsManifest.authType,
+          toolName: exampleFlashcardsStartToolSchema.name,
+          tool: exampleFlashcardsStartToolSchema,
+          authRequirement: exampleFlashcardsStartToolSchema.authRequirement,
           availabilityReason: 'none-required',
         }),
       ],

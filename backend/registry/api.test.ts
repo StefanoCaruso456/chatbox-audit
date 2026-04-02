@@ -1,4 +1,4 @@
-import { exampleAuthenticatedPlannerManifest, exampleInternalChessManifest, examplePublicWeatherManifest } from '@shared/contracts/v1'
+import { exampleAuthenticatedPlannerManifest, exampleInternalChessManifest, examplePublicFlashcardsManifest } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
 import { createAppRegistryApi } from './api'
 import { InMemoryAppRegistryRepository } from './repository'
@@ -98,10 +98,10 @@ describe('AppRegistryApi', () => {
         },
         body: JSON.stringify({
           manifest: {
-            ...examplePublicWeatherManifest,
+            ...examplePublicFlashcardsManifest,
             slug: exampleInternalChessManifest.slug,
           },
-          category: 'weather',
+          category: 'study',
         }),
       })
     )
@@ -164,17 +164,17 @@ describe('AppRegistryApi', () => {
     const { api, service } = createFixture()
 
     await service.registerApp({
-      manifest: examplePublicWeatherManifest,
-      category: 'weather',
+      manifest: examplePublicFlashcardsManifest,
+      category: 'study',
     })
 
     const response = await api.get(
-      new Request(`https://railway.local/api/registry/apps?slug=${examplePublicWeatherManifest.slug}`)
+      new Request(`https://railway.local/api/registry/apps?slug=${examplePublicFlashcardsManifest.slug}`)
     )
     const body = await readJson(response)
 
     expect(response.status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(body.data.app.slug).toBe(examplePublicWeatherManifest.slug)
+    expect(body.data.app.slug).toBe(examplePublicFlashcardsManifest.slug)
   })
 })
