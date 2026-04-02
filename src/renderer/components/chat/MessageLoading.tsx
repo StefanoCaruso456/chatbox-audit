@@ -13,11 +13,24 @@ export default function MessageStatuses(props: { statuses: Message['status'] }) 
   }
   return (
     <>
-      {statuses.map((status, index) => (
-        <MessageStatus key={index} status={status} />
+      {statuses.map((status) => (
+        <MessageStatus key={getMessageStatusKey(status)} status={status} />
       ))}
     </>
   )
+}
+
+function getMessageStatusKey(status: NonNullable<Message['status']>[number]) {
+  switch (status.type) {
+    case 'retrying':
+      return `${status.type}:${status.attempt}:${status.maxAttempts}`
+    case 'launching_app':
+    case 'loading_embedded_app':
+    case 'waiting_app_completion':
+      return `${status.type}:${status.appName || 'unknown'}`
+    default:
+      return `${status.type}:${status.mode || 'default'}`
+  }
 }
 
 function MessageStatus(props: { status: NonNullable<Message['status']>[number] }) {
@@ -82,6 +95,37 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
   }
   if (status.type === 'retrying') {
     return <RetryingIndicator attempt={status.attempt} maxAttempts={status.maxAttempts} />
+  }
+  if (status.type === 'launching_app') {
+    return (
+      <LoadingBubble>
+        <span>
+          {status.appName ? t('Launching {{appName}}...', { appName: status.appName }) : t('Launching app...')}
+        </span>
+      </LoadingBubble>
+    )
+  }
+  if (status.type === 'loading_embedded_app') {
+    return (
+      <LoadingBubble>
+        <span>
+          {status.appName
+            ? t('Loading {{appName}} interface...', { appName: status.appName })
+            : t('Loading app interface...')}
+        </span>
+      </LoadingBubble>
+    )
+  }
+  if (status.type === 'waiting_app_completion') {
+    return (
+      <LoadingBubble>
+        <span>
+          {status.appName
+            ? t('Waiting for {{appName}} to finish...', { appName: status.appName })
+            : t('Waiting for app to finish...')}
+        </span>
+      </LoadingBubble>
+    )
   }
   return null
 }
