@@ -489,6 +489,9 @@ const _Message: FC<Props> = (props) => {
                         <EmbeddedAppPartUI
                           key={`${item.appId}:${item.appSessionId || index}`}
                           part={item as MessageEmbeddedAppPart}
+                          sessionId={sessionId}
+                          messageId={msg.id}
+                          partIndex={index}
                         />
                       ) : null
                     )}
