@@ -4,12 +4,43 @@ import {
   examplePublicFlashcardsManifest,
 } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
+import { AppSubmissionPackageSchema } from '../security'
 import { InMemoryAppRegistryRepository } from './repository'
 import { AppRegistryService } from './service'
 
 function createService() {
   return new AppRegistryService(new InMemoryAppRegistryRepository(), {
     now: () => '2026-04-01T12:00:00.000Z',
+  })
+}
+
+function buildSubmission(
+  manifest: typeof exampleInternalChessManifest | typeof examplePublicFlashcardsManifest | typeof exampleAuthenticatedPlannerManifest,
+  category: string
+) {
+  return AppSubmissionPackageSchema.parse({
+    submissionVersion: 'v1',
+    category,
+    manifest,
+    owner: {
+      ownerType: 'external-partner',
+      ownerName: 'Partner App Studio',
+      contactName: 'Taylor Brooks',
+      contactEmail: 'taylor@example.com',
+      organization: 'Partner App Studio',
+    },
+    domains: manifest.allowedOrigins,
+    requestedOAuthScopes: manifest.authConfig?.scopes ?? [],
+    stagingUrl: manifest.uiEmbedConfig.entryUrl,
+    privacyPolicyUrl: `${manifest.uiEmbedConfig.targetOrigin}/privacy`,
+    support: {
+      supportEmail: 'support@example.com',
+      responsePolicy: 'School support responses within one business day.',
+      supportUrl: `${manifest.uiEmbedConfig.targetOrigin}/support`,
+    },
+    releaseNotes: `Submission package for ${manifest.appVersion}.`,
+    screenshots: [],
+    submittedAt: '2026-04-02T12:00:00.000Z',
   })
 }
 
@@ -29,6 +60,24 @@ describe('AppRegistryService', () => {
       expect(result.value.currentVersionId).toBe(`${exampleInternalChessManifest.appId}@${exampleInternalChessManifest.appVersion}`)
       expect(result.value.category).toBe('games')
       expect(result.value.reviewStatus).toBe('approved')
+      expect(result.value.reviewState).toBe('approved-production')
+    }
+  })
+
+  it('forces submission-package registrations into platform-owned pending review', async () => {
+    const service = createService()
+
+    const result = await service.registerApp({
+      submission: buildSubmission(exampleInternalChessManifest, 'games'),
+      registrationSource: 'partner-submission',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.reviewStatus).toBe('pending')
+      expect(result.value.reviewState).toBe('submitted')
+      expect(result.value.currentVersion.manifest.safetyMetadata.reviewStatus).toBe('pending')
+      expect(result.value.currentVersion.submission.owner.ownerType).toBe('external-partner')
     }
   })
 
@@ -47,6 +96,24 @@ describe('AppRegistryService', () => {
     if (!result.ok) {
       expect(result.code).toBe('invalid-manifest')
       expect(result.details?.some((detail) => detail.includes('authType'))).toBe(true)
+    }
+  })
+
+  it('rejects invalid submission packages with readable details', async () => {
+    const service = createService()
+
+    const result = await service.registerApp({
+      submission: {
+        manifest: examplePublicFlashcardsManifest,
+        category: '',
+      },
+      registrationSource: 'partner-submission',
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.code).toBe('invalid-submission-package')
+      expect(result.details?.length).toBeGreaterThan(0)
     }
   })
 
