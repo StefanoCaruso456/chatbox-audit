@@ -1,9 +1,8 @@
 import { Typography } from '@mui/material'
 import type { Message } from '@shared/types'
-import { useAtomValue } from 'jotai'
 import { Loader } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import * as atoms from '@/stores/atoms'
+import { useRemoteConfig } from '@/stores/remoteConfigStore'
 import LinkTargetBlank from '../common/Link'
 
 export default function MessageStatuses(props: { statuses: Message['status'] }) {
@@ -36,7 +35,7 @@ function getMessageStatusKey(status: NonNullable<Message['status']>[number]) {
 function MessageStatus(props: { status: NonNullable<Message['status']>[number] }) {
   const { status } = props
   const { t } = useTranslation()
-  const remoteConfig = useAtomValue(atoms.remoteConfigAtom)
+  const remoteConfig = useRemoteConfig()
   if (status.type === 'sending_file') {
     return (
       <div>
