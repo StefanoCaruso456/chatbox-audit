@@ -40,7 +40,7 @@ export default function AppCard({ app, isActive = false, onOpen }: AppCardProps)
                 {app.name}
               </Text>
               <Text size="xs" c="chatbox-secondary">
-                {t('Opens in panel')}
+                {app.experience === 'tutormeai-runtime' ? t('TutorMeAI runtime') : t('Opens in panel')}
               </Text>
             </Stack>
           </Flex>

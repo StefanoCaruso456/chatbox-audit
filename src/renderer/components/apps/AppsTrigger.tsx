@@ -24,8 +24,8 @@ export default function AppsTrigger({ className }: AppsTriggerProps) {
       openDelay={500}
       label={
         activeApp
-          ? t('Browse apps or switch from the active tool')
-          : t('Browse approved K-12 apps without leaving chat')
+          ? t('Browse the app library or switch from the active tool')
+          : t('Browse the unified TutorMeAI app library without leaving chat')
       }
     >
       <UnstyledButton
