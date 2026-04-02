@@ -35,6 +35,7 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     gradeRanges: ['6-8', '9-12'],
     launchUrl: 'https://www.instructure.com/canvas',
     launchMode: 'iframe',
+    embedStatus: 'needs-district-url',
     isApproved: true,
     tags: ['lms', 'secondary', 'assignments', 'course-management'],
   },
