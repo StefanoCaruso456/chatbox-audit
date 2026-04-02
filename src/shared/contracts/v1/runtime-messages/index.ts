@@ -82,6 +82,30 @@ export const AppCompletionMessageSchema = EmbeddedAppMessageBaseSchema.extend({
   source: z.literal('app'),
   type: z.literal('app.complete'),
   payload: CompletionSignalSchema,
+}).superRefine((value, ctx) => {
+  if (value.payload.conversationId !== value.conversationId) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'completion payload conversationId must match the message envelope',
+      path: ['payload', 'conversationId'],
+    })
+  }
+
+  if (value.payload.appSessionId !== value.appSessionId) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'completion payload appSessionId must match the message envelope',
+      path: ['payload', 'appSessionId'],
+    })
+  }
+
+  if (value.payload.appId !== value.appId) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'completion payload appId must match the message envelope',
+      path: ['payload', 'appId'],
+    })
+  }
 })
 
 export const AppErrorMessageSchema = EmbeddedAppMessageBaseSchema.extend({
