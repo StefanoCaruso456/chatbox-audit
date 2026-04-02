@@ -312,6 +312,7 @@ erDiagram
 
 - Vercel client work should stay conceptually separate from Railway backend work, even before the repo is physically split.
 - Until the repo split exists, agents must treat `src/shared/contracts/**` as the only stable cross-boundary package.
+- `backend/**` is the Railway backend implementation surface for PostgreSQL schema, migrations, registry services, persistence services, auth, and orchestration work.
 
 ## Non-Negotiable Rules for Downstream Agents
 
