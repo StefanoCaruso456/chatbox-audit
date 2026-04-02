@@ -85,6 +85,7 @@ export interface EmbeddedAppHostProps {
   className?: string
   runtime?: EmbeddedAppHostRuntimeConfig
   onRetry?: () => void
+  onContinueInChat?: () => void
   onOpenInNewTab?: () => void
   onLoad?: () => void
   onError?: () => void

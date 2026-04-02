@@ -127,13 +127,21 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
   const actualOrigin = useMemo(() => getActualOrigin(normalizedSrc), [normalizedSrc])
   const runtimeAppSessionId = props.runtime?.appSessionId ?? props.appSessionId ?? `${props.appId}.session`
   const handshakeToken = props.runtime?.handshakeToken?.trim() || `runtime.${props.appId}.${runtimeAppSessionId}`
+  const [retryNonce, setRetryNonce] = useState(0)
+  const [recoveryDismissed, setRecoveryDismissed] = useState(false)
   const initialState = useMemo(
     () => getInitialHostState(props.state, props.runtime?.completion?.status, normalizedSrc),
     [normalizedSrc, props.runtime?.completion?.status, props.state]
   )
   const runtimeResetKey = useMemo(() => {
-    return [props.appId, runtimeAppSessionId, props.runtime?.conversationId ?? '', normalizedSrc ?? ''].join('|')
-  }, [normalizedSrc, props.appId, props.runtime?.conversationId, runtimeAppSessionId])
+    return [
+      props.appId,
+      runtimeAppSessionId,
+      props.runtime?.conversationId ?? '',
+      normalizedSrc ?? '',
+      retryNonce,
+    ].join('|')
+  }, [normalizedSrc, props.appId, props.runtime?.conversationId, runtimeAppSessionId, retryNonce])
 
   const originValidation = useMemo(() => {
     if (!props.runtime) {
@@ -217,6 +225,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
   useEffect(() => {
     void runtimeResetKey
     setHasLoaded(false)
+    setRecoveryDismissed(false)
     setDisplayState(initialState)
     setRuntimeDescription(props.runtime?.completion?.summary ?? props.description)
     setRuntimeErrorMessage(props.runtime?.completion?.errorMessage ?? props.errorMessage)
@@ -233,6 +242,17 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     props.runtime?.completion?.summary,
     runtimeResetKey,
   ])
+
+  const handleRetry = useCallback(() => {
+    setRecoveryDismissed(false)
+    setRetryNonce((current) => current + 1)
+    props.onRetry?.()
+  }, [props])
+
+  const handleContinueInChat = useCallback(() => {
+    setRecoveryDismissed(true)
+    props.onContinueInChat?.()
+  }, [props])
 
   useEffect(() => {
     const runtime = props.runtime
@@ -445,6 +465,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
   const statusCopy = getEmbeddedAppStatusCopy(effectiveState)
   const tone = getStateTone(effectiveState)
   const hasError = effectiveState === 'error'
+  const showRecoveryPanel = hasError && recoveryDismissed
   const iframeTitle = props.iframeTitle || `${props.appName} embedded app`
   const displayTitle = props.title || props.appName
   const displaySubtitle = props.subtitle || props.appSlug || props.appId
@@ -510,11 +531,9 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
                   <ScalableIcon icon={IconExternalLink} />
                 </ActionIcon>
               )}
-              {props.onRetry && (
-                <ActionIcon variant="subtle" radius="md" aria-label="Retry embedded app" onClick={props.onRetry}>
-                  <ScalableIcon icon={IconRefresh} />
-                </ActionIcon>
-              )}
+              <ActionIcon variant="subtle" radius="md" aria-label="Retry embedded app" onClick={handleRetry}>
+                <ScalableIcon icon={IconRefresh} />
+              </ActionIcon>
             </Group>
           </Group>
           <Text size="sm" mt={8} className="leading-6 text-slate-700">
@@ -532,6 +551,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
         >
           {!hasError && normalizedSrc && (
             <iframe
+              key={runtimeResetKey}
               ref={iframeRef}
               data-testid="embedded-app-host-iframe"
               title={iframeTitle}
@@ -554,7 +574,51 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
             />
           )}
 
-          {!shouldHideOverlay && (
+          {showRecoveryPanel ? (
+            <Box
+              data-testid="embedded-app-host-recovery"
+              className="absolute inset-0 flex items-center justify-center p-5"
+              style={{
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(254,242,242,0.92) 100%)',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <Stack gap="sm" align="center" maw={420} className="text-center">
+                <Box
+                  className="flex h-12 w-12 items-center justify-center rounded-full"
+                  style={{
+                    background: 'rgba(254, 226, 226, 0.95)',
+                    color: tone.accent,
+                  }}
+                >
+                  <ScalableIcon icon={IconAlertTriangle} size={20} color={tone.accent} />
+                </Box>
+                <Stack gap={4}>
+                  <Text fw={700} size="md">
+                    App session ended
+                  </Text>
+                  <Text size="sm" className="text-slate-600">
+                    You can keep chatting while we preserve the failure summary here.
+                  </Text>
+                </Stack>
+                <Group gap="xs" justify="center">
+                  <Button radius="md" onClick={handleRetry}>
+                    Retry app
+                  </Button>
+                  {props.onOpenInNewTab && normalizedSrc && (
+                    <Button
+                      variant="light"
+                      radius="md"
+                      leftSection={<ScalableIcon icon={IconExternalLink} size={14} />}
+                      onClick={props.onOpenInNewTab}
+                    >
+                      Open in new tab
+                    </Button>
+                  )}
+                </Group>
+              </Stack>
+            </Box>
+          ) : !shouldHideOverlay ? (
             <Box
               data-testid="embedded-app-host-overlay"
               className="absolute inset-0 flex items-center justify-center p-5"
@@ -589,11 +653,12 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
                 </Stack>
                 {hasError ? (
                   <Group gap="xs" justify="center">
-                    {props.onRetry && (
-                      <Button radius="md" onClick={props.onRetry}>
-                        Retry app
-                      </Button>
-                    )}
+                    <Button radius="md" onClick={handleRetry}>
+                      Retry app
+                    </Button>
+                    <Button variant="light" radius="md" onClick={handleContinueInChat}>
+                      Continue in chat
+                    </Button>
                     {props.onOpenInNewTab && normalizedSrc && (
                       <Button
                         variant="light"
@@ -615,7 +680,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
                 )}
               </Stack>
             </Box>
-          )}
+          ) : null}
         </Box>
       </Stack>
     </Paper>
