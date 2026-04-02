@@ -1,10 +1,12 @@
 import type { AppSessionAuthState, CompletionSignal, JsonValue } from '@shared/contracts/v1'
 import type { JsonObject } from '@shared/contracts/v1/shared'
-import type { MessageEmbeddedAppPart } from '@shared/types'
+import { createMessage, type MessageEmbeddedAppPart } from '@shared/types'
 import { useCallback, useMemo } from 'react'
+import { v4 as uuidv4 } from 'uuid'
+import type { EmbeddedAppConversationIndicator } from '@/packages/tutormeai-apps/conversation-state'
 import { getSession } from '@/stores/chatStore'
 import { findMessageLocation } from '@/stores/session/forks'
-import { modifyMessage } from '@/stores/sessionActions'
+import { insertMessageAfter, modifyMessage } from '@/stores/sessionActions'
 import EmbeddedAppHost from './EmbeddedAppHost'
 import type {
   EmbeddedAppHostErrorMessage,
@@ -37,6 +39,10 @@ function getEmbeddedAppDescription(part: MessageEmbeddedAppPart) {
 }
 
 function getEmbeddedAppErrorMessage(part: MessageEmbeddedAppPart) {
+  if (part.bridge?.completion?.status === 'cancelled') {
+    return 'This app session was closed. Continue in chat or relaunch it anytime.'
+  }
+
   return part.bridge?.completion?.errorMessage ?? part.errorMessage
 }
 
@@ -78,11 +84,13 @@ export function EmbeddedAppPartUI({
   sessionId,
   messageId,
   partIndex,
+  conversationIndicator: _conversationIndicator,
 }: {
   part: MessageEmbeddedAppPart
   sessionId: string
   messageId: string
   partIndex: number
+  conversationIndicator?: EmbeddedAppConversationIndicator
 }) {
   const updatePart = useCallback(
     async (updater: (currentPart: MessageEmbeddedAppPart) => MessageEmbeddedAppPart) => {
@@ -129,6 +137,7 @@ export function EmbeddedAppPartUI({
       conversationId: part.bridge.conversationId,
       appSessionId: part.bridge.appSessionId ?? part.appSessionId,
       handshakeToken: part.bridge.handshakeToken,
+      restartNonce: part.bridge.restartNonce,
       heartbeatTimeoutMs: part.bridge.heartbeatTimeoutMs,
       bootstrap: part.bridge.bootstrap,
       pendingInvocation: part.bridge.pendingInvocation,
@@ -211,7 +220,6 @@ export function EmbeddedAppPartUI({
           bridge: currentPart.bridge
             ? {
                 ...currentPart.bridge,
-                pendingInvocation: undefined,
               }
             : currentPart.bridge,
         }))
@@ -224,13 +232,91 @@ export function EmbeddedAppPartUI({
           bridge: currentPart.bridge
             ? {
                 ...currentPart.bridge,
-                pendingInvocation: undefined,
               }
             : currentPart.bridge,
         }))
       },
     } as const
   }, [part, updatePart])
+
+  const handleRetry = useCallback(() => {
+    if (!part.bridge?.pendingInvocation) {
+      return
+    }
+
+    void updatePart((currentPart) => {
+      if (!currentPart.bridge?.pendingInvocation) {
+        return currentPart
+      }
+
+      const retryCorrelationId = `corr.retry.${uuidv4()}`
+      const retryToolName = currentPart.bridge.pendingInvocation.toolName
+
+      return {
+        ...currentPart,
+        status: 'loading',
+        summary: `Retrying ${currentPart.appName} for ${retryToolName}.`,
+        errorMessage: undefined,
+        bridge: {
+          ...currentPart.bridge,
+          restartNonce: `restart.${uuidv4()}`,
+          handshakeToken: `runtime.${currentPart.appId}.${uuidv4()}`,
+          bootstrap: currentPart.bridge.bootstrap
+            ? {
+                ...currentPart.bridge.bootstrap,
+                messageId: `bootstrap.retry.${uuidv4()}`,
+                correlationId: retryCorrelationId,
+              }
+            : currentPart.bridge.bootstrap,
+          pendingInvocation: {
+            ...currentPart.bridge.pendingInvocation,
+            toolCallId: `tool-call.retry.${uuidv4()}`,
+            messageId: `invoke.retry.${uuidv4()}`,
+            correlationId: retryCorrelationId,
+          },
+          completion: undefined,
+        },
+      }
+    })
+  }, [part.bridge?.pendingInvocation, updatePart])
+
+  const handleContinueInChat = useCallback(() => {
+    const closedAt = new Date().toISOString()
+    void updatePart((currentPart) => ({
+      ...currentPart,
+      summary: `${currentPart.appName} was closed. Continue in chat or launch another app when you're ready.`,
+      bridge: currentPart.bridge
+        ? {
+            ...currentPart.bridge,
+            pendingInvocation: undefined,
+            completion: {
+              status: 'cancelled',
+              resultSummary: `${currentPart.appName} was closed before it finished.`,
+              result: currentPart.bridge.bootstrap?.initialState,
+            },
+          }
+        : currentPart.bridge,
+    }))
+
+    const followUpMessage = createMessage(
+      'assistant',
+      "We can keep going in chat without the app. Tell me what you'd like to do next."
+    )
+    followUpMessage.generating = false
+    followUpMessage.status = []
+    followUpMessage.contentParts = [
+      {
+        type: 'text',
+        text: "We can keep going in chat without the app. Tell me what you'd like to do next.",
+      },
+      {
+        type: 'info',
+        text: `Closed ${part.appName} at ${closedAt}.`,
+      },
+    ]
+
+    void insertMessageAfter(sessionId, followUpMessage, messageId)
+  }, [messageId, part.appName, sessionId, updatePart])
 
   return (
     <EmbeddedAppHost
@@ -246,6 +332,11 @@ export function EmbeddedAppPartUI({
       sandbox={part.sandbox}
       errorMessage={getEmbeddedAppErrorMessage(part)}
       runtime={runtime}
+      onRetry={handleRetry}
+      onContinueInChat={handleContinueInChat}
+      onOpenInNewTab={() => {
+        window.open(part.sourceUrl, '_blank', 'noopener,noreferrer')
+      }}
     />
   )
 }

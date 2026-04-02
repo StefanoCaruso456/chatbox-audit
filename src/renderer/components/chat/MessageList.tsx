@@ -32,6 +32,7 @@ import { type StateSnapshot, Virtuoso, type VirtuosoHandle } from 'react-virtuos
 import { platformTypeAtom } from '@/hooks/useNeedRoomForWinControls'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
+import { buildEmbeddedAppConversationIndicators } from '@/packages/tutormeai-apps/conversation-state'
 import * as atoms from '@/stores/atoms'
 import {
   deleteFork,
@@ -108,6 +109,11 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
     }
     return null
   }, [currentMessageList])
+
+  const embeddedAppIndicators = useMemo(
+    () => buildEmbeddedAppConversationIndicators(currentMessageList),
+    [currentMessageList]
+  )
 
   const virtuoso = useRef<VirtuosoHandle>(null)
   const messageListRef = useRef<HTMLDivElement>(null)
@@ -316,6 +322,7 @@ const MessageList = forwardRef<MessageListRef, MessageListProps>((props, ref) =>
                         msg={msg}
                         sessionId={currentSession.id}
                         sessionType={currentSession.type || 'chat'}
+                        embeddedAppIndicators={embeddedAppIndicators}
                         className={index === 0 ? 'pt-4' : index === currentMessageList.length - 1 ? '!pb-4' : ''}
                         collapseThreshold={msg.role === 'system' ? 150 : undefined}
                         buttonGroup={

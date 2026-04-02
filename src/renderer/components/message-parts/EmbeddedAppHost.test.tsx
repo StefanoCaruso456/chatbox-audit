@@ -284,6 +284,145 @@ describe('EmbeddedAppHost', () => {
     expect(onHeartbeatTimeout).toHaveBeenCalledTimes(1)
   })
 
+  it('switches to a compact recovery panel when the user continues in chat after a failure', async () => {
+    const onContinueInChat = vi.fn()
+
+    renderHost(
+      <EmbeddedAppHost
+        appId="chess.internal"
+        appName="Chess Tutor"
+        src="https://example.com/chess"
+        runtime={{
+          expectedOrigin: 'https://example.com',
+          conversationId: 'conversation.3',
+          appSessionId: 'app-session.chess.3',
+          handshakeToken: 'nonce-chess-3',
+          bootstrap: {
+            launchReason: 'chat-tool',
+          },
+        }}
+        onContinueInChat={onContinueInChat}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+    attachIframeWindow(iframe)
+    fireEvent.load(iframe)
+
+    dispatchRuntimeMessage(iframe, {
+      version: 'v1',
+      messageId: 'msg.runtime.chess.3',
+      conversationId: 'conversation.3',
+      appSessionId: 'app-session.chess.3',
+      appId: 'chess.internal',
+      sequence: 3,
+      sentAt: '2026-04-01T12:03:00.000Z',
+      security: {
+        handshakeToken: 'nonce-chess-3',
+        expectedOrigin: 'https://example.com',
+      },
+      source: 'app',
+      type: 'app.error',
+      payload: {
+        code: 'app.runtime-error',
+        message: 'The chess app crashed while loading the board.',
+        recoverable: true,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Continue in chat' })).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue in chat' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('embedded-app-host-recovery')).toBeTruthy()
+      expect(screen.getByText('App session ended')).toBeTruthy()
+      expect(screen.getByText(/keep chatting/i)).toBeTruthy()
+    })
+
+    expect(onContinueInChat).toHaveBeenCalledTimes(1)
+  })
+
+  it('replays the iframe handshake after a retry request', async () => {
+    const onRetry = vi.fn()
+
+    renderHost(
+      <EmbeddedAppHost
+        appId="weather.public"
+        appName="Weather Dashboard"
+        src="https://example.com/weather"
+        runtime={{
+          expectedOrigin: 'https://example.com',
+          conversationId: 'conversation.4',
+          appSessionId: 'app-session.weather.4',
+          handshakeToken: 'nonce-weather-4',
+          bootstrap: {
+            launchReason: 'chat-tool',
+            authState: 'connected',
+            grantedPermissions: ['session:write', 'tool:invoke'],
+          },
+          pendingInvocation: {
+            toolCallId: 'tool-call.weather.4',
+            toolName: 'weather.lookup-current',
+            arguments: {
+              location: 'Chicago, IL',
+            },
+            timeoutMs: 10_000,
+          },
+        }}
+        onRetry={onRetry}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+    const contentWindow = attachIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    await waitFor(() => {
+      expect(contentWindow.postMessage).toHaveBeenCalledTimes(2)
+    })
+
+    dispatchRuntimeMessage(iframe, {
+      version: 'v1',
+      messageId: 'msg.runtime.weather.fail',
+      conversationId: 'conversation.4',
+      appSessionId: 'app-session.weather.4',
+      appId: 'weather.public',
+      sequence: 3,
+      sentAt: '2026-04-01T12:04:00.000Z',
+      security: {
+        handshakeToken: 'nonce-weather-4',
+        expectedOrigin: 'https://example.com',
+      },
+      source: 'app',
+      type: 'app.error',
+      payload: {
+        code: 'app.runtime-error',
+        message: 'The forecast widget failed to initialize.',
+        recoverable: true,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Retry embedded app' })).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry app' }))
+
+    expect(onRetry).toHaveBeenCalledTimes(1)
+
+    const retriedIframe = screen.getByTestId('embedded-app-host-iframe')
+    const retriedWindow = attachIframeWindow(retriedIframe)
+    fireEvent.load(retriedIframe)
+
+    await waitFor(() => {
+      expect(retriedWindow.postMessage).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('shows a blocked state when the iframe src is invalid', () => {
     renderHost(
       <EmbeddedAppHost

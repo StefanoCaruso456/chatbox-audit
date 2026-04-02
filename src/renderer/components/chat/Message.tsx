@@ -1,5 +1,14 @@
 import NiceModal from '@ebay/nice-modal-react'
-import { ActionIcon, type ActionIconProps, Flex, Image as Img, Loader, Text, Tooltip as Tooltip1 } from '@mantine/core'
+import {
+  ActionIcon,
+  type ActionIconProps,
+  Badge,
+  Flex,
+  Image as Img,
+  Loader,
+  Text,
+  Tooltip as Tooltip1,
+} from '@mantine/core'
 import { Grid, Typography, useTheme } from '@mui/material'
 import Box from '@mui/material/Box'
 import type { Message, MessageEmbeddedAppPart, MessagePicture, MessageToolCallPart, SessionType } from '@shared/types'
@@ -32,6 +41,7 @@ import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { navigateToSettings } from '@/modals/Settings'
 import { copyToClipboard } from '@/packages/navigator'
+import type { EmbeddedAppConversationIndicator } from '@/packages/tutormeai-apps/conversation-state'
 import { countWord } from '@/packages/word-count'
 import platform from '@/platform'
 import storage from '@/storage'
@@ -51,6 +61,46 @@ import { MessageAttachmentGrid } from './MessageAttachmentGrid'
 import MessageErrTips from './MessageErrTips'
 import MessageStatuses from './MessageLoading'
 
+function getEmbeddedAppLifecycleMeta(part: MessageEmbeddedAppPart) {
+  if (part.bridge?.completion) {
+    return {
+      label: 'Completed app',
+      color: 'teal' as const,
+      description: 'This app session has finished and the chat can follow up on the result.',
+    }
+  }
+
+  if (part.status === 'error') {
+    return {
+      label: 'Failed app',
+      color: 'red' as const,
+      description: part.errorMessage || 'This app session needs a retry or a fresh launch.',
+    }
+  }
+
+  if (part.bridge?.bootstrap?.authState === 'required') {
+    return {
+      label: 'Awaiting auth',
+      color: 'yellow' as const,
+      description: 'Connect the account to continue this app session.',
+    }
+  }
+
+  if (part.bridge?.pendingInvocation) {
+    return {
+      label: 'Active app',
+      color: 'blue' as const,
+      description: 'The app is currently active in this conversation.',
+    }
+  }
+
+  return {
+    label: 'Ready app',
+    color: 'gray' as const,
+    description: 'The app is available and waiting for the next interaction.',
+  }
+}
+
 interface Props {
   id?: string
   sessionId: string
@@ -62,6 +112,7 @@ interface Props {
   small?: boolean
   assistantAvatarKey?: string
   sessionPicUrl?: string
+  embeddedAppIndicators?: Record<string, EmbeddedAppConversationIndicator>
 }
 
 const _Message: FC<Props> = (props) => {
@@ -486,13 +537,39 @@ const _Message: FC<Props> = (props) => {
                       ) : item.type === 'tool-call' ? (
                         <ToolCallPartUI key={item.toolCallId} part={item as MessageToolCallPart} />
                       ) : item.type === 'embedded-app' ? (
-                        <EmbeddedAppPartUI
-                          key={`${item.appId}:${item.appSessionId || index}`}
-                          part={item as MessageEmbeddedAppPart}
-                          sessionId={sessionId}
-                          messageId={msg.id}
-                          partIndex={index}
-                        />
+                        <div key={`${item.appId}:${item.appSessionId || index}`} className="mt-2">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            {(() => {
+                              const lifecycle = getEmbeddedAppLifecycleMeta(item as MessageEmbeddedAppPart)
+                              return (
+                                <>
+                                  <Badge variant="light" color={lifecycle.color} size="sm">
+                                    {lifecycle.label}
+                                  </Badge>
+                                  {props.embeddedAppIndicators?.[`${msg.id}:${index}`] && (
+                                    <Badge
+                                      variant="outline"
+                                      color={props.embeddedAppIndicators[`${msg.id}:${index}`].tone}
+                                      size="sm"
+                                    >
+                                      {props.embeddedAppIndicators[`${msg.id}:${index}`].label}
+                                    </Badge>
+                                  )}
+                                  <Text size="xs" c="dimmed">
+                                    {lifecycle.description}
+                                  </Text>
+                                </>
+                              )
+                            })()}
+                          </div>
+                          <EmbeddedAppPartUI
+                            part={item as MessageEmbeddedAppPart}
+                            sessionId={sessionId}
+                            messageId={msg.id}
+                            partIndex={index}
+                            conversationIndicator={props.embeddedAppIndicators?.[`${msg.id}:${index}`]}
+                          />
+                        </div>
                       ) : null
                     )}
                   </div>

@@ -40,6 +40,7 @@ export interface EmbeddedAppHostRuntimeConfig {
   conversationId: string
   appSessionId?: string
   handshakeToken?: string
+  restartNonce?: string
   heartbeatTimeoutMs?: number
   bootstrap?: EmbeddedAppHostBootstrapConfig
   pendingInvocation?: EmbeddedAppHostPendingInvocation
@@ -85,6 +86,7 @@ export interface EmbeddedAppHostProps {
   className?: string
   runtime?: EmbeddedAppHostRuntimeConfig
   onRetry?: () => void
+  onContinueInChat?: () => void
   onOpenInNewTab?: () => void
   onLoad?: () => void
   onError?: () => void

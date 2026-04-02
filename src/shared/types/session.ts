@@ -141,6 +141,7 @@ export const MessageEmbeddedAppPartSchema = z.object({
       conversationId: z.string(),
       appSessionId: z.string().optional(),
       handshakeToken: z.string().min(1).optional(),
+      restartNonce: z.string().min(1).optional(),
       heartbeatTimeoutMs: z.number().int().positive().optional(),
       bootstrap: z
         .object({
