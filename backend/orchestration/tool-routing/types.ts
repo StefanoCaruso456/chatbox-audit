@@ -18,7 +18,46 @@ export type ToolRoutingSignal =
   | 'active-app-boost'
   | 'follow-up-intent'
   | 'multiple-close-matches'
+  | 'explicit-ambiguity'
+  | 'explicit-app-conflict'
+  | 'generic-action-request'
+  | 'low-confidence-match'
+  | 'invalid-routing-request'
+  | 'unrelated-request'
+  | 'missing-active-app'
   | 'no-match'
+
+export type ClarifyToolRouteDecisionReason =
+  | 'multiple-close-matches'
+  | 'explicit-ambiguity'
+  | 'explicit-app-conflict'
+  | 'generic-tool-request'
+
+export type PlainChatRouteDecisionReason =
+  | 'invalid-request'
+  | 'no-eligible-tool-match'
+  | 'low-confidence-tool-match'
+  | 'unrelated-request'
+  | 'missing-active-app'
+
+export interface ToolRouteClarificationOption {
+  appId: string
+  appName: string
+  appSlug: string
+  toolName: string
+  isActiveApp: boolean
+}
+
+export interface ToolRoutingIntentSignals {
+  explicitAmbiguity: boolean
+  followUpIntent: boolean
+  launchIntent: boolean
+  activeAppMentioned: boolean
+  generalConversationCue: boolean
+  genericActionOnly: boolean
+  mentionedAppCount: number
+  hasConflictingExplicitMentions: boolean
+}
 
 export interface RouteToolRequest {
   conversationId: string
@@ -62,13 +101,16 @@ export interface InvokeToolRouteDecision extends ToolRouteDecisionBase {
 
 export interface ClarifyToolRouteDecision extends ToolRouteDecisionBase {
   kind: 'clarify'
+  reason: ClarifyToolRouteDecisionReason
   clarificationQuestion: string
+  options: ToolRouteClarificationOption[]
   routingSignals: ToolRoutingSignal[]
 }
 
 export interface PlainChatRouteDecision extends ToolRouteDecisionBase {
   kind: 'plain-chat'
-  reason: string
+  reason: PlainChatRouteDecisionReason
+  refusalMessage: string
   routingSignals: ToolRoutingSignal[]
 }
 
@@ -89,7 +131,7 @@ export interface BuildToolInvocationRequestInput {
 
 export interface ToolRoutingInvocationAdapterResult extends QueueToolInvocationRequest {
   routing: {
-    decisionKind: Extract<ToolRouteDecisionKind, 'invoke-tool'>
+    decisionKind: Extract<ToolRoutingDecisionKind, 'invoke-tool'>
     score: number
     signals: ToolRoutingSignal[]
     activeAppId: string | null

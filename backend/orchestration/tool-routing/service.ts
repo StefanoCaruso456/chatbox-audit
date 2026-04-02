@@ -1,13 +1,17 @@
-import type { ConversationAppContext, JsonObject } from '@shared/contracts/v1'
+import type { ConversationAppContext } from '@shared/contracts/v1'
 import type { AvailableToolRecord } from '../tool-discovery'
 import type {
   BuildToolInvocationRequestInput,
   ClarifyToolRouteDecision,
+  ClarifyToolRouteDecisionReason,
   InvokeToolRouteDecision,
   PlainChatRouteDecision,
+  PlainChatRouteDecisionReason,
   RouteToolRequest,
   ToolRouteCandidateSummary,
+  ToolRouteClarificationOption,
   ToolRouteDecision,
+  ToolRoutingIntentSignals,
   ToolRoutingInvocationAdapterResult,
   ToolRoutingSignal,
 } from './types'
@@ -28,6 +32,7 @@ export class ToolRoutingService {
     const userId = this.normalizeIdentifier(request.userId)
     const userRequest = this.normalizeText(request.userRequest)
     const evaluatedAt = this.normalizeTimestamp(request.evaluatedAt)
+    const intentSignals = this.detectIntentSignals(userRequest, request.availableTools, request.activeAppContext)
 
     if (!conversationId || !userId) {
       return this.plainChatDecision({
@@ -37,14 +42,42 @@ export class ToolRoutingService {
         evaluatedAt,
         activeAppContext: request.activeAppContext ?? null,
         candidates: [],
-        reason: 'The routing request was invalid, so the system will stay in plain chat mode.',
-        routingSignals: ['no-match'],
+        reason: 'invalid-request',
+        routingSignals: ['no-match', 'invalid-routing-request'],
       })
     }
 
     const scoredCandidates = this.scoreCandidates(request.availableTools, userRequest, request.activeAppContext)
     const activeAppId = request.activeAppContext?.activeApp?.appId ?? null
     const activeAppSessionId = request.activeAppContext?.activeApp?.appSessionId ?? null
+
+    if (intentSignals.hasConflictingExplicitMentions) {
+      return this.clarifyDecision({
+        conversationId,
+        userId,
+        userRequest,
+        evaluatedAt,
+        activeAppContext: request.activeAppContext ?? null,
+        candidates: scoredCandidates,
+        reason: 'explicit-app-conflict',
+        routingSignals: ['explicit-app-conflict'],
+        clarificationQuestion: this.buildClarificationQuestion(scoredCandidates, 'explicit-app-conflict'),
+      })
+    }
+
+    if (this.shouldClarifyGenericAction(intentSignals, scoredCandidates)) {
+      return this.clarifyDecision({
+        conversationId,
+        userId,
+        userRequest,
+        evaluatedAt,
+        activeAppContext: request.activeAppContext ?? null,
+        candidates: scoredCandidates,
+        reason: 'generic-tool-request',
+        routingSignals: ['generic-action-request'],
+        clarificationQuestion: this.buildClarificationQuestion(scoredCandidates, 'generic-tool-request'),
+      })
+    }
 
     if (scoredCandidates.length === 0 || scoredCandidates[0].score <= 0) {
       return this.plainChatDecision({
@@ -54,8 +87,8 @@ export class ToolRoutingService {
         evaluatedAt,
         activeAppContext: request.activeAppContext ?? null,
         candidates: scoredCandidates,
-        reason: 'No eligible tool matched the request strongly enough to route.',
-        routingSignals: ['no-match'],
+        reason: this.resolvePlainChatReason(intentSignals),
+        routingSignals: this.resolvePlainChatSignals(intentSignals),
       })
     }
 
@@ -64,7 +97,6 @@ export class ToolRoutingService {
     const secondScore = secondCandidate?.score ?? 0
     const closeMatch = secondCandidate && secondScore > 0 && topScore - secondScore <= 3
     const weakMatch = topScore < 10
-    const ambiguousRequest = this.looksAmbiguous(userRequest)
 
     if (weakMatch) {
       return this.plainChatDecision({
@@ -74,12 +106,12 @@ export class ToolRoutingService {
         evaluatedAt,
         activeAppContext: request.activeAppContext ?? null,
         candidates: scoredCandidates,
-        reason: 'The request does not name a tool strongly enough to justify execution.',
-        routingSignals: ['no-match'],
+        reason: this.resolveWeakMatchReason(intentSignals),
+        routingSignals: this.resolveWeakMatchSignals(intentSignals),
       })
     }
 
-    if (closeMatch || ambiguousRequest) {
+    if (closeMatch || intentSignals.explicitAmbiguity) {
       return this.clarifyDecision({
         conversationId,
         userId,
@@ -87,8 +119,12 @@ export class ToolRoutingService {
         evaluatedAt,
         activeAppContext: request.activeAppContext ?? null,
         candidates: scoredCandidates,
-        routingSignals: ['multiple-close-matches'],
-        clarificationQuestion: this.buildClarificationQuestion(scoredCandidates),
+        reason: closeMatch ? 'multiple-close-matches' : 'explicit-ambiguity',
+        routingSignals: closeMatch ? ['multiple-close-matches'] : ['explicit-ambiguity'],
+        clarificationQuestion: this.buildClarificationQuestion(
+          scoredCandidates,
+          closeMatch ? 'multiple-close-matches' : 'explicit-ambiguity'
+        ),
       })
     }
 
@@ -291,13 +327,28 @@ export class ToolRoutingService {
     return score
   }
 
-  private buildClarificationQuestion(candidates: ToolRouteCandidateSummary[]): string {
+  private buildClarificationQuestion(
+    candidates: ToolRouteCandidateSummary[],
+    reason: ClarifyToolRouteDecisionReason
+  ): string {
     const uniqueApps = [...new Map(candidates.map((candidate) => [candidate.appId, candidate])).values()]
       .slice(0, 3)
       .map((candidate) => candidate.appName)
 
     if (uniqueApps.length === 0) {
       return 'Which app should I use?'
+    }
+
+    if (reason === 'generic-tool-request') {
+      if (uniqueApps.length === 1) {
+        return `I can open ${uniqueApps[0]}, or we can stay in chat. Which would you like?`
+      }
+
+      if (uniqueApps.length === 2) {
+        return `I can use ${uniqueApps[0]} or ${uniqueApps[1]}. Which app should I open?`
+      }
+
+      return `I can use ${uniqueApps[0]}, ${uniqueApps[1]}, or ${uniqueApps[2]}. Which app should I open?`
     }
 
     if (uniqueApps.length === 1) {
@@ -309,6 +360,111 @@ export class ToolRoutingService {
     }
 
     return `I can help with ${uniqueApps[0]}, ${uniqueApps[1]}, or ${uniqueApps[2]}. Which one do you mean?`
+  }
+
+  private detectIntentSignals(
+    userRequest: string,
+    availableTools: AvailableToolRecord[],
+    activeAppContext: ConversationAppContext | null | undefined
+  ): ToolRoutingIntentSignals {
+    const normalized = this.normalizeText(userRequest)
+    const requestTokens = new Set(this.tokenize(normalized))
+    const allAppNames = new Set<string>()
+    const explicitMentions = new Set<string>()
+
+    for (const tool of availableTools) {
+      const normalizedAppName = this.normalizeText(tool.appName)
+      const normalizedAppSlug = this.normalizeText(tool.appSlug)
+      const normalizedToolName = this.normalizeText(tool.toolName)
+      const normalizedToolDisplayName = this.normalizeText(tool.tool.displayName ?? '')
+
+      for (const token of this.tokenize(tool.appName)) {
+        allAppNames.add(token)
+      }
+      for (const token of this.tokenize(tool.appSlug)) {
+        allAppNames.add(token)
+      }
+
+      if (
+        (normalizedAppName.length > 0 && normalized.includes(normalizedAppName)) ||
+        (normalizedAppSlug.length > 0 && normalized.includes(normalizedAppSlug)) ||
+        (normalizedToolName.length > 0 && normalized.includes(normalizedToolName)) ||
+        (normalizedToolDisplayName.length > 0 && normalized.includes(normalizedToolDisplayName))
+      ) {
+        explicitMentions.add(tool.appId)
+      }
+    }
+
+    const generalConversationCue = this.generalConversationVerbs.some((cue) => normalized.includes(cue))
+    const launchIntent = this.launchIntentTokens.some((token) => requestTokens.has(token))
+    const genericActionOnly =
+      launchIntent &&
+      requestTokens.size <= 2 &&
+      ![...requestTokens].some((token) => allAppNames.has(token)) &&
+      !this.looksLikeFollowUp(userRequest)
+
+    return {
+      explicitAmbiguity: this.looksAmbiguous(userRequest),
+      followUpIntent: this.looksLikeFollowUp(userRequest),
+      launchIntent,
+      activeAppMentioned: false,
+      generalConversationCue,
+      genericActionOnly,
+      mentionedAppCount: explicitMentions.size,
+      hasConflictingExplicitMentions: explicitMentions.size > 1,
+    }
+  }
+
+  private shouldClarifyGenericAction(
+    intentSignals: ToolRoutingIntentSignals,
+    candidates: Array<AvailableToolRecord & ToolRouteCandidateSummary>
+  ): boolean {
+    if (!intentSignals.genericActionOnly) {
+      return false
+    }
+
+    const candidateApps = new Set(candidates.filter((candidate) => candidate.score > 0).map((candidate) => candidate.appId))
+    return candidateApps.size > 1
+  }
+
+  private resolvePlainChatReason(intentSignals: ToolRoutingIntentSignals): PlainChatRouteDecisionReason {
+    if (intentSignals.generalConversationCue && !intentSignals.launchIntent && !intentSignals.followUpIntent) {
+      return 'unrelated-request'
+    }
+
+    if (intentSignals.followUpIntent) {
+      return 'missing-active-app'
+    }
+
+    return 'no-eligible-tool-match'
+  }
+
+  private resolvePlainChatSignals(intentSignals: ToolRoutingIntentSignals): ToolRoutingSignal[] {
+    if (intentSignals.generalConversationCue && !intentSignals.launchIntent && !intentSignals.followUpIntent) {
+      return ['unrelated-request', 'no-match']
+    }
+
+    if (intentSignals.followUpIntent) {
+      return ['missing-active-app', 'no-match']
+    }
+
+    return ['no-match']
+  }
+
+  private resolveWeakMatchReason(intentSignals: ToolRoutingIntentSignals): PlainChatRouteDecisionReason {
+    if (intentSignals.generalConversationCue && !intentSignals.launchIntent && !intentSignals.followUpIntent) {
+      return 'unrelated-request'
+    }
+
+    return 'low-confidence-tool-match'
+  }
+
+  private resolveWeakMatchSignals(intentSignals: ToolRoutingIntentSignals): ToolRoutingSignal[] {
+    if (intentSignals.generalConversationCue && !intentSignals.launchIntent && !intentSignals.followUpIntent) {
+      return ['unrelated-request', 'low-confidence-match']
+    }
+
+    return ['low-confidence-match']
   }
 
   private looksAmbiguous(userRequest: string): boolean {
@@ -334,6 +490,18 @@ export class ToolRoutingService {
     )
   }
 
+  private buildClarificationOptions(
+    candidates: Array<AvailableToolRecord & ToolRouteCandidateSummary>
+  ): ToolRouteClarificationOption[] {
+    return [...new Map(candidates.map((candidate) => [candidate.appId, candidate])).values()].slice(0, 3).map((candidate) => ({
+      appId: candidate.appId,
+      appName: candidate.appName,
+      appSlug: candidate.appSlug,
+      toolName: candidate.toolName,
+      isActiveApp: candidate.isActiveApp,
+    }))
+  }
+
   private clarifyDecision(input: {
     conversationId: string
     userId: string
@@ -341,6 +509,7 @@ export class ToolRoutingService {
     evaluatedAt: string
     activeAppContext: ConversationAppContext | null
     candidates: Array<AvailableToolRecord & ToolRouteCandidateSummary>
+    reason: ClarifyToolRouteDecisionReason
     routingSignals: ToolRoutingSignal[]
     clarificationQuestion: string
   }): ClarifyToolRouteDecision {
@@ -356,6 +525,8 @@ export class ToolRoutingService {
       candidates: input.candidates,
       routingSignals: input.routingSignals,
       clarificationQuestion: input.clarificationQuestion,
+      reason: input.reason,
+      options: this.buildClarificationOptions(input.candidates),
     }
   }
 
@@ -366,7 +537,7 @@ export class ToolRoutingService {
     evaluatedAt: string
     activeAppContext: ConversationAppContext | null
     candidates: Array<AvailableToolRecord & ToolRouteCandidateSummary>
-    reason: string
+    reason: PlainChatRouteDecisionReason
     routingSignals: ToolRoutingSignal[]
   }): PlainChatRouteDecision {
     return {
@@ -381,6 +552,23 @@ export class ToolRoutingService {
       candidates: input.candidates,
       routingSignals: input.routingSignals,
       reason: input.reason,
+      refusalMessage: this.buildPlainChatRefusalMessage(input.reason),
+    }
+  }
+
+  private buildPlainChatRefusalMessage(reason: PlainChatRouteDecisionReason): string {
+    switch (reason) {
+      case 'invalid-request':
+        return 'I could not validate that tool-routing request, so I will stay in plain chat.'
+      case 'missing-active-app':
+        return 'There is no active app session to continue, so I will stay in plain chat.'
+      case 'low-confidence-tool-match':
+        return 'The request did not match a tool clearly enough, so I will stay in plain chat.'
+      case 'unrelated-request':
+        return 'This request looks unrelated to the available apps, so I will answer in plain chat.'
+      case 'no-eligible-tool-match':
+      default:
+        return 'No eligible app tool matched the request strongly enough, so I will stay in plain chat.'
     }
   }
 
@@ -445,4 +633,27 @@ export class ToolRoutingService {
     'with',
     'you',
   ])
+
+  private readonly launchIntentTokens = [
+    'open',
+    'launch',
+    'start',
+    'play',
+    'use',
+    'connect',
+    'create',
+    'show',
+    'run',
+  ]
+
+  private readonly generalConversationVerbs = [
+    'tell me',
+    'explain',
+    'why is',
+    'what is',
+    'who is',
+    'write',
+    'joke',
+    'summarize',
+  ]
 }

@@ -122,7 +122,9 @@ describe('ToolRoutingService', () => {
 
     expect(decision.clarificationQuestion).toContain('Planner App')
     expect(decision.clarificationQuestion).toContain('Notes App')
-    expect(decision.routingSignals).toContain('multiple-close-matches')
+    expect(decision.reason).toBe('generic-tool-request')
+    expect(decision.routingSignals).toContain('generic-action-request')
+    expect(decision.options).toHaveLength(2)
   })
 
   it('falls back to plain chat for unrelated requests', () => {
@@ -154,8 +156,9 @@ describe('ToolRoutingService', () => {
       return
     }
 
-    expect(decision.reason).toContain('No eligible tool matched')
-    expect(decision.routingSignals).toContain('no-match')
+    expect(decision.reason).toBe('unrelated-request')
+    expect(decision.refusalMessage).toContain('unrelated')
+    expect(decision.routingSignals).toContain('unrelated-request')
   })
 
   it('prefers the active app when it is the best available follow-up target', () => {
@@ -235,10 +238,100 @@ describe('ToolRoutingService', () => {
     expect(invocation.appId).toBe(examplePublicWeatherManifest.appId)
     expect(invocation.toolName).toBe(exampleWeatherLookupToolSchema.name)
     expect(invocation.routing.decisionKind).toBe('invoke-tool')
-    expect(invocation.metadata.routing).toMatchObject({
+    expect(invocation.metadata).toBeDefined()
+    const metadata = invocation.metadata
+    if (!metadata) {
+      return
+    }
+
+    expect(metadata.routing).toMatchObject({
       decisionKind: 'invoke-tool',
       activeAppId: null,
     })
-    expect(invocation.metadata.transitionLog?.[0].status).toBe('queued')
+    expect(metadata.transitionLog?.[0].status).toBe('queued')
+  })
+
+  it('asks for clarification when the request explicitly mentions multiple apps', () => {
+    const service = createService()
+    const decision = service.routeToolRequest({
+      conversationId: 'conversation.6',
+      userId: 'user.6',
+      userRequest: 'Should I use chess or weather?',
+      availableTools: [
+        createToolRecord({
+          appId: exampleInternalChessManifest.appId,
+          appName: exampleInternalChessManifest.name,
+          appSlug: exampleInternalChessManifest.slug,
+          appVersionId: `${exampleInternalChessManifest.appId}@${exampleInternalChessManifest.appVersion}`,
+          appVersion: exampleInternalChessManifest.appVersion,
+          category: 'games',
+          distribution: exampleInternalChessManifest.distribution,
+          authType: exampleInternalChessManifest.authType,
+          toolName: exampleChessLaunchToolSchema.name,
+          tool: exampleChessLaunchToolSchema,
+          authRequirement: exampleChessLaunchToolSchema.authRequirement,
+          availabilityReason: 'platform-authenticated',
+        }),
+        createToolRecord({
+          appId: examplePublicWeatherManifest.appId,
+          appName: examplePublicWeatherManifest.name,
+          appSlug: examplePublicWeatherManifest.slug,
+          appVersionId: `${examplePublicWeatherManifest.appId}@${examplePublicWeatherManifest.appVersion}`,
+          appVersion: examplePublicWeatherManifest.appVersion,
+          category: 'weather',
+          distribution: examplePublicWeatherManifest.distribution,
+          authType: examplePublicWeatherManifest.authType,
+          toolName: exampleWeatherLookupToolSchema.name,
+          tool: exampleWeatherLookupToolSchema,
+          authRequirement: exampleWeatherLookupToolSchema.authRequirement,
+          availabilityReason: 'none-required',
+        }),
+      ],
+    })
+
+    expect(decision.kind).toBe('clarify')
+    if (decision.kind !== 'clarify') {
+      return
+    }
+
+    expect(decision.reason).toBe('explicit-app-conflict')
+    expect(decision.routingSignals).toContain('explicit-app-conflict')
+    expect(decision.options.map((option) => option.appSlug)).toEqual(
+      expect.arrayContaining([exampleInternalChessManifest.slug, examplePublicWeatherManifest.slug])
+    )
+  })
+
+  it('stays in plain chat for follow-up language when there is no active app session', () => {
+    const service = createService()
+    const decision = service.routeToolRequest({
+      conversationId: 'conversation.7',
+      userId: 'user.7',
+      userRequest: 'continue with that one',
+      availableTools: [
+        createToolRecord({
+          appId: examplePublicWeatherManifest.appId,
+          appName: examplePublicWeatherManifest.name,
+          appSlug: examplePublicWeatherManifest.slug,
+          appVersionId: `${examplePublicWeatherManifest.appId}@${examplePublicWeatherManifest.appVersion}`,
+          appVersion: examplePublicWeatherManifest.appVersion,
+          category: 'weather',
+          distribution: examplePublicWeatherManifest.distribution,
+          authType: examplePublicWeatherManifest.authType,
+          toolName: exampleWeatherLookupToolSchema.name,
+          tool: exampleWeatherLookupToolSchema,
+          authRequirement: exampleWeatherLookupToolSchema.authRequirement,
+          availabilityReason: 'none-required',
+        }),
+      ],
+    })
+
+    expect(decision.kind).toBe('plain-chat')
+    if (decision.kind !== 'plain-chat') {
+      return
+    }
+
+    expect(decision.reason).toBe('missing-active-app')
+    expect(decision.routingSignals).toContain('missing-active-app')
+    expect(decision.refusalMessage).toContain('no active app session')
   })
 })
