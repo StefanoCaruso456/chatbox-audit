@@ -27,6 +27,7 @@ import {
 import { generateImage, streamText } from '@/packages/model-calls'
 import { getModelDisplayName } from '@/packages/model-setting-utils'
 import { estimateTokensFromMessages } from '@/packages/token'
+import { routeTutorMeAiAppRequest } from '@/packages/tutormeai-apps/orchestrator'
 import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
@@ -99,6 +100,20 @@ export function createLoadingPictures(n: number): MessagePicture[] {
     ret.push({ loading: true })
   }
   return ret
+}
+
+function hasVisibleAssistantContent(message: Message): boolean {
+  return (message.contentParts || []).some((part) => {
+    if (part.type === 'text' || part.type === 'reasoning') {
+      return part.text.trim().length > 0
+    }
+
+    if (part.type === 'info') {
+      return part.text.trim().length > 0
+    }
+
+    return true
+  })
 }
 
 /**
@@ -181,21 +196,52 @@ export async function generate(
         let firstTokenLatency: number | undefined
         const persistInterval = 2000
         let lastPersistTimestamp = Date.now()
-        const promptMsgs = await genMessageContext(
-          settings,
-          messages.slice(0, targetMsgIx),
-          model.isSupportToolUse('read-file'),
-          { compactionPoints: session.compactionPoints }
-        )
+        const previousMessages = messages.slice(0, targetMsgIx)
+        const latestUserMessage = [...previousMessages].reverse().find((message) => message.role === 'user')
+        const localAppResult =
+          latestUserMessage && typeof window !== 'undefined'
+            ? await routeTutorMeAiAppRequest({
+                origin: window.location.origin,
+                conversationId: session.id,
+                userId: configs.uuid || 'local-user',
+                userRequest: getMessageText(latestUserMessage, true, true),
+                requestMessageId: latestUserMessage.id,
+                previousMessages,
+              })
+            : { kind: 'pass-through' as const }
+
+        if (localAppResult.kind === 'invoke-tool' || localAppResult.kind === 'clarify') {
+          targetMsg = {
+            ...targetMsg,
+            ...localAppResult.message,
+            id: targetMsg.id,
+            generating: false,
+            cancel: undefined,
+            status: [],
+            finishReason: undefined,
+            usage: undefined,
+            tokensUsed:
+              targetMsg.tokensUsed ?? estimateTokensFromMessages([...previousMessages, localAppResult.message]),
+          }
+          await modifyMessage(sessionId, targetMsg, true)
+          break
+        }
+
+        const promptMsgs = await genMessageContext(settings, previousMessages, model.isSupportToolUse('read-file'), {
+          compactionPoints: session.compactionPoints,
+        })
         const modifyMessageCache: OnResultChangeWithCancel = async (updated) => {
-          const textLength = getMessageText(targetMsg, true, true).length
-          if (!firstTokenLatency && textLength > 0) {
+          const nextMessage = {
+            ...targetMsg,
+            ...pickBy(updated, identity),
+          }
+          const hasVisibleContent = hasVisibleAssistantContent(nextMessage)
+          if (!firstTokenLatency && hasVisibleContent) {
             firstTokenLatency = Date.now() - startTime
           }
           targetMsg = {
-            ...targetMsg,
-            ...pickBy(updated, identity),
-            status: textLength > 0 ? [] : targetMsg.status,
+            ...nextMessage,
+            status: hasVisibleContent ? [] : targetMsg.status,
             firstTokenLatency,
           }
           // update cache on each chunk and persist to storage periodically
@@ -435,7 +481,10 @@ export async function genMessageContext(
     const keys = Array.from(allStorageKeys)
     const contents = await Promise.all(keys.map((key) => storageGetBlob(key)))
     keys.forEach((key, index) => {
-      blobContents.set(key, contents[index])
+      const content = contents[index]
+      if (typeof content === 'string') {
+        blobContents.set(key, content)
+      }
     })
   }
 
@@ -497,7 +546,7 @@ export async function genMessageContext(
               fileKey: isTruncated ? file.storageKey : undefined,
             })
 
-            const attachment = prefix + contentToAdd + '\n' + suffix
+            const attachment = `${prefix}${contentToAdd}\n${suffix}`
             msg = mergeMessages(msg, createMessage(msg.role, attachment))
           }
         }
@@ -535,7 +584,7 @@ export async function genMessageContext(
               fileKey: isTruncated ? link.storageKey : undefined,
             })
 
-            const attachment = prefix + contentToAdd + '\n' + suffix
+            const attachment = `${prefix}${contentToAdd}\n${suffix}`
             msg = mergeMessages(msg, createMessage(msg.role, attachment))
           }
         }

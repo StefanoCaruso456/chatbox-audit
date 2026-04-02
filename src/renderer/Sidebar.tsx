@@ -11,9 +11,9 @@ import {
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
   IconMessageChatbot,
+  type IconProps,
   IconSearch,
   IconSettingsFilled,
-  type IconProps,
 } from '@tabler/icons-react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'
@@ -24,8 +24,8 @@ import { ScalableIcon } from './components/common/ScalableIcon'
 import ThemeSwitchButton from './components/dev/ThemeSwitchButton'
 import SessionItem from './components/session/SessionItem'
 import { FORCE_ENABLE_DEV_PAGES } from './dev/devToolsConfig'
-import { useProjects } from './hooks/useProjects'
 import useNeedRoomForMacWinControls from './hooks/useNeedRoomForWinControls'
+import { useProjects } from './hooks/useProjects'
 import { useIsSmallScreen, useSidebarWidth } from './hooks/useScreenChange'
 import useVersion from './hooks/useVersion'
 import { navigateToSettings } from './modals/Settings'
@@ -47,6 +47,7 @@ export default function Sidebar() {
   const setShowSidebar = useUIStore((s) => s.setShowSidebar)
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
   const setOpenSearchDialog = useUIStore((s) => s.setOpenSearchDialog)
+  const triggerConversationModeHint = useUIStore((s) => s.triggerConversationModeHint)
   const { sessionMetaList: sortedSessions } = useSessionList()
   const { projects } = useProjects()
 
@@ -88,13 +89,14 @@ export default function Sidebar() {
   }, [projects, sortedSessions])
 
   const handleCreateNewSession = useCallback(() => {
+    triggerConversationModeHint()
     navigate({ to: `/` })
 
     if (isSmallScreen) {
       setShowSidebar(false)
     }
     trackingEvent('create_new_conversation', { event_category: 'user' })
-  }, [isSmallScreen, navigate, setShowSidebar])
+  }, [isSmallScreen, navigate, setShowSidebar, triggerConversationModeHint])
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -185,11 +187,9 @@ export default function Sidebar() {
               gap="sm"
               onClick={() => platform.openLink('https://chatboxai.app/')}
               style={{ cursor: 'pointer' }}
+              aria-label="Chatbox"
             >
               <Image src={icon} w={20} h={20} />
-              <Text span c="chatbox-secondary" size="xl" lh={1.2} fw="700">
-                Chatbox
-              </Text>
             </Flex>
             {FORCE_ENABLE_DEV_PAGES && <ThemeSwitchButton size="xs" />}
           </Flex>
@@ -203,12 +203,6 @@ export default function Sidebar() {
 
         <Box flex={1} className="overflow-y-auto">
           <Stack gap="xs" px="xs" pb="md">
-            <SidebarPrimaryAction
-              icon={IconCirclePlus}
-              label={t('New Chat')}
-              onClick={handleCreateNewSession}
-              emphasized
-            />
             <SidebarPrimaryAction
               icon={IconSearch}
               label={t('Search chats')}
@@ -226,6 +220,7 @@ export default function Sidebar() {
                   icon={IconFolderPlus}
                   label={t('New project')}
                   onClick={() => void NiceModal.show('create-project')}
+                  emphasized
                   compact
                 />
 
@@ -266,6 +261,12 @@ export default function Sidebar() {
               label={t('Your chats')}
               expanded={chatsExpanded}
               onClick={() => setChatsExpanded((expanded) => !expanded)}
+            />
+            <SidebarPrimaryAction
+              icon={IconCirclePlus}
+              label={t('New Chat')}
+              onClick={handleCreateNewSession}
+              emphasized
             />
             <Collapse in={chatsExpanded}>
               <Stack gap={2} pt={4}>

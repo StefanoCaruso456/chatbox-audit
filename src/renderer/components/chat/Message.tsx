@@ -1,12 +1,20 @@
 import NiceModal from '@ebay/nice-modal-react'
-import { ActionIcon, type ActionIconProps, Flex, Image as Img, Loader, Text, Tooltip as Tooltip1 } from '@mantine/core'
+import {
+  ActionIcon,
+  type ActionIconProps,
+  Badge,
+  Flex,
+  Image as Img,
+  Loader,
+  Text,
+  Tooltip as Tooltip1,
+} from '@mantine/core'
 import { Grid, Typography, useTheme } from '@mui/material'
 import Box from '@mui/material/Box'
-import type { Message, MessagePicture, MessageToolCallPart, SessionType } from '@shared/types'
+import type { Message, MessageEmbeddedAppPart, MessagePicture, MessageToolCallPart, SessionType } from '@shared/types'
 import { getMessageText } from '@shared/utils/message'
 import {
   IconArrowDown,
-  IconBug,
   IconCode,
   IconCopy,
   IconDotsVertical,
@@ -33,6 +41,7 @@ import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { navigateToSettings } from '@/modals/Settings'
 import { copyToClipboard } from '@/packages/navigator'
+import type { EmbeddedAppConversationIndicator } from '@/packages/tutormeai-apps/conversation-state'
 import { countWord } from '@/packages/word-count'
 import platform from '@/platform'
 import storage from '@/storage'
@@ -43,14 +52,54 @@ import '../../static/Block.css'
 import { generateMore, modifyMessage, regenerateInNewFork, removeMessage } from '@/stores/sessionActions'
 import * as toastActions from '@/stores/toastActions'
 import ActionMenu, { type ActionMenuItemProps } from '../ActionMenu'
-import { isContainRenderableCode, MessageArtifact } from '../Artifact'
 import { AssistantAvatar, SystemAvatar, UserAvatar } from '../common/Avatar'
 import { ScalableIcon } from '../common/ScalableIcon'
 import Loading from '../icons/Loading'
+import { EmbeddedAppPartUI } from '../message-parts/EmbeddedAppPartUI'
 import { ReasoningContentUI, ToolCallPartUI } from '../message-parts/ToolCallPartUI'
 import { MessageAttachmentGrid } from './MessageAttachmentGrid'
 import MessageErrTips from './MessageErrTips'
 import MessageStatuses from './MessageLoading'
+
+function getEmbeddedAppLifecycleMeta(part: MessageEmbeddedAppPart) {
+  if (part.bridge?.completion) {
+    return {
+      label: 'Completed app',
+      color: 'teal' as const,
+      description: 'This app session has finished and the chat can follow up on the result.',
+    }
+  }
+
+  if (part.status === 'error') {
+    return {
+      label: 'Failed app',
+      color: 'red' as const,
+      description: part.errorMessage || 'This app session needs a retry or a fresh launch.',
+    }
+  }
+
+  if (part.bridge?.bootstrap?.authState === 'required') {
+    return {
+      label: 'Awaiting auth',
+      color: 'yellow' as const,
+      description: 'Connect the account to continue this app session.',
+    }
+  }
+
+  if (part.bridge?.pendingInvocation) {
+    return {
+      label: 'Active app',
+      color: 'blue' as const,
+      description: 'The app is currently active in this conversation.',
+    }
+  }
+
+  return {
+    label: 'Ready app',
+    color: 'gray' as const,
+    description: 'The app is available and waiting for the next interaction.',
+  }
+}
 
 interface Props {
   id?: string
@@ -63,6 +112,7 @@ interface Props {
   small?: boolean
   assistantAvatarKey?: string
   sessionPicUrl?: string
+  embeddedAppIndicators?: Record<string, EmbeddedAppConversationIndicator>
 }
 
 const _Message: FC<Props> = (props) => {
@@ -91,12 +141,9 @@ const _Message: FC<Props> = (props) => {
     enableMarkdownRendering,
     enableLaTeXRendering,
     enableMermaidRendering,
-    autoPreviewArtifacts,
-    autoCollapseCodeBlock,
   } = useSettingsStore((state) => state)
 
-  const [previewArtifact, setPreviewArtifact] = useState(autoPreviewArtifacts)
-  const [shouldThrowError, setShouldThrowError] = useState(false)
+  const [shouldThrowError] = useState(false)
 
   const contentLength = useMemo(() => {
     return getMessageText(msg).length
@@ -163,11 +210,6 @@ const _Message: FC<Props> = (props) => {
     await NiceModal.show('message-edit', { sessionId, msg: msg })
   }, [msg, sessionId])
 
-  // for testing: manual trigger error
-  const onTriggerError = useCallback(() => {
-    setShouldThrowError(true)
-  }, [])
-
   const onViewMessageJson = useCallback(async () => {
     await NiceModal.show('json-viewer', { title: t('Message Raw JSON'), data: msg })
   }, [msg, t])
@@ -228,14 +270,6 @@ const _Message: FC<Props> = (props) => {
 
     tips.push(`time: ${messageTimestamp}`)
   }
-
-  // 是否需要渲染 Aritfact 组件
-  const needArtifact = useMemo(() => {
-    if (msg.role !== 'assistant') {
-      return false
-    }
-    return isContainRenderableCode(getMessageText(msg))
-  }, [msg.contentParts, msg.role, msg])
 
   const contentParts = msg.contentParts || []
 
@@ -502,6 +536,40 @@ const _Message: FC<Props> = (props) => {
                         )
                       ) : item.type === 'tool-call' ? (
                         <ToolCallPartUI key={item.toolCallId} part={item as MessageToolCallPart} />
+                      ) : item.type === 'embedded-app' ? (
+                        <div key={`${item.appId}:${item.appSessionId || index}`} className="mt-2">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            {(() => {
+                              const lifecycle = getEmbeddedAppLifecycleMeta(item as MessageEmbeddedAppPart)
+                              return (
+                                <>
+                                  <Badge variant="light" color={lifecycle.color} size="sm">
+                                    {lifecycle.label}
+                                  </Badge>
+                                  {props.embeddedAppIndicators?.[`${msg.id}:${index}`] && (
+                                    <Badge
+                                      variant="outline"
+                                      color={props.embeddedAppIndicators[`${msg.id}:${index}`].tone}
+                                      size="sm"
+                                    >
+                                      {props.embeddedAppIndicators[`${msg.id}:${index}`].label}
+                                    </Badge>
+                                  )}
+                                  <Text size="xs" c="dimmed">
+                                    {lifecycle.description}
+                                  </Text>
+                                </>
+                              )
+                            })()}
+                          </div>
+                          <EmbeddedAppPartUI
+                            part={item as MessageEmbeddedAppPart}
+                            sessionId={sessionId}
+                            messageId={msg.id}
+                            partIndex={index}
+                            conversationIndicator={props.embeddedAppIndicators?.[`${msg.id}:${index}`]}
+                          />
+                        </div>
                       ) : null
                     )}
                   </div>
@@ -611,6 +679,16 @@ type PictureGalleryProps = {
   onReport?(picture: MessagePicture): void
 }
 
+type GalleryRenderProps = {
+  ref: ((element: HTMLElement | null) => void) | null
+  open: () => void
+}
+
+type PhotoSwipeLike = {
+  currIndex: number
+  close: () => void
+}
+
 const PictureGallery = memo(({ pictures, compact, onReport }: PictureGalleryProps) => {
   const isSmallScreen = useIsSmallScreen()
   const imageHeight = compact ? (isSmallScreen ? 60 : 100) : isSmallScreen ? 100 : 200
@@ -628,7 +706,7 @@ const PictureGallery = memo(({ pictures, compact, onReport }: PictureGalleryProp
           outlineID: 'pswp__icn-download',
         },
         appendTo: 'bar',
-        onClick: async (_e, _el, pswp) => {
+        onClick: async (_e: Event, _el: HTMLElement, pswp: PhotoSwipeLike) => {
           const picture = pictures[pswp.currIndex]
           if (picture.storageKey) {
             const base64 = await storage.getBlob(picture.storageKey)
@@ -661,7 +739,7 @@ const PictureGallery = memo(({ pictures, compact, onReport }: PictureGalleryProp
               outlineID: 'pswp__icn-report',
             },
             appendTo: 'bar',
-            onClick: (_e, _el, pswp) => {
+            onClick: (_e: Event, _el: HTMLElement, pswp: PhotoSwipeLike) => {
               const picture = pictures[pswp.currIndex]
               pswp.close()
               onReport(picture)
@@ -678,7 +756,7 @@ const PictureGallery = memo(({ pictures, compact, onReport }: PictureGalleryProp
             <ImageInStorageGalleryItem key={p.storageKey} storageKey={p.storageKey} height={imageHeight} />
           ) : p.url ? (
             <GalleryItem key={p.url} original={p.url} thumbnail={p.url} width={1024} height={1024}>
-              {({ ref, open }) => (
+              {({ ref, open }: GalleryRenderProps) => (
                 <Img
                   src={p.url}
                   h={imageHeight}
@@ -718,7 +796,7 @@ const ImageInStorageGalleryItem = ({ storageKey, height }: { storageKey: string;
 
   return pic ? (
     <GalleryItem original={pic.data} thumbnail={pic.data} width={pic.width} height={pic.height}>
-      {({ ref, open }) => (
+      {({ ref, open }: GalleryRenderProps) => (
         <Img
           src={pic.data}
           h={height ?? fallbackHeight}

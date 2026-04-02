@@ -8,8 +8,8 @@ export { ModelProviderType } from './provider'
 
 /**
  * Document parser service type
- * - none: No parsing service, only supports basic text files (mobile/web default)
- * - local: Local parsing using built-in libraries (desktop default)
+ * - none: No parsing service, only supports basic text files
+ * - local: Built-in local parsing using desktop or browser-side libraries
  * - chatbox-ai: Chatbox cloud parsing service (requires login, consumes compute points)
  * - mineru: Third-party MinerU parsing service (desktop only)
  */

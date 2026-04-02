@@ -12,8 +12,8 @@ import {
 } from '../shared'
 import {
   exampleChessLaunchToolSchema,
+  exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
-  exampleWeatherLookupToolSchema,
   ToolSchemaSchema,
 } from '../tool-schema'
 import { toValidationResult } from '../validation'
@@ -242,20 +242,20 @@ export const exampleInternalChessManifest: AppManifest = AppManifestSchema.parse
   },
 })
 
-export const examplePublicWeatherManifest: AppManifest = AppManifestSchema.parse({
+export const examplePublicFlashcardsManifest: AppManifest = AppManifestSchema.parse({
   version: 'v1',
-  appId: 'weather.public',
-  slug: 'weather',
-  name: 'Weather Lookup',
-  shortDescription: 'Check local weather conditions for classroom planning.',
+  appId: 'flashcards.public',
+  slug: 'flashcards',
+  name: 'Flashcards Coach',
+  shortDescription: 'Practice quick recall with a topic-based flashcard deck inside chat.',
   appVersion: '1.0.0',
   distribution: 'public-external',
   authType: 'none',
   permissions: ['tool:invoke'],
-  allowedOrigins: ['https://weather.chatbridge.dev'],
+  allowedOrigins: ['https://flashcards.chatbridge.dev'],
   uiEmbedConfig: {
-    entryUrl: 'https://weather.chatbridge.dev/embed',
-    targetOrigin: 'https://weather.chatbridge.dev',
+    entryUrl: 'https://flashcards.chatbridge.dev/embed',
+    targetOrigin: 'https://flashcards.chatbridge.dev',
     loadingStrategy: 'lazy',
     sandbox: {
       allowScripts: true,
@@ -264,11 +264,12 @@ export const examplePublicWeatherManifest: AppManifest = AppManifestSchema.parse
       allowSameOrigin: false,
     },
   },
-  toolDefinitions: [exampleWeatherLookupToolSchema],
+  toolDefinitions: [exampleFlashcardsStartToolSchema],
   safetyMetadata: {
     reviewStatus: 'approved',
     ageRating: 'all-ages',
     dataAccessLevel: 'minimal',
+    notes: 'Public study aid approved for no-auth classroom use.',
   },
 })
 
@@ -311,6 +312,6 @@ export const exampleAuthenticatedPlannerManifest: AppManifest = AppManifestSchem
 
 export const exampleAppManifests = [
   exampleInternalChessManifest,
-  examplePublicWeatherManifest,
+  examplePublicFlashcardsManifest,
   exampleAuthenticatedPlannerManifest,
 ]

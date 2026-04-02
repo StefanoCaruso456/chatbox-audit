@@ -23,6 +23,44 @@ CREATE UNIQUE INDEX idx_users_email_unique
   ON users (LOWER(email))
   WHERE email IS NOT NULL AND deleted_at IS NULL;
 
+CREATE TABLE platform_sessions (
+  platform_session_id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES users (user_id),
+  provider text NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  session_token_hash text NOT NULL,
+  refresh_token_hash text NOT NULL,
+  token_version integer NOT NULL DEFAULT 1,
+  session_expires_at timestamptz NOT NULL,
+  refresh_expires_at timestamptz NOT NULL,
+  issued_at timestamptz NOT NULL,
+  last_used_at timestamptz,
+  last_refreshed_at timestamptz,
+  revoked_at timestamptz,
+  user_agent text,
+  ip_address text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT NOW(),
+  updated_at timestamptz NOT NULL DEFAULT NOW(),
+  CONSTRAINT platform_sessions_provider_present CHECK (LENGTH(TRIM(provider)) > 0),
+  CONSTRAINT platform_sessions_status_valid CHECK (status IN ('active', 'expired', 'revoked')),
+  CONSTRAINT platform_sessions_token_version_positive CHECK (token_version >= 1),
+  CONSTRAINT platform_sessions_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object'),
+  CONSTRAINT platform_sessions_expiry_order CHECK (refresh_expires_at >= session_expires_at)
+);
+
+ALTER TABLE platform_sessions
+  ADD CONSTRAINT uq_platform_sessions_session_token_hash UNIQUE (session_token_hash);
+
+ALTER TABLE platform_sessions
+  ADD CONSTRAINT uq_platform_sessions_refresh_token_hash UNIQUE (refresh_token_hash);
+
+CREATE INDEX idx_platform_sessions_user_status
+  ON platform_sessions (user_id, status, updated_at DESC);
+
+CREATE INDEX idx_platform_sessions_refresh_expiry
+  ON platform_sessions (status, refresh_expires_at);
+
 CREATE TABLE conversations (
   conversation_id text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users (user_id),
@@ -77,7 +115,9 @@ CREATE TABLE apps (
   distribution text NOT NULL,
   auth_type text NOT NULL,
   review_status text NOT NULL DEFAULT 'pending',
+  review_state text NOT NULL DEFAULT 'submitted',
   current_version_id text,
+  last_review_record_id text,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   updated_at timestamptz NOT NULL DEFAULT NOW(),
@@ -87,6 +127,7 @@ CREATE TABLE apps (
   CONSTRAINT apps_distribution_valid CHECK (distribution IN ('internal', 'public-external', 'authenticated-external')),
   CONSTRAINT apps_auth_type_valid CHECK (auth_type IN ('none', 'platform-session', 'oauth2')),
   CONSTRAINT apps_review_status_valid CHECK (review_status IN ('pending', 'approved', 'blocked')),
+  CONSTRAINT apps_review_state_valid CHECK (review_state IN ('draft', 'submitted', 'validation-failed', 'review-pending', 'approved-staging', 'approved-production', 'rejected', 'suspended', 'retired')),
   CONSTRAINT apps_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
 
@@ -96,25 +137,39 @@ ALTER TABLE apps
 CREATE INDEX idx_apps_review_distribution
   ON apps (review_status, distribution, auth_type);
 
+CREATE INDEX idx_apps_review_state
+  ON apps (review_state, distribution, auth_type);
+
 CREATE TABLE app_versions (
   app_version_id text PRIMARY KEY,
   app_id text NOT NULL REFERENCES apps (app_id),
   version text NOT NULL,
   manifest_json jsonb NOT NULL,
+  submission_package_json jsonb NOT NULL DEFAULT '{}'::jsonb,
   tool_definitions_json jsonb NOT NULL,
   ui_embed_config_json jsonb NOT NULL,
   allowed_origins_json jsonb NOT NULL,
   auth_config_json jsonb,
   safety_metadata_json jsonb NOT NULL,
+  review_state text NOT NULL DEFAULT 'submitted',
+  runtime_review_status text NOT NULL DEFAULT 'pending',
+  reviewed_by_user_id text REFERENCES users (user_id),
+  reviewer_notes text,
+  last_review_record_id text,
+  submitted_at timestamptz NOT NULL DEFAULT NOW(),
+  decided_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   published_at timestamptz,
   CONSTRAINT app_versions_version_present CHECK (LENGTH(TRIM(version)) > 0),
   CONSTRAINT app_versions_manifest_is_object CHECK (jsonb_typeof(manifest_json) = 'object'),
+  CONSTRAINT app_versions_submission_is_object CHECK (jsonb_typeof(submission_package_json) = 'object'),
   CONSTRAINT app_versions_tools_is_array CHECK (jsonb_typeof(tool_definitions_json) = 'array'),
   CONSTRAINT app_versions_embed_is_object CHECK (jsonb_typeof(ui_embed_config_json) = 'object'),
   CONSTRAINT app_versions_origins_is_array CHECK (jsonb_typeof(allowed_origins_json) = 'array'),
   CONSTRAINT app_versions_auth_is_object_or_null CHECK (auth_config_json IS NULL OR jsonb_typeof(auth_config_json) = 'object'),
-  CONSTRAINT app_versions_safety_is_object CHECK (jsonb_typeof(safety_metadata_json) = 'object')
+  CONSTRAINT app_versions_safety_is_object CHECK (jsonb_typeof(safety_metadata_json) = 'object'),
+  CONSTRAINT app_versions_review_state_valid CHECK (review_state IN ('draft', 'submitted', 'validation-failed', 'review-pending', 'approved-staging', 'approved-production', 'rejected', 'suspended', 'retired')),
+  CONSTRAINT app_versions_runtime_review_status_valid CHECK (runtime_review_status IN ('pending', 'approved', 'blocked'))
 );
 
 ALTER TABLE app_versions
@@ -125,6 +180,9 @@ ALTER TABLE app_versions
 
 CREATE INDEX idx_app_versions_app_created
   ON app_versions (app_id, created_at DESC);
+
+CREATE INDEX idx_app_versions_review_state
+  ON app_versions (review_state, runtime_review_status, created_at DESC);
 
 ALTER TABLE apps
   ADD CONSTRAINT fk_apps_current_version
@@ -164,12 +222,29 @@ ALTER TABLE app_review_records
   REFERENCES app_versions (app_id, app_version_id)
   DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE apps
+  ADD CONSTRAINT fk_apps_last_review_record
+  FOREIGN KEY (last_review_record_id)
+  REFERENCES app_review_records (app_review_record_id)
+  DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE app_versions
+  ADD CONSTRAINT fk_app_versions_last_review_record
+  FOREIGN KEY (last_review_record_id)
+  REFERENCES app_review_records (app_review_record_id)
+  DEFERRABLE INITIALLY DEFERRED;
+
 CREATE TABLE oauth_connections (
   oauth_connection_id text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users (user_id),
   app_id text NOT NULL REFERENCES apps (app_id),
   provider text NOT NULL,
   status text NOT NULL,
+  authorization_state_hash text NOT NULL,
+  authorization_url text NOT NULL,
+  authorization_expires_at timestamptz,
+  code_verifier_ciphertext text,
+  requested_scopes text[] NOT NULL DEFAULT ARRAY[]::text[],
   external_account_id text,
   scopes text[] NOT NULL DEFAULT ARRAY[]::text[],
   access_token_ciphertext text,
@@ -185,17 +260,25 @@ CREATE TABLE oauth_connections (
   updated_at timestamptz NOT NULL DEFAULT NOW(),
   CONSTRAINT oauth_connections_provider_present CHECK (LENGTH(TRIM(provider)) > 0),
   CONSTRAINT oauth_connections_status_valid CHECK (status IN ('pending', 'connected', 'expired', 'revoked', 'error')),
+  CONSTRAINT oauth_connections_authorization_state_present CHECK (LENGTH(TRIM(authorization_state_hash)) > 0),
+  CONSTRAINT oauth_connections_authorization_url_present CHECK (LENGTH(TRIM(authorization_url)) > 0),
   CONSTRAINT oauth_connections_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
 
 ALTER TABLE oauth_connections
   ADD CONSTRAINT uq_oauth_connections_user_app_provider UNIQUE (user_id, app_id, provider);
 
+ALTER TABLE oauth_connections
+  ADD CONSTRAINT uq_oauth_connections_authorization_state_hash UNIQUE (authorization_state_hash);
+
 CREATE INDEX idx_oauth_connections_status_expiry
   ON oauth_connections (status, access_token_expires_at);
 
 CREATE INDEX idx_oauth_connections_app_status
   ON oauth_connections (app_id, status);
+
+CREATE INDEX idx_oauth_connections_state_expiry
+  ON oauth_connections (status, authorization_expires_at);
 
 CREATE TABLE app_sessions (
   app_session_id text PRIMARY KEY,
@@ -325,6 +408,11 @@ ALTER TABLE app_sessions
 
 CREATE TRIGGER trg_users_updated_at
 BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at_timestamp();
+
+CREATE TRIGGER trg_platform_sessions_updated_at
+BEFORE UPDATE ON platform_sessions
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_timestamp();
 

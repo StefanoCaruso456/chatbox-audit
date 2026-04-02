@@ -353,8 +353,8 @@ Decision:
 
 - Chess
   - Internal, no auth, rich bidirectional state.
-- Weather Dashboard
-  - External public API, lightweight UI, no per-user auth.
+- Flashcards Coach
+  - External public learning app, lightweight UI, no per-user auth.
 - Spotify Playlist Builder
   - External OAuth app, demonstrates token brokerage and scoped credentials.
 

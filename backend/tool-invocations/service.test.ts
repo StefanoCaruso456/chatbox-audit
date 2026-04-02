@@ -97,23 +97,23 @@ describe('ToolInvocationLoggingService', () => {
     const service = createService()
 
     await service.queueInvocation({
-      toolCallId: 'tool-call.weather.1',
+      toolCallId: 'tool-call.flashcards.1',
       conversationId: 'conversation.2',
       userId: 'user.2',
-      appId: 'weather.public',
-      toolName: 'weather.lookup',
+      appId: 'flashcards.public',
+      toolName: 'flashcards.start-session',
       invocationMode: 'platform-proxy',
       authRequirement: 'none',
       requestPayloadJson: {
-        location: 'Chicago, IL',
+        topic: 'fractions',
       },
     })
 
     const failed = await service.failInvocation({
-      toolCallId: 'tool-call.weather.1',
+      toolCallId: 'tool-call.flashcards.1',
       errorPayloadJson: {
         code: 'upstream-unavailable',
-        message: 'Weather API returned 503.',
+        message: 'Flashcards catalog returned 503.',
       },
     })
 
@@ -124,21 +124,21 @@ describe('ToolInvocationLoggingService', () => {
     }
 
     await service.queueInvocation({
-      toolCallId: 'tool-call.weather.2',
+      toolCallId: 'tool-call.flashcards.2',
       conversationId: 'conversation.2',
       userId: 'user.2',
-      appId: 'weather.public',
-      toolName: 'weather.lookup',
+      appId: 'flashcards.public',
+      toolName: 'flashcards.start-session',
       invocationMode: 'platform-proxy',
       authRequirement: 'none',
       requestPayloadJson: {
-        location: 'Chicago, IL',
+        topic: 'fractions',
       },
     })
 
     const cancelled = await service.cancelInvocation({
-      toolCallId: 'tool-call.weather.2',
-      resultSummary: 'The user cancelled the forecast lookup.',
+      toolCallId: 'tool-call.flashcards.2',
+      resultSummary: 'The user cancelled the flashcards study session.',
     })
 
     expect(cancelled.ok).toBe(true)
@@ -147,20 +147,20 @@ describe('ToolInvocationLoggingService', () => {
     }
 
     await service.queueInvocation({
-      toolCallId: 'tool-call.weather.3',
+      toolCallId: 'tool-call.flashcards.3',
       conversationId: 'conversation.2',
       userId: 'user.2',
-      appId: 'weather.public',
-      toolName: 'weather.lookup',
+      appId: 'flashcards.public',
+      toolName: 'flashcards.start-session',
       invocationMode: 'platform-proxy',
       authRequirement: 'none',
       requestPayloadJson: {
-        location: 'Chicago, IL',
+        topic: 'fractions',
       },
     })
 
     const timedOut = await service.timeoutInvocation({
-      toolCallId: 'tool-call.weather.3',
+      toolCallId: 'tool-call.flashcards.3',
     })
 
     expect(timedOut.ok).toBe(true)
@@ -185,28 +185,28 @@ describe('ToolInvocationLoggingService', () => {
       requestPayloadJson: { mode: 'practice' },
     })
     await service.queueInvocation({
-      toolCallId: 'tool-call.weather.4',
+      toolCallId: 'tool-call.flashcards.4',
       conversationId: 'conversation.2',
-      appSessionId: 'app-session.weather.1',
+      appSessionId: 'app-session.flashcards.1',
       userId: 'user.2',
-      appId: 'weather.public',
-      toolName: 'weather.lookup',
+      appId: 'flashcards.public',
+      toolName: 'flashcards.start-session',
       invocationMode: 'platform-proxy',
       authRequirement: 'none',
-      requestPayloadJson: { location: 'Chicago, IL' },
+      requestPayloadJson: { topic: 'fractions' },
     })
 
     const byConversation = await service.listByConversation('conversation.1')
     expect(byConversation.map((record) => record.toolCallId)).toEqual(['tool-call.chess.3'])
 
-    const bySession = await service.listBySession('app-session.weather.1')
-    expect(bySession.map((record) => record.toolCallId)).toEqual(['tool-call.weather.4'])
+    const bySession = await service.listBySession('app-session.flashcards.1')
+    expect(bySession.map((record) => record.toolCallId)).toEqual(['tool-call.flashcards.4'])
 
     const byStatus = await service.listByStatus('queued')
     expect(byStatus).toHaveLength(2)
 
-    const byAppTool = await service.listByAppTool('weather.public', 'weather.lookup')
-    expect(byAppTool.map((record) => record.toolCallId)).toEqual(['tool-call.weather.4'])
+    const byAppTool = await service.listByAppTool('flashcards.public', 'flashcards.start-session')
+    expect(byAppTool.map((record) => record.toolCallId)).toEqual(['tool-call.flashcards.4'])
   })
 
   it('rejects duplicate tool call ids', async () => {
@@ -236,9 +236,11 @@ describe('ToolInvocationLoggingService', () => {
 
     expect(duplicate).toEqual({
       ok: false,
+      domain: 'tool-invocation',
       code: 'duplicate-tool-call',
       message: 'Tool call "tool-call.chess.4" already exists.',
       details: undefined,
+      retryable: false,
     })
   })
 
@@ -268,9 +270,11 @@ describe('ToolInvocationLoggingService', () => {
 
     expect(retryStart).toEqual({
       ok: false,
+      domain: 'tool-invocation',
       code: 'invalid-transition',
       message: 'Tool call "tool-call.chess.5" cannot transition from "succeeded" to "running".',
       details: undefined,
+      retryable: false,
     })
   })
 })

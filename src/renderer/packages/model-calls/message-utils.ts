@@ -17,6 +17,11 @@ async function convertContentParts<T extends TextPart | ImagePart | FilePart>(
       contentParts.map(async (c) => {
         if (c.type === 'text') {
           return { type: 'text', text: c.text } as T
+        } else if (c.type === 'embedded-app') {
+          return {
+            type: 'text',
+            text: `Embedded app: ${c.title || c.appName} (status: ${c.status})${c.summary ? `\n${c.summary}` : ''}`,
+          } as T
         } else if (c.type === 'image') {
           if (options?.modelSupportVision === false) {
             return { type: 'text', text: `This is an image, OCR Result: \n${c.ocrResult}` } as T
@@ -105,7 +110,7 @@ export async function convertToModelMessages(
       }
     })
   )
-  
+
   // Filter out null values manually instead of using compact
   return results.filter((result): result is ModelMessage => result !== null)
 }

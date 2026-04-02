@@ -1,5 +1,9 @@
 import type { LanguageModelUsage } from 'ai'
 import { z } from 'zod'
+import { CompletionStatusSchema } from '../contracts/v1/completion-signal'
+import { AppPermissionsSchema } from '../contracts/v1/permissions'
+import { JsonObjectSchema, OriginSchema } from '../contracts/v1/shared'
+import { ToolSchemaSchema } from '../contracts/v1/tool-schema'
 import { SessionSettingsSchema } from '../types/settings'
 import { ModelProviderEnum } from './provider'
 
@@ -117,12 +121,68 @@ export const MessageToolCallPartSchema = z.object({
   result: z.unknown().optional(),
 })
 
+export const MessageEmbeddedAppPartSchema = z.object({
+  type: z.literal('embedded-app'),
+  appId: z.string(),
+  appName: z.string(),
+  appSessionId: z.string().optional(),
+  sourceUrl: z.string().url(),
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  status: z.enum(['loading', 'ready', 'error']),
+  minHeight: z.number().int().positive().optional(),
+  aspectRatio: z.number().positive().optional(),
+  sandbox: z.string().optional(),
+  allowedOrigin: OriginSchema.optional(),
+  errorMessage: z.string().optional(),
+  bridge: z
+    .object({
+      expectedOrigin: OriginSchema,
+      conversationId: z.string(),
+      appSessionId: z.string().optional(),
+      handshakeToken: z.string().min(1).optional(),
+      restartNonce: z.string().min(1).optional(),
+      heartbeatTimeoutMs: z.number().int().positive().optional(),
+      bootstrap: z
+        .object({
+          launchReason: z.enum(['chat-tool', 'resume-session', 'manual-open']),
+          authState: z.enum(['not-required', 'connected', 'required', 'expired']).optional(),
+          grantedPermissions: AppPermissionsSchema.optional(),
+          messageId: z.string().optional(),
+          correlationId: z.string().optional(),
+          initialState: JsonObjectSchema.optional(),
+          availableTools: z.array(ToolSchemaSchema).optional(),
+        })
+        .optional(),
+      pendingInvocation: z
+        .object({
+          toolCallId: z.string(),
+          toolName: z.string(),
+          arguments: JsonObjectSchema.optional(),
+          timeoutMs: z.number().int().positive().optional(),
+          messageId: z.string().optional(),
+          correlationId: z.string().optional(),
+        })
+        .optional(),
+      completion: z
+        .object({
+          status: CompletionStatusSchema,
+          resultSummary: z.string().optional(),
+          result: JsonObjectSchema.optional(),
+          errorMessage: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+})
+
 export const MessageContentPartSchema = z.discriminatedUnion('type', [
   MessageTextPartSchema,
   MessageImagePartSchema,
   MessageInfoPartSchema,
   MessageReasoningPartSchema,
   MessageToolCallPartSchema,
+  MessageEmbeddedAppPartSchema,
 ])
 
 export const MessageContentPartsSchema = z.array(MessageContentPartSchema)
@@ -154,6 +214,18 @@ export const MessageStatusSchema = z.discriminatedUnion('type', [
     attempt: z.number(),
     maxAttempts: z.number(),
     error: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('launching_app'),
+    appName: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('loading_embedded_app'),
+    appName: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('waiting_app_completion'),
+    appName: z.string().optional(),
   }),
 ])
 
@@ -298,6 +370,8 @@ export type MessageToolCallPart<Args = unknown, Result = unknown> = z.infer<type
   args: Args
   result?: Result
 }
+export type MessageEmbeddedAppBridge = NonNullable<z.infer<typeof MessageEmbeddedAppPartSchema>['bridge']>
+export type MessageEmbeddedAppPart = z.infer<typeof MessageEmbeddedAppPartSchema>
 export type MessageContentParts = z.infer<typeof MessageContentPartsSchema>
 export type StreamTextResult = z.infer<typeof StreamTextResultSchema>
 export type ToolUseScope = z.infer<typeof ToolUseScopeSchema>

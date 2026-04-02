@@ -9,12 +9,14 @@ import {
   exampleAppCompletionMessage,
   exampleAppErrorMessage,
   exampleAppManifests,
+  exampleAuthenticatedPlannerManifest,
   exampleChessLaunchToolSchema,
   exampleCompletionSignals,
   exampleConversationAppContext,
   exampleEmbeddedAppMessages,
+  exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
-  examplePublicWeatherManifest,
+  examplePublicFlashcardsManifest,
   exampleToolSchemas,
   ToolSchemaSchema,
   validateAppManifest,
@@ -47,7 +49,7 @@ describe('AppManifestSchema', () => {
   })
 
   it('rejects missing toolDefinitions', () => {
-    const invalidManifest = { ...examplePublicWeatherManifest }
+    const invalidManifest = { ...examplePublicFlashcardsManifest }
     delete (invalidManifest as { toolDefinitions?: unknown[] }).toolDefinitions
 
     const result = validateAppManifest(invalidManifest)
@@ -69,6 +71,39 @@ describe('AppManifestSchema', () => {
     expect(result.success).toBe(false)
     if (!result.success) {
       expect(result.errors.some((error) => error.includes('requiredPermissions'))).toBe(true)
+    }
+  })
+
+  it('rejects authenticated external apps that omit oauth config', () => {
+    const invalidManifest = {
+      ...exampleAuthenticatedPlannerManifest,
+      authConfig: undefined,
+    }
+
+    const result = validateAppManifest(invalidManifest)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('authConfig'))).toBe(true)
+    }
+  })
+
+  it('rejects public external apps whose tools require session auth', () => {
+    const invalidManifest = {
+      ...examplePublicFlashcardsManifest,
+      toolDefinitions: [
+        {
+          ...exampleFlashcardsStartToolSchema,
+          authRequirement: 'platform-session',
+        },
+      ],
+    }
+
+    const result = validateAppManifest(invalidManifest)
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('authRequirement'))).toBe(true)
     }
   })
 })
@@ -139,6 +174,21 @@ describe('EmbeddedAppMessageSchema', () => {
     expect(exampleAppErrorMessage.type).toBe('app.error')
     expect(() => EmbeddedAppMessageSchema.parse(exampleAppCompletionMessage)).not.toThrow()
     expect(() => EmbeddedAppMessageSchema.parse(exampleAppErrorMessage)).not.toThrow()
+  })
+
+  it('rejects completion payloads whose ids drift from the message envelope', () => {
+    const result = validateEmbeddedAppMessage({
+      ...exampleAppCompletionMessage,
+      payload: {
+        ...exampleCompletionSignals[0],
+        conversationId: 'conversation.other',
+      },
+    })
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('conversationId'))).toBe(true)
+    }
   })
 })
 

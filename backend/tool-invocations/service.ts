@@ -1,4 +1,5 @@
 import type { JsonObject } from '@shared/contracts/v1'
+import { failureResult } from '../errors'
 import type { ToolInvocationRepository } from './repository'
 import type {
   CancelToolInvocationRequest,
@@ -309,11 +310,6 @@ export class ToolInvocationLoggingService {
   }
 
   private failure(code: ToolInvocationErrorCode, message: string, details?: string[]): ToolInvocationFailure {
-    return {
-      ok: false,
-      code,
-      message,
-      details,
-    }
+    return failureResult('tool-invocation', code, message, { details })
   }
 }

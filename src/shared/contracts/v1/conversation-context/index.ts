@@ -166,6 +166,21 @@ export const exampleConversationAppContext: ConversationAppContext = Conversatio
         },
       },
     },
+    {
+      appSessionId: 'app-session.flashcards.1',
+      appId: 'flashcards.public',
+      status: 'succeeded',
+      resultSummary: 'Flashcard session on fractions is ready for follow-up.',
+      completedAt: '2026-03-31T16:09:30.000Z',
+      followUpContext: {
+        summary: 'Use the flashcard deck to guide the next study question.',
+        userVisibleSummary: 'Flashcards are ready for review.',
+        stateDigest: {
+          topic: 'fractions',
+          reviewedCount: 3,
+        },
+      },
+    },
   ],
   sessionTimeline: [
     {
@@ -190,11 +205,23 @@ export const exampleConversationAppContext: ConversationAppContext = Conversatio
         winner: 'white',
       },
     },
+    {
+      appSessionId: 'app-session.flashcards.1',
+      appId: 'flashcards.public',
+      status: 'completed',
+      summary: 'Flashcard session ready for discussion.',
+      updatedAt: '2026-03-31T16:09:30.000Z',
+      latestSequence: 12,
+      latestStateDigest: {
+        topic: 'fractions',
+        reviewedCount: 3,
+      },
+    },
   ],
   selection: {
     strategy: 'active-plus-recent-completions',
-    includedSessionIds: ['app-session.chess.1', 'app-session.chess.2'],
+    includedSessionIds: ['app-session.chess.1', 'app-session.chess.2', 'app-session.flashcards.1'],
     omittedSessionCount: 0,
   },
-  notes: ['Prioritize the active chess board and the latest completed game summary for follow-up answers.'],
+  notes: ['Prioritize the active chess board and keep the completed flashcard session as secondary follow-up context.'],
 })

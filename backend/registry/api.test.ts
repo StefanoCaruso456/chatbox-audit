@@ -1,5 +1,6 @@
-import { exampleAuthenticatedPlannerManifest, exampleInternalChessManifest, examplePublicWeatherManifest } from '@shared/contracts/v1'
+import { exampleAuthenticatedPlannerManifest, exampleInternalChessManifest, examplePublicFlashcardsManifest } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
+import { AppSubmissionPackageSchema } from '../security'
 import { createAppRegistryApi } from './api'
 import { InMemoryAppRegistryRepository } from './repository'
 import { AppRegistryService } from './service'
@@ -22,6 +23,33 @@ async function readJson(response: Response) {
   return response.json()
 }
 
+function buildSubmission(manifest: typeof exampleInternalChessManifest | typeof examplePublicFlashcardsManifest | typeof exampleAuthenticatedPlannerManifest, category: string) {
+  return AppSubmissionPackageSchema.parse({
+    submissionVersion: 'v1',
+    category,
+    manifest,
+    owner: {
+      ownerType: 'external-partner',
+      ownerName: 'Partner App Studio',
+      contactName: 'Taylor Brooks',
+      contactEmail: 'taylor@example.com',
+      organization: 'Partner App Studio',
+    },
+    domains: manifest.allowedOrigins,
+    requestedOAuthScopes: manifest.authConfig?.scopes ?? [],
+    stagingUrl: manifest.uiEmbedConfig.entryUrl,
+    privacyPolicyUrl: `${manifest.uiEmbedConfig.targetOrigin}/privacy`,
+    support: {
+      supportEmail: 'support@example.com',
+      responsePolicy: 'School support responses within one business day.',
+      supportUrl: `${manifest.uiEmbedConfig.targetOrigin}/support`,
+    },
+    releaseNotes: `Submission package for ${manifest.appVersion}.`,
+    screenshots: [],
+    submittedAt: '2026-04-02T12:00:00.000Z',
+  })
+}
+
 describe('AppRegistryApi', () => {
   it('forces new registrations into pending review on the API surface', async () => {
     const { api } = createFixture()
@@ -32,10 +60,7 @@ describe('AppRegistryApi', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          manifest: exampleInternalChessManifest,
-          category: 'games',
-        }),
+        body: JSON.stringify(buildSubmission(exampleInternalChessManifest, 'games')),
       })
     )
 
@@ -66,8 +91,10 @@ describe('AppRegistryApi', () => {
     expect(body).toEqual({
       ok: false,
       error: {
+        domain: 'api',
         code: 'invalid-json',
         message: 'Request body must be valid JSON.',
+        retryable: false,
       },
     })
   })
@@ -81,10 +108,7 @@ describe('AppRegistryApi', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          manifest: exampleInternalChessManifest,
-          category: 'games',
-        }),
+        body: JSON.stringify(buildSubmission(exampleInternalChessManifest, 'games')),
       })
     )
 
@@ -94,13 +118,15 @@ describe('AppRegistryApi', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          manifest: {
-            ...examplePublicWeatherManifest,
-            slug: exampleInternalChessManifest.slug,
-          },
-          category: 'weather',
-        }),
+        body: JSON.stringify(
+          buildSubmission(
+            {
+              ...examplePublicFlashcardsManifest,
+              slug: exampleInternalChessManifest.slug,
+            },
+            'study'
+          )
+        ),
       })
     )
 
@@ -108,6 +134,7 @@ describe('AppRegistryApi', () => {
 
     expect(response.status).toBe(409)
     expect(body.ok).toBe(false)
+    expect(body.error.domain).toBe('registry')
     expect(body.error.code).toBe('slug-conflict')
   })
 
@@ -149,8 +176,10 @@ describe('AppRegistryApi', () => {
     expect(body).toEqual({
       ok: false,
       error: {
+        domain: 'api',
         code: 'unapproved-read-disabled',
         message: 'Unapproved registry exposure is disabled on this API surface.',
+        retryable: false,
       },
     })
   })
@@ -159,17 +188,17 @@ describe('AppRegistryApi', () => {
     const { api, service } = createFixture()
 
     await service.registerApp({
-      manifest: examplePublicWeatherManifest,
-      category: 'weather',
+      manifest: examplePublicFlashcardsManifest,
+      category: 'study',
     })
 
     const response = await api.get(
-      new Request(`https://railway.local/api/registry/apps?slug=${examplePublicWeatherManifest.slug}`)
+      new Request(`https://railway.local/api/registry/apps?slug=${examplePublicFlashcardsManifest.slug}`)
     )
     const body = await readJson(response)
 
     expect(response.status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(body.data.app.slug).toBe(examplePublicWeatherManifest.slug)
+    expect(body.data.app.slug).toBe(examplePublicFlashcardsManifest.slug)
   })
 })

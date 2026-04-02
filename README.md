@@ -13,6 +13,16 @@ We regularly sync code from the pro repo to this repo, and vice versa.
 
 The system uses a web-based Next.js client deployed on Vercel and a dedicated Node.js backend deployed on Railway. The Railway backend owns orchestration, app registration, tool routing, OAuth flows, app session management, and invocation logging. Persistent data is stored in PostgreSQL. Embedded third-party apps render inside iframe containers and communicate with the host via `postMessage`. Chat responses stream to the client over SSE.
 
+## TutorMeAI Case Study Docs
+
+- Setup guide: [docs/tutormeai-setup-guide.md](./docs/tutormeai-setup-guide.md)
+- Architecture: [docs/architecture.md](./docs/architecture.md)
+- Trust governance roadmap: [tasks/roadmap-tutormeai-trust-governance.md](./tasks/roadmap-tutormeai-trust-governance.md)
+- Trust policy docs: [docs/trust/README.md](./docs/trust/README.md)
+- Third-party developer guide: [docs/tutormeai-third-party-developer-guide.md](./docs/tutormeai-third-party-developer-guide.md)
+- Cost analysis: [docs/tutormeai-cost-analysis.md](./docs/tutormeai-cost-analysis.md)
+- Demo checklist: [docs/tutormeai-demo-checklist.md](./docs/tutormeai-demo-checklist.md)
+
 ### Download for Desktop
 
 <table style="width: 100%">
@@ -224,7 +234,7 @@ Any form of contribution is welcome, including but not limited to:
 ## Prerequisites
 
 - Node.js (v20.x – v22.x)
-- npm (required – pnpm is not supported)
+- pnpm (required – package scripts and engine checks assume pnpm)
 
 ## Codex Skills
 
@@ -241,25 +251,25 @@ git clone https://github.com/chatboxai/chatbox.git
 2. Install the required dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 3. Start the application (in development mode)
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 4. Build the application, package the installer for current platform
 
 ```bash
-npm run package
+pnpm run package
 ```
 
 5. Build the application, package the installer for all platforms
 
 ```bash
-npm run package:all
+pnpm run package:all
 ```
 
 ## Star History

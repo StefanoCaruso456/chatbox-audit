@@ -65,7 +65,7 @@ Use the following agent swarm:
 - Embedded App Runtime Agent
 - Auth & Security Agent
 - Chess App Agent
-- Public External App Agent (example: Weather)
+- Public External App Agent (example: Flashcards)
 - Authenticated App Agent (example: Spotify)
 - QA / Test Agent
 - Docs / DevEx / Cost Analysis Agent
@@ -518,26 +518,26 @@ Implement a non-auth public app to prove low-friction external integration.
 
 #### Recommended App
 
-Weather Dashboard
+Flashcards Coach
 
 #### Responsibilities
 
-- public external API integration
+- public external content integration
 - manifest and tools
 - UI rendering
 - structured result summary for chatbot follow-up
-- error handling for API failures
+- error handling for app/runtime failures
 
 #### Outputs
 
-- working weather app
+- working flashcards app
 - manifest
 - app result summaries
 - test cases
 
 #### Acceptance Criteria
 
-- user can invoke weather app from chat
+- user can invoke flashcards app from chat
 - UI renders correctly
 - result can be discussed after completion
 - app works without user-specific auth

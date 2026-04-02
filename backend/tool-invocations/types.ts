@@ -1,4 +1,5 @@
 import type { JsonObject, ToolAuthRequirement, ToolInvocationMode } from '@shared/contracts/v1'
+import type { BackendFailureResult, BackendResult } from '../errors'
 
 export const ToolInvocationStatusValues = [
   'queued',
@@ -111,19 +112,9 @@ export interface ListToolInvocationsFilter {
   status?: ToolInvocationStatus
 }
 
-export interface ToolInvocationSuccess<T> {
-  ok: true
-  value: T
-}
+export type ToolInvocationFailure = BackendFailureResult<ToolInvocationErrorCode, 'tool-invocation'>
 
-export interface ToolInvocationFailure {
-  ok: false
-  code: ToolInvocationErrorCode
-  message: string
-  details?: string[]
-}
-
-export type ToolInvocationResult<T> = ToolInvocationSuccess<T> | ToolInvocationFailure
+export type ToolInvocationResult<T> = BackendResult<T, ToolInvocationErrorCode, 'tool-invocation'>
 
 export type ToolInvocationErrorCode =
   | 'invalid-payload'

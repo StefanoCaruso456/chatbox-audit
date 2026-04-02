@@ -17,17 +17,31 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
     },
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'backend/**/*.{test,spec}.{ts,tsx}',
+      'test/integration/**/*.{test,spec}.{ts,tsx}',
+    ],
     exclude: ['node_modules', 'dist', 'release', '.erb'],
   }
 })
 ```
 
 ### Test Commands
-- `npm run test` - Run all tests once
-- `npm run test:watch` - Run tests in watch mode
-- `npm run test:ui` - Launch Vitest UI for interactive testing
-- `npm run test:coverage` - Run tests with coverage report
+- `pnpm run test` - Run all tests once
+- `pnpm run test:watch` - Run tests in watch mode
+- `pnpm run test:ui` - Launch Vitest UI for interactive testing
+- `pnpm run test:coverage` - Run tests with coverage report
+- `pnpm run test:integration` - Run the integration suites
+
+## TutorMeAI Phase 6 Coverage
+
+TutorMeAI-specific QA coverage now includes:
+
+- shared contract regression tests in `src/shared/contracts/v1/index.test.ts`
+- runtime helper tests in `src/renderer/components/message-parts/embedded-app-runtime.test.ts`
+- end-to-end app lifecycle coverage in `test/integration/tutormeai/app-lifecycle.test.tsx`
+- routing and refusal scenario coverage in `test/integration/tutormeai/routing-scenarios.test.ts`
 
 ## Existing Test Coverage
 

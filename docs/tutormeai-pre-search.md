@@ -442,7 +442,7 @@ These are the decisions I would defend in the pre-search:
 - Plugin registration: typed App Manifest
 - Tool definitions: typed Tool Schema
 - Completion handling: typed Completion Signal
-- MVP app mix: Chess + Weather + Spotify
+- MVP app mix: Chess + Flashcards + Spotify
 - Execution strategy: one vertical slice first, then expand
 
 These choices are consistent with the case's suggested stack options and its guidance to define the API contract early, solve completion signaling cleanly, build vertically, and think like a platform designer.

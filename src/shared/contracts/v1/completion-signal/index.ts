@@ -78,24 +78,27 @@ export const exampleChessCompletionSignal: CompletionSignal = CompletionSignalSc
   },
 })
 
-export const exampleWeatherCompletionSignal: CompletionSignal = CompletionSignalSchema.parse({
+export const exampleFlashcardsCompletionSignal: CompletionSignal = CompletionSignalSchema.parse({
   version: 'v1',
   conversationId: 'conversation.2',
-  appSessionId: 'app-session.weather.1',
-  appId: 'weather.public',
-  toolCallId: 'tool-call.weather.1',
+  appSessionId: 'app-session.flashcards.1',
+  appId: 'flashcards.public',
+  toolCallId: 'tool-call.flashcards.1',
   status: 'succeeded',
-  resultSummary: 'The forecast for Chicago is mild with light winds.',
+  resultSummary: 'Flashcard session on fractions is ready with five study prompts.',
   result: {
-    summary: '58F and partly cloudy',
-    location: 'Chicago, IL',
+    topic: 'fractions',
+    cardCount: 5,
+    reviewedCount: 3,
   },
   completedAt: '2026-03-31T18:05:00.000Z',
   followUpContext: {
-    summary: 'Use the forecast to answer classroom planning or clothing questions.',
-    recommendedPrompts: ['Should students bring jackets tomorrow?'],
+    summary: 'Use the flashcard deck and reviewed cards to help the student study the topic.',
+    userVisibleSummary: 'Flashcards are ready to review in chat.',
+    recommendedPrompts: ['Quiz me on fractions.', 'Which card should I focus on first?'],
     stateDigest: {
-      temperatureF: 58,
+      topic: 'fractions',
+      reviewedCount: 3,
     },
   },
 })
@@ -125,6 +128,6 @@ export const examplePlannerCompletionSignal: CompletionSignal = CompletionSignal
 
 export const exampleCompletionSignals = [
   exampleChessCompletionSignal,
-  exampleWeatherCompletionSignal,
+  exampleFlashcardsCompletionSignal,
   examplePlannerCompletionSignal,
 ]

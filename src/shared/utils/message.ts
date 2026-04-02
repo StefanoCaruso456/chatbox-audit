@@ -15,6 +15,9 @@ export function getMessageText(message: Message, includeImagePlaceHolder = true,
         if (c.type === 'image') {
           return includeImagePlaceHolder ? '[image]' : null
         }
+        if (c.type === 'embedded-app') {
+          return `[embedded app: ${c.title || c.appName}]`
+        }
         return ''
       })
       .filter((c) => c !== null)
@@ -41,8 +44,11 @@ export function migrateMessage(
     'content' in message
   ) {
     const imageParts = (message as Message & { pictures?: MessagePicture[] }).pictures
-      ?.filter((pic) => pic.storageKey || pic.url)
-      .map((pic) => ({ type: 'image' as const, storageKey: pic.storageKey!, url: pic.url }))
+      ?.filter(
+        (pic): pic is MessagePicture & { storageKey: string } =>
+          typeof pic.storageKey === 'string' && pic.storageKey.length > 0
+      )
+      .map((pic) => ({ type: 'image' as const, storageKey: pic.storageKey }))
     result.contentParts = [{ type: 'text', text: String(message.content ?? '') }, ...(imageParts || [])]
   }
 

@@ -159,6 +159,8 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const pasteLongTextAsAFile = useSettingsStore((state) => state.pasteLongTextAsAFile)
     const shortcuts = useSettingsStore((state) => state.shortcuts)
     const widthFull = useUIStore((s) => s.widthFull) || fullWidth
+    const pendingConversationModeHintId = useUIStore((s) => s.pendingConversationModeHintId)
+    const clearConversationModeHint = useUIStore((s) => s.clearConversationModeHint)
 
     const currentSessionId = sessionId
     const isNewSession = currentSessionId === 'new'
@@ -213,9 +215,51 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const { knowledgeBase, setKnowledgeBase } = useKnowledgeBase({ isNewSession })
 
     const [showCompressionModal, setShowCompressionModal] = useState(false)
+    const [conversationModeHintActive, setConversationModeHintActive] = useState(false)
+    const [conversationModeHintVisible, setConversationModeHintVisible] = useState(false)
+    const handledConversationModeHintIdRef = useRef<number | null>(null)
 
     const [links, setLinks] = useAtom(atoms.inputBoxLinksFamily(currentSessionId || 'new'))
     const [isSubmitting, setIsSubmitting] = useState(false)
+
+    useEffect(() => {
+      if (sessionType !== 'chat' || !onClickSessionSettings || !pendingConversationModeHintId) {
+        return
+      }
+
+      if (handledConversationModeHintIdRef.current === pendingConversationModeHintId) {
+        return
+      }
+
+      handledConversationModeHintIdRef.current = pendingConversationModeHintId
+      setConversationModeHintActive(true)
+      setConversationModeHintVisible(true)
+
+      const blinkDurationMs = 900
+      const timers = [
+        setTimeout(() => setConversationModeHintVisible(false), blinkDurationMs),
+        setTimeout(() => setConversationModeHintVisible(true), blinkDurationMs * 2),
+        setTimeout(() => setConversationModeHintVisible(false), blinkDurationMs * 3),
+        setTimeout(() => setConversationModeHintVisible(true), blinkDurationMs * 4),
+        setTimeout(() => setConversationModeHintVisible(false), blinkDurationMs * 5),
+        setTimeout(() => {
+          setConversationModeHintActive(false)
+          setConversationModeHintVisible(false)
+          clearConversationModeHint(pendingConversationModeHintId)
+        }, blinkDurationMs * 6),
+      ]
+
+      return () => {
+        timers.forEach(clearTimeout)
+      }
+    }, [clearConversationModeHint, onClickSessionSettings, pendingConversationModeHintId, sessionType])
+
+    const handleConversationModeClick = useCallback(() => {
+      setConversationModeHintActive(false)
+      setConversationModeHintVisible(false)
+      clearConversationModeHint(pendingConversationModeHintId)
+      return onClickSessionSettings?.()
+    }, [clearConversationModeHint, onClickSessionSettings, pendingConversationModeHintId])
 
     useEffect(() => {
       const constructedMessage = sessionHelpers.constructUserMessage(
@@ -1126,16 +1170,30 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   ))}
 
                 {!isSmallScreen && (
-                  <Tooltip label={t('Conversation Settings')} position="top" withArrow>
+                  <Tooltip
+                    label={conversationModeHintActive ? t('Review Conversation Mode') : t('Conversation Mode')}
+                    position="top"
+                    withArrow
+                    opened={conversationModeHintActive ? conversationModeHintVisible : undefined}
+                  >
                     <UnstyledButton
-                      onClick={onClickSessionSettings}
+                      onClick={handleConversationModeClick}
                       disabled={!onClickSessionSettings}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors disabled:opacity-50"
+                      className={cn(
+                        'flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-700 disabled:opacity-50',
+                        conversationModeHintVisible
+                          ? 'bg-[var(--chatbox-background-tertiary)] ring-1 ring-[var(--chatbox-tint-brand)] shadow-[0_0_0_4px_rgba(59,130,246,0.12)] scale-[1.03]'
+                          : 'hover:bg-[var(--chatbox-background-tertiary)]'
+                      )}
                     >
                       <IconAdjustmentsHorizontal
                         size={toolbarIconSize}
                         strokeWidth={1.8}
-                        className="text-[var(--chatbox-tint-secondary)]"
+                        className={
+                          conversationModeHintVisible
+                            ? 'text-[var(--chatbox-tint-brand)]'
+                            : 'text-[var(--chatbox-tint-secondary)]'
+                        }
                       />
                     </UnstyledButton>
                   </Tooltip>
@@ -1168,9 +1226,9 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       </Menu.Item>
                       <Menu.Item
                         leftSection={<ScalableIcon icon={IconAdjustmentsHorizontal} size={16} />}
-                        onClick={onClickSessionSettings}
+                        onClick={handleConversationModeClick}
                       >
-                        {t('Conversation Settings')}
+                        {conversationModeHintActive ? t('Review Conversation Mode') : t('Conversation Mode')}
                       </Menu.Item>
                     </Menu.Dropdown>
                   </Menu>

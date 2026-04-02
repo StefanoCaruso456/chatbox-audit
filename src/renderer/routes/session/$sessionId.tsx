@@ -2,9 +2,10 @@ import NiceModal from '@ebay/nice-modal-react'
 import { Button } from '@mantine/core'
 import type { Message, ModelProvider } from '@shared/types'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { ForwardedRef, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from 'zustand'
+import AppsWorkspace from '@/components/apps/AppsWorkspace'
 import MessageList, { type MessageListRef } from '@/components/chat/MessageList'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import InputBox from '@/components/InputBox/InputBox'
@@ -123,7 +124,7 @@ function RouteComponent() {
     if (!currentSession) {
       return false
     }
-    NiceModal.show('session-settings', {
+    void NiceModal.show('session-settings', {
       session: currentSession,
     })
     return true
@@ -151,30 +152,46 @@ function RouteComponent() {
   }, [currentSession?.settings?.provider, currentSession?.settings?.modelId])
 
   return currentSession ? (
-    <div className="flex flex-col h-full">
-      <Header session={currentSession} />
+    <main className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0)_18%,rgba(255,255,255,0.03)_100%)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-chatbox-background-brand-secondary/20 to-transparent" />
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <Header session={currentSession} />
 
-      {/* MessageList 设置 key，确保每个 session 对应新的 MessageList 实例 */}
-      <MessageList ref={messageListRef} key={`message-list${currentSessionId}`} currentSession={currentSession} />
-
-      {/* <ScrollButtons /> */}
-      <ErrorBoundary name="session-inputbox">
-        <InputBox
-          key={`input-box${currentSession.id}`}
-          sessionId={currentSession.id}
-          sessionType={currentSession.type}
-          model={model}
-          onStartNewThread={onStartNewThread}
-          onRollbackThread={onRollbackThread}
-          onSelectModel={onSelectModel}
-          onClickSessionSettings={onClickSessionSettings}
-          generating={!!lastGeneratingMessage}
-          onSubmit={onSubmit}
-          onStopGenerating={onStopGenerating}
-        />
-      </ErrorBoundary>
-      <ThreadHistoryDrawer session={currentSession} />
-    </div>
+        <div className="relative flex min-h-0 flex-1 flex-col px-2 pb-2 pt-1 sm:px-3 sm:pb-3">
+          <AppsWorkspace>
+            <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-chatbox-border-primary/70 bg-chatbox-background-primary shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-chatbox-tint-brand/60 to-transparent" />
+              <div className="relative flex min-h-0 flex-1 flex-col">
+                <MessageList
+                  ref={messageListRef}
+                  key={`message-list${currentSessionId}`}
+                  currentSession={currentSession}
+                  className="min-h-0 flex-1"
+                />
+              </div>
+              <ErrorBoundary name="session-inputbox">
+                <div className="border-t border-chatbox-border-primary/60 bg-chatbox-background-secondary/80 px-2 py-2 backdrop-blur-sm sm:px-3">
+                  <InputBox
+                    key={`input-box${currentSession.id}`}
+                    sessionId={currentSession.id}
+                    sessionType={currentSession.type}
+                    model={model}
+                    onStartNewThread={onStartNewThread}
+                    onRollbackThread={onRollbackThread}
+                    onSelectModel={onSelectModel}
+                    onClickSessionSettings={onClickSessionSettings}
+                    generating={!!lastGeneratingMessage}
+                    onSubmit={onSubmit}
+                    onStopGenerating={onStopGenerating}
+                  />
+                </div>
+              </ErrorBoundary>
+            </section>
+          </AppsWorkspace>
+        </div>
+        <ThreadHistoryDrawer session={currentSession} />
+      </div>
+    </main>
   ) : (
     !isFetching && (
       <div className="flex flex-1 flex-col items-center justify-center min-h-[60vh]">
