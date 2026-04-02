@@ -8,6 +8,7 @@ export type AppCategory =
   | 'Creativity, Coding & Projects'
 
 export type LaunchMode = 'iframe' | 'external'
+export type AppExperience = 'approved-library' | 'tutormeai-runtime'
 
 export interface ApprovedApp {
   id: string
@@ -20,6 +21,8 @@ export interface ApprovedApp {
   launchMode: LaunchMode
   isApproved: boolean
   tags: string[]
+  vendorUrl?: string
+  experience?: AppExperience
 }
 
 export const GRADE_RANGE_OPTIONS: GradeRange[] = ['Pre-K-2', '3-5', '6-8', '9-12', 'Multi-level']
