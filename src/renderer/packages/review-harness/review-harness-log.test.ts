@@ -11,7 +11,7 @@ import {
   createReviewHarnessEvent,
   type ReviewHarnessLog,
   summarizeReviewHarnessLog,
-} from './review-harness-log'
+} from '@/packages/review-harness/review-harness-log'
 
 describe('review-harness-log', () => {
   it('appends structured review harness events without mutating the original log', () => {

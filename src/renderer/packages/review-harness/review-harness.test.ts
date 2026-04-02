@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildReviewHarnessConfig } from './review-harness'
+import { buildReviewHarnessConfig } from '@/packages/review-harness/review-harness'
 
 describe('buildReviewHarnessConfig', () => {
   it('derives a stable runtime config from search params', () => {
