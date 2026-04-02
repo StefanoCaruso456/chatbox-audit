@@ -1,3 +1,8 @@
+import {
+  exampleChessLaunchToolSchema,
+  exampleFlashcardsStartToolSchema,
+  examplePlannerDashboardToolSchema,
+} from '@shared/contracts/v1'
 import type { ApprovedApp } from '@/types/apps'
 
 const curatedApprovedAppCatalog: ApprovedApp[] = [
@@ -39,9 +44,8 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     tags: ['lms', 'secondary', 'assignments', 'course-management'],
     vendorUrl: 'https://www.instructure.com/canvas/login',
     loadingFallback: {
-      title: 'This app needs a school-specific launch link',
-      body: 'Canvas and similar district-managed tools often need a verified school launch URL before they can open beside chat. Open the Canvas login finder in a new tab, then sign in through your school portal.',
-      actionLabel: 'Open Canvas login',
+      title: 'This library card is not a live TutorMeAI runtime yet',
+      body: 'Canvas and similar district-managed tools need a school-specific launch integration before they can run inside the governed TutorMeAI sidebar runtime.',
     },
   },
   {
@@ -328,6 +332,17 @@ const tutorMeAiApps: ApprovedApp[] = [
     isApproved: true,
     tags: ['tutormeai', 'chess', 'strategy', 'guided-practice'],
     experience: 'tutormeai-runtime',
+    runtimeBridge: {
+      appId: 'chess.internal',
+      authState: 'not-required',
+      grantedPermissions: ['session:write', 'tool:invoke'],
+      availableTools: [exampleChessLaunchToolSchema],
+      pendingInvocation: {
+        toolName: exampleChessLaunchToolSchema.name,
+        arguments: { mode: 'practice' },
+        timeoutMs: exampleChessLaunchToolSchema.timeoutMs,
+      },
+    },
   },
   {
     id: 'flashcards-coach',
@@ -342,6 +357,17 @@ const tutorMeAiApps: ApprovedApp[] = [
     isApproved: true,
     tags: ['tutormeai', 'flashcards', 'study', 'review'],
     experience: 'tutormeai-runtime',
+    runtimeBridge: {
+      appId: 'flashcards.public',
+      authState: 'not-required',
+      grantedPermissions: ['tool:invoke'],
+      availableTools: [exampleFlashcardsStartToolSchema],
+      pendingInvocation: {
+        toolName: exampleFlashcardsStartToolSchema.name,
+        arguments: { topic: 'fractions' },
+        timeoutMs: exampleFlashcardsStartToolSchema.timeoutMs,
+      },
+    },
   },
   {
     id: 'planner-connect',
@@ -356,6 +382,17 @@ const tutorMeAiApps: ApprovedApp[] = [
     isApproved: true,
     tags: ['tutormeai', 'planner', 'assignments', 'authenticated'],
     experience: 'tutormeai-runtime',
+    runtimeBridge: {
+      appId: 'planner.oauth',
+      authState: 'required',
+      grantedPermissions: ['conversation:read-summary', 'tool:invoke', 'oauth:connect', 'user:read-profile'],
+      availableTools: [examplePlannerDashboardToolSchema],
+      pendingInvocation: {
+        toolName: examplePlannerDashboardToolSchema.name,
+        arguments: { focus: 'today' },
+        timeoutMs: examplePlannerDashboardToolSchema.timeoutMs,
+      },
+    },
   },
 ]
 

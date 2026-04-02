@@ -1,7 +1,8 @@
 import { ActionIcon, Badge, Box, Button, Divider, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
-import { IconExternalLink, IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
+import { IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
 import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
@@ -10,6 +11,7 @@ import { type ApprovedApp, formatAppTagLabel } from '@/types/apps'
 import AppCategoryBadge from './AppCategoryBadge'
 import AppGradeBadge from './AppGradeBadge'
 import AppIcon from './AppIcon'
+import { buildSidebarEmbeddedAppRuntime, resolveAppPanelLaunchUrl } from './app-panel-runtime'
 
 const iframeSandbox = [
   'allow-downloads',
@@ -21,31 +23,10 @@ const iframeSandbox = [
   'allow-scripts',
 ].join(' ')
 
-function resolveLaunchUrl(launchUrl: string) {
-  const trimmed = launchUrl.trim()
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed
-  }
-
-  if (!trimmed.startsWith('/')) {
-    return trimmed
-  }
-
-  if (typeof window === 'undefined') {
-    return trimmed
-  }
-
-  if (window.location.protocol === 'file:') {
-    return `${window.location.href.split('#')[0]}#${trimmed}`
-  }
-
-  return new URL(trimmed, window.location.origin).toString()
-}
-
 function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
   const { t } = useTranslation()
-  const badgeLabel = app.experience === 'tutormeai-runtime' ? t('TutorMeAI Runtime') : t('Approved Apps')
-  const badgeColor = app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'chatbox-success'
+  const badgeLabel = app.experience === 'tutormeai-runtime' ? t('TutorMeAI Runtime') : t('Governed Preview')
+  const badgeColor = app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'chatbox-warning'
 
   return (
     <Flex justify="space-between" align="start" gap="sm">
@@ -77,8 +58,12 @@ function AppPanelBadges({ app }: { app: ApprovedApp }) {
   return (
     <Flex wrap="wrap" gap="xs">
       <AppCategoryBadge category={app.category} />
-      <Badge radius="xl" variant="outline" color={app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'gray'}>
-        {app.experience === 'tutormeai-runtime' ? 'Chat-aware runtime' : 'Approved library'}
+      <Badge
+        radius="xl"
+        variant="outline"
+        color={app.experience === 'tutormeai-runtime' ? 'chatbox-brand' : 'chatbox-warning'}
+      >
+        {app.experience === 'tutormeai-runtime' ? 'Live embedded runtime' : 'Governed preview'}
       </Badge>
       {app.gradeRanges.map((gradeRange) => (
         <AppGradeBadge key={`${app.id}:${gradeRange}`} gradeRange={gradeRange} />
@@ -95,15 +80,14 @@ function AppPanelBadges({ app }: { app: ApprovedApp }) {
 function AppTrustNotice({ app }: { app: ApprovedApp }) {
   const { t } = useTranslation()
 
-  const title =
-    app.experience === 'tutormeai-runtime' ? t('Governed TutorMeAI runtime') : t('Curated for K-12 classrooms')
+  const title = app.experience === 'tutormeai-runtime' ? t('Live TutorMeAI runtime') : t('Governed library preview')
   const body =
     app.experience === 'tutormeai-runtime'
       ? t(
-          'This app runs inside the TutorMeAI embedded runtime with chat context, lifecycle events, and governed launch behavior.'
+          'This app runs through the same embedded runtime the chat uses, so bootstrap, heartbeat, and completion events stay inside TutorMeAI.'
         )
       : t(
-          'This approved tool opens through the TutorMeAI app library shell so it stays in the same governed sidebar ecosystem.'
+          'This app lives in the same governed sidebar ecosystem, but it is still a curated preview until it is wired into the full TutorMeAI runtime.'
         )
 
   return (
@@ -122,11 +106,11 @@ function AppTrustNotice({ app }: { app: ApprovedApp }) {
 
 function AppLoadingFallback({
   app,
-  onOpenVendor,
+  onRetry,
   onSwitchApps,
 }: {
   app: ApprovedApp
-  onOpenVendor: () => void
+  onRetry: () => void
   onSwitchApps: () => void
 }) {
   const { t } = useTranslation()
@@ -135,12 +119,11 @@ function AppLoadingFallback({
     app.loadingFallback?.body ??
     (app.experience === 'tutormeai-runtime'
       ? t(
-          'This TutorMeAI runtime is still booting. You can keep waiting or open it in a new tab while the embedded session finishes loading.'
+          'This TutorMeAI runtime is still booting inside the sidebar. Retry the session or switch to another app while we keep the governed launch flow intact.'
         )
       : t(
-          'Some approved tools need vendor iframe access enabled. You can keep waiting or open this app in a new tab while the district embed URL is finalized.'
+          'This library card is still a governed preview. Retry the preview route or switch to a fully integrated TutorMeAI runtime app.'
         ))
-  const vendorActionLabel = app.loadingFallback?.actionLabel ?? t('Open in new tab')
 
   return (
     <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/12 bg-slate-950/88 p-3 shadow-xl">
@@ -156,10 +139,10 @@ function AppLoadingFallback({
             size="xs"
             variant="light"
             color="chatbox-brand"
-            leftSection={<IconExternalLink size={14} />}
-            onClick={onOpenVendor}
+            leftSection={<IconReload size={14} />}
+            onClick={onRetry}
           >
-            {vendorActionLabel}
+            {t('Retry')}
           </Button>
           <Button
             size="xs"
@@ -184,11 +167,15 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [showLoadNotice, setShowLoadNotice] = useState(false)
-  const resolvedLaunchUrl = useMemo(() => (app ? resolveLaunchUrl(app.launchUrl) : ''), [app])
-  const resolvedVendorUrl = useMemo(() => resolveLaunchUrl(app.vendorUrl ?? app.launchUrl), [app])
+  const resolvedLaunchUrl = useMemo(() => (app ? resolveAppPanelLaunchUrl(app.launchUrl) : ''), [app])
+  const embeddedRuntime = useMemo(
+    () => buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
+    [app, reloadNonce, resolvedLaunchUrl]
+  )
+  const usesEmbeddedRuntime = app.experience === 'tutormeai-runtime' && Boolean(embeddedRuntime)
 
   useEffect(() => {
-    if (!app) {
+    if (!app || usesEmbeddedRuntime) {
       return
     }
 
@@ -201,16 +188,12 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [app])
+  }, [app, usesEmbeddedRuntime])
 
   const handleReload = () => {
     setIsLoading(true)
     setShowLoadNotice(false)
     setReloadNonce((value) => value + 1)
-  }
-
-  const handleOpenVendor = () => {
-    window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')
   }
 
   const handleSwitchApps = () => {
@@ -232,14 +215,6 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         >
           {t('Switch apps')}
         </Button>
-        <Button
-          variant="subtle"
-          color="chatbox-secondary"
-          leftSection={<IconExternalLink size={16} />}
-          onClick={handleOpenVendor}
-        >
-          {t('Open in new tab')}
-        </Button>
         <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
           <IconReload size={17} />
         </ActionIcon>
@@ -247,34 +222,55 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
       <Divider />
 
-      <Box className="relative min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-chatbox-border-primary/70 bg-[#0f172a]">
-        <iframe
-          key={`${app.id}:${reloadNonce}`}
-          src={resolvedLaunchUrl}
-          title={`${app.name} app panel`}
-          className="h-full w-full border-0 bg-white"
-          sandbox={iframeSandbox}
-          allow="clipboard-read; clipboard-write; fullscreen"
-          referrerPolicy="strict-origin-when-cross-origin"
-          onLoad={() => {
-            setIsLoading(false)
-            setShowLoadNotice(false)
-          }}
-        />
+      {usesEmbeddedRuntime && embeddedRuntime ? (
+        <Box className="min-h-0 flex-1 overflow-hidden">
+          <EmbeddedAppHost
+            appId={app.runtimeBridge?.appId ?? app.id}
+            appName={app.name}
+            appSlug={app.id}
+            src={resolvedLaunchUrl}
+            title={`${app.name} live session`}
+            subtitle="TutorMeAI sidebar runtime"
+            description={`${app.name} is running inside the governed TutorMeAI sidebar runtime.`}
+            loadingLabel={t('Connecting {{name}} runtime', { name: app.name })}
+            className="h-full min-h-0"
+            height="100%"
+            sandbox={iframeSandbox}
+            runtime={embeddedRuntime}
+            onRetry={handleReload}
+            onContinueInChat={closeApprovedApp}
+          />
+        </Box>
+      ) : (
+        <Box className="relative min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-chatbox-border-primary/70 bg-[#0f172a]">
+          <iframe
+            key={`${app.id}:${reloadNonce}`}
+            src={resolvedLaunchUrl}
+            title={`${app.name} app panel`}
+            className="h-full w-full border-0 bg-white"
+            sandbox={iframeSandbox}
+            allow="clipboard-read; clipboard-write; fullscreen"
+            referrerPolicy="strict-origin-when-cross-origin"
+            onLoad={() => {
+              setIsLoading(false)
+              setShowLoadNotice(false)
+            }}
+          />
 
-        {isLoading ? (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/65 backdrop-blur-sm">
-            <Loader color="var(--chatbox-tint-brand)" />
-            <Text size="sm" c="white">
-              {t('Loading {{name}}...', { name: app.name })}
-            </Text>
-          </div>
-        ) : null}
+          {isLoading ? (
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/65 backdrop-blur-sm">
+              <Loader color="var(--chatbox-tint-brand)" />
+              <Text size="sm" c="white">
+                {t('Loading {{name}}...', { name: app.name })}
+              </Text>
+            </div>
+          ) : null}
 
-        {showLoadNotice ? (
-          <AppLoadingFallback app={app} onOpenVendor={handleOpenVendor} onSwitchApps={handleSwitchApps} />
-        ) : null}
-      </Box>
+          {showLoadNotice ? (
+            <AppLoadingFallback app={app} onRetry={handleReload} onSwitchApps={handleSwitchApps} />
+          ) : null}
+        </Box>
+      )}
     </Stack>
   )
 }
