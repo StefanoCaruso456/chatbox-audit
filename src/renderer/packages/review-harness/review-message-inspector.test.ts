@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { inspectReviewMessage } from '@/packages/review-harness/review-message-inspector'
 import {
   exampleAppHeartbeatMessage,
   exampleAppStateUpdateMessage,
   exampleHostBootstrapMessage,
 } from '../../../shared/contracts/v1/runtime-messages'
-import { inspectReviewMessage } from './review-message-inspector'
 
 const context = {
   expectedOrigin: 'https://apps.chatbridge.dev',
