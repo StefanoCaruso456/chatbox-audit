@@ -23,6 +23,44 @@ CREATE UNIQUE INDEX idx_users_email_unique
   ON users (LOWER(email))
   WHERE email IS NOT NULL AND deleted_at IS NULL;
 
+CREATE TABLE platform_sessions (
+  platform_session_id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES users (user_id),
+  provider text NOT NULL,
+  status text NOT NULL DEFAULT 'active',
+  session_token_hash text NOT NULL,
+  refresh_token_hash text NOT NULL,
+  token_version integer NOT NULL DEFAULT 1,
+  session_expires_at timestamptz NOT NULL,
+  refresh_expires_at timestamptz NOT NULL,
+  issued_at timestamptz NOT NULL,
+  last_used_at timestamptz,
+  last_refreshed_at timestamptz,
+  revoked_at timestamptz,
+  user_agent text,
+  ip_address text,
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT NOW(),
+  updated_at timestamptz NOT NULL DEFAULT NOW(),
+  CONSTRAINT platform_sessions_provider_present CHECK (LENGTH(TRIM(provider)) > 0),
+  CONSTRAINT platform_sessions_status_valid CHECK (status IN ('active', 'expired', 'revoked')),
+  CONSTRAINT platform_sessions_token_version_positive CHECK (token_version >= 1),
+  CONSTRAINT platform_sessions_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object'),
+  CONSTRAINT platform_sessions_expiry_order CHECK (refresh_expires_at >= session_expires_at)
+);
+
+ALTER TABLE platform_sessions
+  ADD CONSTRAINT uq_platform_sessions_session_token_hash UNIQUE (session_token_hash);
+
+ALTER TABLE platform_sessions
+  ADD CONSTRAINT uq_platform_sessions_refresh_token_hash UNIQUE (refresh_token_hash);
+
+CREATE INDEX idx_platform_sessions_user_status
+  ON platform_sessions (user_id, status, updated_at DESC);
+
+CREATE INDEX idx_platform_sessions_refresh_expiry
+  ON platform_sessions (status, refresh_expires_at);
+
 CREATE TABLE conversations (
   conversation_id text PRIMARY KEY,
   user_id text NOT NULL REFERENCES users (user_id),
@@ -170,6 +208,11 @@ CREATE TABLE oauth_connections (
   app_id text NOT NULL REFERENCES apps (app_id),
   provider text NOT NULL,
   status text NOT NULL,
+  authorization_state_hash text NOT NULL,
+  authorization_url text NOT NULL,
+  authorization_expires_at timestamptz,
+  code_verifier_ciphertext text,
+  requested_scopes text[] NOT NULL DEFAULT ARRAY[]::text[],
   external_account_id text,
   scopes text[] NOT NULL DEFAULT ARRAY[]::text[],
   access_token_ciphertext text,
@@ -185,17 +228,25 @@ CREATE TABLE oauth_connections (
   updated_at timestamptz NOT NULL DEFAULT NOW(),
   CONSTRAINT oauth_connections_provider_present CHECK (LENGTH(TRIM(provider)) > 0),
   CONSTRAINT oauth_connections_status_valid CHECK (status IN ('pending', 'connected', 'expired', 'revoked', 'error')),
+  CONSTRAINT oauth_connections_authorization_state_present CHECK (LENGTH(TRIM(authorization_state_hash)) > 0),
+  CONSTRAINT oauth_connections_authorization_url_present CHECK (LENGTH(TRIM(authorization_url)) > 0),
   CONSTRAINT oauth_connections_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
 
 ALTER TABLE oauth_connections
   ADD CONSTRAINT uq_oauth_connections_user_app_provider UNIQUE (user_id, app_id, provider);
 
+ALTER TABLE oauth_connections
+  ADD CONSTRAINT uq_oauth_connections_authorization_state_hash UNIQUE (authorization_state_hash);
+
 CREATE INDEX idx_oauth_connections_status_expiry
   ON oauth_connections (status, access_token_expires_at);
 
 CREATE INDEX idx_oauth_connections_app_status
   ON oauth_connections (app_id, status);
+
+CREATE INDEX idx_oauth_connections_state_expiry
+  ON oauth_connections (status, authorization_expires_at);
 
 CREATE TABLE app_sessions (
   app_session_id text PRIMARY KEY,
@@ -325,6 +376,11 @@ ALTER TABLE app_sessions
 
 CREATE TRIGGER trg_users_updated_at
 BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at_timestamp();
+
+CREATE TRIGGER trg_platform_sessions_updated_at
+BEFORE UPDATE ON platform_sessions
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at_timestamp();
 

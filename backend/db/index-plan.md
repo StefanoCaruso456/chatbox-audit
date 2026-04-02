@@ -1,6 +1,7 @@
 # TutorMeAI PostgreSQL Index Plan
 
 This document explains the initial indexes created by `backend/db/migrations/0001_tutormeai_platform.sql`.
+Phase 3 auth/security adds `backend/db/migrations/0002_tutormeai_auth_security.sql` for platform-session persistence.
 
 ## Query Patterns
 
@@ -76,21 +77,39 @@ Primary indexes:
 - `idx_tool_invocations_status_started`
 - `idx_tool_invocations_app_tool_started`
 
-### 6. OAuth connection lookup and refresh
+### 6. OAuth connection lookup, callback, and refresh
 
 Expected query:
 
 - load a user's app connection before invoking an authenticated tool
+- resolve a pending callback state during OAuth completion
 - refresh expiring or expired tokens
 - inspect active/failed connections by app
 
 Primary indexes:
 
 - unique constraint on `(user_id, app_id, provider)`
+- unique constraint on `authorization_state_hash`
 - `idx_oauth_connections_status_expiry`
 - `idx_oauth_connections_app_status`
+- `idx_oauth_connections_state_expiry`
 
-### 7. App review and approval history
+### 7. Platform auth session lookup and refresh
+
+Expected query:
+
+- authenticate a bearer token to a single active platform session
+- refresh a user's session with token rotation
+- revoke all or one active session for a user
+
+Primary indexes:
+
+- unique constraint on `session_token_hash`
+- unique constraint on `refresh_token_hash`
+- `idx_platform_sessions_user_status`
+- `idx_platform_sessions_refresh_expiry`
+
+### 8. App review and approval history
 
 Expected query:
 
