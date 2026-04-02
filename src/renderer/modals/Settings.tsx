@@ -31,6 +31,8 @@ import { RouteComponent as SettingsProviderChatboxAiRouteComponent } from '@/rou
 import { RouteComponent as SettingsProviderIndexRouteComponent } from '@/routes/settings/provider/index'
 import { RouteComponent as SettingsProviderRouteRouteComponent } from '@/routes/settings/provider/route'
 import { SettingsRoot } from '@/routes/settings/route'
+import { RouteComponent as SettingsTutorMeAIProfileRouteComponent } from '@/routes/settings/tutormeai-profile'
+import { RouteComponent as SettingsTutorMeAIReviewsRouteComponent } from '@/routes/settings/tutormeai-reviews'
 import { RouteComponent as SettingsWebSearchRouteComponent } from '@/routes/settings/web-search'
 
 export type SettingsModalProps = {}
@@ -141,6 +143,18 @@ const SettingsChatboxAiRoute = createRoute({
   getParentRoute: () => RootRoute,
 })
 
+const SettingsTutorMeAIProfileRoute = createRoute({
+  component: SettingsTutorMeAIProfileRouteComponent,
+  path: '/settings/tutormeai-profile',
+  getParentRoute: () => RootRoute,
+})
+
+const SettingsTutorMeAIReviewsRoute = createRoute({
+  component: SettingsTutorMeAIReviewsRouteComponent,
+  path: '/settings/tutormeai-reviews',
+  getParentRoute: () => RootRoute,
+})
+
 const SettingsGeneralRoute = createRoute({
   component: SettingsGeneralRouteComponent,
   path: '/settings/general',
@@ -222,6 +236,8 @@ SettingsProviderRouteRoute.addChildren([
 const routeTree = RootRoute.addChildren([
   SettingsIndexRoute,
   SettingsChatboxAiRoute,
+  SettingsTutorMeAIProfileRoute,
+  SettingsTutorMeAIReviewsRoute,
   SettingsGeneralRoute,
   SettingsChatRoute,
   SettingsWebSearchRoute,
