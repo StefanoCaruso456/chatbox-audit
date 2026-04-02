@@ -13,7 +13,7 @@ import {
   type SessionType,
   type Settings,
 } from '@shared/types'
-import { cloneMessage, mergeMessages } from '@shared/utils/message'
+import { cloneMessage, getMessageText, mergeMessages } from '@shared/utils/message'
 import { identity, pickBy } from 'lodash'
 import { createModelDependencies } from '@/adapters'
 import * as appleAppStore from '@/packages/apple_app_store'
@@ -27,6 +27,7 @@ import {
 import { generateImage, streamText } from '@/packages/model-calls'
 import { getModelDisplayName } from '@/packages/model-setting-utils'
 import { estimateTokensFromMessages } from '@/packages/token'
+import { routeTutorMeAiAppRequest } from '@/packages/tutormeai-apps/orchestrator'
 import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
@@ -195,12 +196,40 @@ export async function generate(
         let firstTokenLatency: number | undefined
         const persistInterval = 2000
         let lastPersistTimestamp = Date.now()
-        const promptMsgs = await genMessageContext(
-          settings,
-          messages.slice(0, targetMsgIx),
-          model.isSupportToolUse('read-file'),
-          { compactionPoints: session.compactionPoints }
-        )
+        const previousMessages = messages.slice(0, targetMsgIx)
+        const latestUserMessage = [...previousMessages].reverse().find((message) => message.role === 'user')
+        const localAppResult =
+          latestUserMessage && typeof window !== 'undefined'
+            ? await routeTutorMeAiAppRequest({
+                origin: window.location.origin,
+                conversationId: session.id,
+                userId: configs.uuid || 'local-user',
+                userRequest: getMessageText(latestUserMessage, true, true),
+                requestMessageId: latestUserMessage.id,
+                previousMessages,
+              })
+            : { kind: 'pass-through' as const }
+
+        if (localAppResult.kind === 'invoke-tool' || localAppResult.kind === 'clarify') {
+          targetMsg = {
+            ...targetMsg,
+            ...localAppResult.message,
+            id: targetMsg.id,
+            generating: false,
+            cancel: undefined,
+            status: [],
+            finishReason: undefined,
+            usage: undefined,
+            tokensUsed:
+              targetMsg.tokensUsed ?? estimateTokensFromMessages([...previousMessages, localAppResult.message]),
+          }
+          await modifyMessage(sessionId, targetMsg, true)
+          break
+        }
+
+        const promptMsgs = await genMessageContext(settings, previousMessages, model.isSupportToolUse('read-file'), {
+          compactionPoints: session.compactionPoints,
+        })
         const modifyMessageCache: OnResultChangeWithCancel = async (updated) => {
           const nextMessage = {
             ...targetMsg,

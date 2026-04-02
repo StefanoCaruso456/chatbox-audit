@@ -1,7 +1,16 @@
+import type { AppSessionAuthState, CompletionSignal, JsonValue } from '@shared/contracts/v1'
 import type { JsonObject } from '@shared/contracts/v1/shared'
 import type { MessageEmbeddedAppPart } from '@shared/types'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
+import { getSession } from '@/stores/chatStore'
+import { findMessageLocation } from '@/stores/session/forks'
+import { modifyMessage } from '@/stores/sessionActions'
 import EmbeddedAppHost from './EmbeddedAppHost'
+import type {
+  EmbeddedAppHostErrorMessage,
+  EmbeddedAppHostStateMessage,
+  EmbeddedAppHostTimeoutError,
+} from './embedded-app-host'
 
 function toHostState(status: MessageEmbeddedAppPart['status']) {
   if (status === 'error') {
@@ -31,7 +40,85 @@ function getEmbeddedAppErrorMessage(part: MessageEmbeddedAppPart) {
   return part.bridge?.completion?.errorMessage ?? part.errorMessage
 }
 
-export function EmbeddedAppPartUI({ part }: { part: MessageEmbeddedAppPart }) {
+function mapRuntimeStatusToMessageStatus(
+  status: 'pending' | 'active' | 'waiting-auth' | 'waiting-user' | 'completed' | 'failed'
+) {
+  if (status === 'failed') {
+    return 'error' as const
+  }
+
+  if (status === 'pending') {
+    return 'loading' as const
+  }
+
+  return 'ready' as const
+}
+
+function inferAuthStateFromJsonValue(value: JsonValue | undefined): AppSessionAuthState | undefined {
+  if (value === 'connected' || value === 'required' || value === 'expired' || value === 'not-required') {
+    return value
+  }
+
+  return undefined
+}
+
+function inferAuthStateFromCompletion(
+  part: MessageEmbeddedAppPart,
+  completion: CompletionSignal
+): AppSessionAuthState | undefined {
+  if (part.bridge?.bootstrap?.authState === 'required' && completion.status === 'succeeded') {
+    return 'connected'
+  }
+
+  return undefined
+}
+
+export function EmbeddedAppPartUI({
+  part,
+  sessionId,
+  messageId,
+  partIndex,
+}: {
+  part: MessageEmbeddedAppPart
+  sessionId: string
+  messageId: string
+  partIndex: number
+}) {
+  const updatePart = useCallback(
+    async (updater: (currentPart: MessageEmbeddedAppPart) => MessageEmbeddedAppPart) => {
+      const session = await getSession(sessionId)
+      if (!session) {
+        return
+      }
+
+      const location = findMessageLocation(session, messageId)
+      if (!location) {
+        return
+      }
+
+      const currentMessage = location.list[location.index]
+      const currentPart = currentMessage.contentParts?.[partIndex]
+      if (!currentPart || currentPart.type !== 'embedded-app') {
+        return
+      }
+
+      const nextParts = [...(currentMessage.contentParts || [])]
+      nextParts[partIndex] = updater(currentPart)
+
+      await modifyMessage(
+        sessionId,
+        {
+          ...currentMessage,
+          contentParts: nextParts,
+          generating: false,
+          status: [],
+        },
+        true
+      )
+    },
+    [messageId, partIndex, sessionId]
+  )
+
   const runtime = useMemo(() => {
     if (!part.bridge) {
       return undefined
@@ -56,8 +143,94 @@ export function EmbeddedAppPartUI({ part }: { part: MessageEmbeddedAppPart }) {
             errorMessage: part.bridge.completion.errorMessage,
           }
         : undefined,
+      onStateUpdate: (message: EmbeddedAppHostStateMessage) => {
+        void updatePart((currentPart) => {
+          const state = message.payload.state
+          const authState =
+            state && typeof state === 'object' && !Array.isArray(state)
+              ? inferAuthStateFromJsonValue((state as Record<string, JsonValue>).authState)
+              : undefined
+
+          return {
+            ...currentPart,
+            status: mapRuntimeStatusToMessageStatus(message.payload.status),
+            summary: message.payload.summary,
+            errorMessage: message.payload.status === 'failed' ? currentPart.errorMessage : undefined,
+            bridge: currentPart.bridge
+              ? {
+                  ...currentPart.bridge,
+                  bootstrap: currentPart.bridge.bootstrap
+                    ? {
+                        ...currentPart.bridge.bootstrap,
+                        authState: authState ?? currentPart.bridge.bootstrap.authState,
+                        initialState:
+                          state && typeof state === 'object' && !Array.isArray(state)
+                            ? (state as JsonObject)
+                            : currentPart.bridge.bootstrap.initialState,
+                      }
+                    : currentPart.bridge.bootstrap,
+                }
+              : currentPart.bridge,
+          }
+        })
+      },
+      onCompletion: (signal: CompletionSignal) => {
+        void updatePart((currentPart) => ({
+          ...currentPart,
+          status: 'ready',
+          summary: signal.followUpContext.userVisibleSummary ?? signal.resultSummary,
+          errorMessage: signal.status === 'failed' || signal.status === 'timed-out' ? signal.resultSummary : undefined,
+          bridge: currentPart.bridge
+            ? {
+                ...currentPart.bridge,
+                pendingInvocation: undefined,
+                bootstrap: currentPart.bridge.bootstrap
+                  ? {
+                      ...currentPart.bridge.bootstrap,
+                      authState:
+                        inferAuthStateFromCompletion(currentPart, signal) ?? currentPart.bridge.bootstrap.authState,
+                    }
+                  : currentPart.bridge.bootstrap,
+                completion: {
+                  status: signal.status,
+                  resultSummary: signal.resultSummary,
+                  result: signal.result,
+                  errorMessage:
+                    signal.status === 'failed' || signal.status === 'timed-out' ? signal.resultSummary : undefined,
+                },
+              }
+            : currentPart.bridge,
+        }))
+      },
+      onRuntimeError: (message: EmbeddedAppHostErrorMessage | EmbeddedAppHostTimeoutError) => {
+        const runtimeErrorMessage = 'payload' in message ? message.payload.message : message.message
+        void updatePart((currentPart) => ({
+          ...currentPart,
+          status: 'error',
+          errorMessage: runtimeErrorMessage,
+          bridge: currentPart.bridge
+            ? {
+                ...currentPart.bridge,
+                pendingInvocation: undefined,
+              }
+            : currentPart.bridge,
+        }))
+      },
+      onHeartbeatTimeout: (error: EmbeddedAppHostTimeoutError) => {
+        void updatePart((currentPart) => ({
+          ...currentPart,
+          status: 'error',
+          errorMessage: error.message,
+          bridge: currentPart.bridge
+            ? {
+                ...currentPart.bridge,
+                pendingInvocation: undefined,
+              }
+            : currentPart.bridge,
+        }))
+      },
     } as const
-  }, [part])
+  }, [part, updatePart])
 
   return (
     <EmbeddedAppHost
