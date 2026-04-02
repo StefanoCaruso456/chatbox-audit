@@ -6,12 +6,14 @@ import { ReviewHarnessPage } from './review-harness/-components/ReviewHarnessPag
 
 const searchSchema = z.object({
   appId: z.string().optional(),
+  appVersionId: z.string().optional(),
   appName: z.string().optional(),
   entryUrl: z.string().url(),
   targetOrigin: z.string().optional(),
   allowedOrigins: z.string().optional(),
   conversationId: z.string().optional(),
   appSessionId: z.string().optional(),
+  reviewerUserId: z.string().optional(),
   authState: z.enum(['not-required', 'connected', 'required', 'expired']).optional(),
   sandbox: z.string().optional(),
   reviewerNotes: z.string().optional(),

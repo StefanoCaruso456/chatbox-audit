@@ -5,16 +5,20 @@ describe('buildReviewHarnessConfig', () => {
   it('derives a stable runtime config from search params', () => {
     const config = buildReviewHarnessConfig({
       appId: 'flashcards.public',
+      appVersionId: 'flashcards.public@1.0.0',
       appName: 'Flashcards Coach',
       entryUrl: 'https://staging.example.com/flashcards',
       allowedOrigins: 'https://staging.example.com',
+      reviewerUserId: 'reviewer.platform',
     })
 
     expect(config.appId).toBe('flashcards.public')
+    expect(config.appVersionId).toBe('flashcards.public@1.0.0')
     expect(config.appName).toBe('Flashcards Coach')
     expect(config.targetOrigin).toBe('https://staging.example.com')
     expect(config.allowedOrigins).toEqual(['https://staging.example.com'])
     expect(config.appSessionId).toBe('review.flashcards.public')
+    expect(config.reviewerUserId).toBe('reviewer.platform')
     expect(config.runtimeWarnings).toEqual([])
   })
 
