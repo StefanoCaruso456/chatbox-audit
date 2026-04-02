@@ -18,6 +18,7 @@ The system uses a web-based Next.js client deployed on Vercel and a dedicated No
 - Setup guide: [docs/tutormeai-setup-guide.md](./docs/tutormeai-setup-guide.md)
 - Architecture: [docs/architecture.md](./docs/architecture.md)
 - Trust governance roadmap: [tasks/roadmap-tutormeai-trust-governance.md](./tasks/roadmap-tutormeai-trust-governance.md)
+- Trust policy docs: [docs/trust/README.md](./docs/trust/README.md)
 - Third-party developer guide: [docs/tutormeai-third-party-developer-guide.md](./docs/tutormeai-third-party-developer-guide.md)
 - Cost analysis: [docs/tutormeai-cost-analysis.md](./docs/tutormeai-cost-analysis.md)
 - Demo checklist: [docs/tutormeai-demo-checklist.md](./docs/tutormeai-demo-checklist.md)

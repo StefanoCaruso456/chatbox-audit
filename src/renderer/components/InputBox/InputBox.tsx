@@ -1126,7 +1126,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   ))}
 
                 {!isSmallScreen && (
-                  <Tooltip label={t('Conversation Settings')} position="top" withArrow>
+                  <Tooltip label={t('Conversation Mode')} position="top" withArrow>
                     <UnstyledButton
                       onClick={onClickSessionSettings}
                       disabled={!onClickSessionSettings}
@@ -1170,7 +1170,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                         leftSection={<ScalableIcon icon={IconAdjustmentsHorizontal} size={16} />}
                         onClick={onClickSessionSettings}
                       >
-                        {t('Conversation Settings')}
+                        {t('Conversation Mode')}
                       </Menu.Item>
                     </Menu.Dropdown>
                   </Menu>
