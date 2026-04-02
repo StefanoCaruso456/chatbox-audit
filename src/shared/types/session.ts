@@ -131,6 +131,39 @@ export const MessageEmbeddedAppPartSchema = z.object({
   sandbox: z.string().optional(),
   allowedOrigin: z.string().optional(),
   errorMessage: z.string().optional(),
+  bridge: z
+    .object({
+      expectedOrigin: z.string().url(),
+      conversationId: z.string(),
+      appSessionId: z.string().optional(),
+      handshakeToken: z.string().min(1).optional(),
+      bootstrap: z
+        .object({
+          launchReason: z.enum(['chat-tool', 'resume-session', 'manual-open']),
+          messageId: z.string().optional(),
+          correlationId: z.string().optional(),
+          initialState: z.unknown().optional(),
+          availableTools: z.array(z.string()).optional(),
+        })
+        .optional(),
+      pendingInvocation: z
+        .object({
+          toolCallId: z.string(),
+          toolName: z.string(),
+          arguments: z.unknown().optional(),
+          timeoutMs: z.number().int().positive().optional(),
+        })
+        .optional(),
+      completion: z
+        .object({
+          status: z.enum(['succeeded', 'cancelled', 'failed', 'timed-out']),
+          resultSummary: z.string().optional(),
+          result: z.unknown().optional(),
+          errorMessage: z.string().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 })
 
 export const MessageContentPartSchema = z.discriminatedUnion('type', [
@@ -327,6 +360,7 @@ export type MessageToolCallPart<Args = unknown, Result = unknown> = z.infer<type
   args: Args
   result?: Result
 }
+export type MessageEmbeddedAppBridge = NonNullable<z.infer<typeof MessageEmbeddedAppPartSchema>['bridge']>
 export type MessageEmbeddedAppPart = z.infer<typeof MessageEmbeddedAppPartSchema>
 export type MessageContentParts = z.infer<typeof MessageContentPartsSchema>
 export type StreamTextResult = z.infer<typeof StreamTextResultSchema>
