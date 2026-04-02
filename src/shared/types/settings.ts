@@ -112,6 +112,14 @@ export const ProviderOptionsSchema = z.object({
   google: GoogleParamsSchema.optional(),
 })
 
+export const TutorMeAIUserRoleSchema = z.enum(['student', 'teacher', 'school_admin', 'district_Director'])
+
+export const TutorMeAIProfileSchema = z.object({
+  name: z.string().default(''),
+  email: z.string().default(''),
+  role: TutorMeAIUserRoleSchema.default('student'),
+})
+
 // NOTICE: Global settings is for new session default settings, set to session when session created, changes will not affect existing sessions
 export const GlobalSessionSettingsSchema = z.object({
   maxContextMessageCount: z.number().optional().catch(undefined),
@@ -265,6 +273,11 @@ export enum Theme {
 export const SettingsSchema = GlobalSessionSettingsSchema.extend({
   providers: z.record(z.string(), ProviderSettingsSchema).optional().catch(undefined),
   customProviders: z.array(CustomProviderBaseInfoSchema).optional().catch(undefined),
+  tutorMeAIProfile: TutorMeAIProfileSchema.default({
+    name: '',
+    email: '',
+    role: 'student',
+  }),
   favoritedModels: z
     .array(
       z.object({
@@ -393,6 +406,8 @@ export type ClaudeParams = z.infer<typeof ClaudeParamsSchema>
 export type OpenAIParams = z.infer<typeof OpenAIParamsSchema>
 export type GoogleParams = z.infer<typeof GoogleParamsSchema>
 export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>
+export type TutorMeAIUserRole = z.infer<typeof TutorMeAIUserRoleSchema>
+export type TutorMeAIProfile = z.infer<typeof TutorMeAIProfileSchema>
 export type GlobalSessionSettings = z.infer<typeof GlobalSessionSettingsSchema>
 export type ChatboxAILicenseDetail = z.infer<typeof ChatboxAILicenseDetailSchema>
 export type UnifiedTokenUsageDetail = z.infer<typeof UnifiedTokenUsageDetailSchema>
