@@ -11,9 +11,9 @@ import {
   IconInfoCircle,
   IconLayoutSidebarLeftCollapse,
   IconMessageChatbot,
+  type IconProps,
   IconSearch,
   IconSettingsFilled,
-  type IconProps,
 } from '@tabler/icons-react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'
@@ -24,8 +24,8 @@ import { ScalableIcon } from './components/common/ScalableIcon'
 import ThemeSwitchButton from './components/dev/ThemeSwitchButton'
 import SessionItem from './components/session/SessionItem'
 import { FORCE_ENABLE_DEV_PAGES } from './dev/devToolsConfig'
-import { useProjects } from './hooks/useProjects'
 import useNeedRoomForMacWinControls from './hooks/useNeedRoomForWinControls'
+import { useProjects } from './hooks/useProjects'
 import { useIsSmallScreen, useSidebarWidth } from './hooks/useScreenChange'
 import useVersion from './hooks/useVersion'
 import { navigateToSettings } from './modals/Settings'
@@ -204,12 +204,6 @@ export default function Sidebar() {
         <Box flex={1} className="overflow-y-auto">
           <Stack gap="xs" px="xs" pb="md">
             <SidebarPrimaryAction
-              icon={IconCirclePlus}
-              label={t('New Chat')}
-              onClick={handleCreateNewSession}
-              emphasized
-            />
-            <SidebarPrimaryAction
               icon={IconSearch}
               label={t('Search chats')}
               onClick={() => setOpenSearchDialog(true, true)}
@@ -261,6 +255,13 @@ export default function Sidebar() {
                 })}
               </Stack>
             </Collapse>
+
+            <SidebarPrimaryAction
+              icon={IconCirclePlus}
+              label={t('New Chat')}
+              onClick={handleCreateNewSession}
+              emphasized
+            />
 
             <SidebarDisclosure
               label={t('Your chats')}
