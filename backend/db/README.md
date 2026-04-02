@@ -7,6 +7,8 @@ Ticket 09 deliverables live here:
 - `schema.sql`: canonical PostgreSQL schema snapshot
 - `migrations/0001_tutormeai_platform.sql`: executable initial migration
 - `migrations/0002_tutormeai_auth_security.sql`: executable Phase 3 auth/security migration
+- `migrations/0003_tutormeai_submission_review_hardening.sql`: executable trust Phase 2 submission-validation migration
+- `migrations/0004_tutormeai_review_workflow.sql`: executable trust Phase 4 reviewer-workflow migration
 - `index-plan.md`: rationale for the primary indexes needed by persistence, registry, and audit flows
 
 ## Design Notes
@@ -24,6 +26,8 @@ Ticket 09 deliverables live here:
 ```bash
 psql "$DATABASE_URL" -f backend/db/migrations/0001_tutormeai_platform.sql
 psql "$DATABASE_URL" -f backend/db/migrations/0002_tutormeai_auth_security.sql
+psql "$DATABASE_URL" -f backend/db/migrations/0003_tutormeai_submission_review_hardening.sql
+psql "$DATABASE_URL" -f backend/db/migrations/0004_tutormeai_review_workflow.sql
 ```
 
 ## Scope Of This Ticket
@@ -38,3 +42,7 @@ Ticket 09 establishes the durable PostgreSQL model for:
 - OAuth connections and token storage
 
 Later Phase 1 tickets should build services and APIs on top of these tables rather than introducing parallel persistence shapes.
+
+Trust-roadmap note:
+
+The trust-governance enhancements reuse these same tables. Review workflow and app-approval hardening should extend the existing review, app, and app-version records rather than creating a second parallel approval database model.

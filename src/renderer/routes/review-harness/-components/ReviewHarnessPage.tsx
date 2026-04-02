@@ -20,7 +20,7 @@ import {
   type ReviewHarnessLog,
   type ReviewHarnessReviewSeverity,
 } from '@/packages/review-harness/review-harness-log'
-import type { ReviewHarnessConfig } from '../review-harness'
+import type { ReviewHarnessConfig } from '@/packages/review-harness/review-harness'
 
 type LoggedRawMessagePayload = {
   inspection: ReviewMessageInspectionResult
@@ -474,8 +474,8 @@ export function ReviewHarnessPage({ config }: { config: ReviewHarnessConfig }) {
                   conversationId: config.conversationId,
                   appId: config.appId,
                   appSessionId: config.appSessionId,
-                  errorName: 'type' in error ? error.type : undefined,
-                  message: error.message,
+                  errorName: 'payload' in error ? error.payload.code : error.code,
+                  message: 'payload' in error ? error.payload.message : error.message,
                   recoverable: 'payload' in error ? error.payload.recoverable : error.recoverable,
                 })
               )

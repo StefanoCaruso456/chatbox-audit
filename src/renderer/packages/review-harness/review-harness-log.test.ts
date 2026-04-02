@@ -195,9 +195,11 @@ describe('review-harness-log', () => {
       note: 'Looks good overall.',
     })
 
-    expect(event.type).toBe('reviewer-note')
-    expect(event.actor).toBe('reviewer')
-    expect(event.severity).toBe('info')
+    expect(event).toMatchObject({
+      type: 'reviewer-note',
+      actor: 'reviewer',
+      severity: 'info',
+    })
     expect(event.id.startsWith('review-harness.reviewer-note.')).toBe(true)
     expect(event.timestamp).toBeTruthy()
   })

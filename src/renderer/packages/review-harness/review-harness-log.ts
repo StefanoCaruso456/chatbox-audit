@@ -17,7 +17,7 @@ export type ReviewHarnessRawMessageDirection = 'host-to-iframe' | 'iframe-to-hos
 
 export type ReviewHarnessReviewSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical'
 
-export type ReviewHarnessCompletionStatus = 'succeeded' | 'failed' | 'cancelled'
+export type ReviewHarnessCompletionStatus = 'succeeded' | 'failed' | 'cancelled' | 'timed-out'
 
 export type ReviewHarnessFindingStatus = 'open' | 'resolved' | 'dismissed'
 
@@ -133,6 +133,7 @@ export interface ReviewHarnessEventInputBase {
 }
 
 export interface ReviewHarnessIframeLoadEventInput extends ReviewHarnessEventInputBase {
+  type: 'iframe-load'
   iframeUrl: string
   origin: string
   status?: ReviewHarnessIframeLoadEvent['status']
@@ -142,12 +143,14 @@ export interface ReviewHarnessIframeLoadEventInput extends ReviewHarnessEventInp
 }
 
 export interface ReviewHarnessRuntimeStateEventInput extends ReviewHarnessEventInputBase {
+  type: 'runtime-state'
   state: Record<string, ReviewHarnessJsonValue>
   stateLabel?: string
   sequence?: number
 }
 
 export interface ReviewHarnessCompletionEventInput extends ReviewHarnessEventInputBase {
+  type: 'completion'
   status: ReviewHarnessCompletionStatus
   resultSummary: string
   result?: ReviewHarnessJsonValue
@@ -155,6 +158,7 @@ export interface ReviewHarnessCompletionEventInput extends ReviewHarnessEventInp
 }
 
 export interface ReviewHarnessRuntimeErrorEventInput extends ReviewHarnessEventInputBase {
+  type: 'runtime-error'
   errorName?: string
   message: string
   stack?: string
@@ -162,6 +166,7 @@ export interface ReviewHarnessRuntimeErrorEventInput extends ReviewHarnessEventI
 }
 
 export interface ReviewHarnessHeartbeatTimeoutEventInput extends ReviewHarnessEventInputBase {
+  type: 'heartbeat-timeout'
   timeoutMs: number
   lastHeartbeatAt?: string
   missedHeartbeats?: number
@@ -169,6 +174,7 @@ export interface ReviewHarnessHeartbeatTimeoutEventInput extends ReviewHarnessEv
 }
 
 export interface ReviewHarnessRawMessageEventInput extends ReviewHarnessEventInputBase {
+  type: 'raw-message'
   direction?: ReviewHarnessRawMessageDirection
   message: unknown
   messageType?: string
@@ -177,6 +183,7 @@ export interface ReviewHarnessRawMessageEventInput extends ReviewHarnessEventInp
 }
 
 export interface ReviewHarnessReviewerNoteEventInput extends ReviewHarnessEventInputBase {
+  type: 'reviewer-note'
   note: string
   severity?: ReviewHarnessReviewSeverity
   tags?: string[]
@@ -184,6 +191,7 @@ export interface ReviewHarnessReviewerNoteEventInput extends ReviewHarnessEventI
 }
 
 export interface ReviewHarnessReviewerFindingEventInput extends ReviewHarnessEventInputBase {
+  type: 'reviewer-finding'
   title: string
   summary: string
   severity?: ReviewHarnessReviewSeverity
@@ -489,6 +497,8 @@ function inferActor(type: ReviewHarnessEventType): ReviewHarnessActor {
     case 'reviewer-finding':
       return 'reviewer'
   }
+
+  return 'platform'
 }
 
 function createEmptyEventCounts(): Record<ReviewHarnessEventType, number> {

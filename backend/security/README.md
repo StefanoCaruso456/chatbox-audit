@@ -1,9 +1,11 @@
 # Backend Security
 
-This module owns the TutorMeAI Phase 3 backend security slice:
+This module owns the TutorMeAI trust governance backend slice across Phases 2-4:
 
 - app review records
 - app approval synchronization
+- reviewer workflow orchestration
+- reviewer decision API routes
 - app submission package schema
 - domain and origin validation
 - permission sanity checking
@@ -19,6 +21,8 @@ Primary concepts:
 - `AppSecurityReviewRecord` models the append-only review history that aligns with `app_review_records`
 - `AppSecurityService` records reviews, syncs registry state, and decides whether an app can launch
 - `AppSubmissionPackageSchema` defines the structured review intake package for partner-submitted app versions
+- `AppReviewWorkflowService` owns the review queue, review context, start-review action, and reviewer decision transitions
+- `createSecurityApi()` exposes fetch-style review queue, context, start-review, and decision routes for the Railway backend
 - `validateDomainOriginSubmission()` checks exact HTTPS origin usage, entry/target alignment, and declared origin/domain consistency
 - `buildPermissionSanityReport()` flags suspicious permission and auth-permission combinations before review
 - `reviewOAuthScopeSanity()` compares manifest scopes against provider/requested scopes and flags missing, excessive, wildcard, or mismatched scope sets
@@ -32,3 +36,4 @@ The module is designed for least privilege:
 - sandbox defaults are conservative
 - app launchability is gated by review status and allowlisted origins
 - submission-time validation can block malformed or unsafe onboarding payloads before human review
+- reviewer decisions are platform-owned and can move versions through staging, production, remediation, rejection, and suspension states

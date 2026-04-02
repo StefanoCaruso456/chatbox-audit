@@ -196,16 +196,23 @@ CREATE TABLE app_review_records (
   app_version_id text,
   reviewed_by_user_id text REFERENCES users (user_id),
   review_status text NOT NULL,
+  review_state text NOT NULL DEFAULT 'submitted',
+  decision_action text,
+  decision_summary text,
   age_rating text NOT NULL,
   data_access_level text NOT NULL,
+  remediation_items_json jsonb NOT NULL DEFAULT '[]'::jsonb,
   permissions_snapshot_json jsonb NOT NULL DEFAULT '[]'::jsonb,
   notes text,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   decided_at timestamptz,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT app_review_records_status_valid CHECK (review_status IN ('pending', 'approved', 'blocked')),
+  CONSTRAINT app_review_records_review_state_valid CHECK (review_state IN ('draft', 'submitted', 'validation-failed', 'review-pending', 'approved-staging', 'approved-production', 'rejected', 'suspended', 'retired')),
+  CONSTRAINT app_review_records_decision_action_valid CHECK (decision_action IS NULL OR decision_action IN ('start-review', 'approve-staging', 'approve-production', 'request-remediation', 'reject', 'suspend')),
   CONSTRAINT app_review_records_age_rating_valid CHECK (age_rating IN ('all-ages', '13+', '16+', '18+')),
   CONSTRAINT app_review_records_data_access_valid CHECK (data_access_level IN ('minimal', 'moderate', 'sensitive')),
+  CONSTRAINT app_review_records_remediation_items_is_array CHECK (jsonb_typeof(remediation_items_json) = 'array'),
   CONSTRAINT app_review_records_permissions_is_array CHECK (jsonb_typeof(permissions_snapshot_json) = 'array'),
   CONSTRAINT app_review_records_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
@@ -215,6 +222,9 @@ CREATE INDEX idx_app_review_records_app_created
 
 CREATE INDEX idx_app_review_records_status_created
   ON app_review_records (review_status, created_at DESC);
+
+CREATE INDEX idx_app_review_records_state_created
+  ON app_review_records (review_state, created_at DESC);
 
 ALTER TABLE app_review_records
   ADD CONSTRAINT fk_app_review_records_app_version

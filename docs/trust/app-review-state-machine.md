@@ -2,15 +2,15 @@
 
 ## Purpose
 
-This document defines the target app review lifecycle and allowed transitions.
+This document defines the app review lifecycle and allowed transitions used by the trust-governance approval flow.
 
 It is the source of truth for Trust Governance Roadmap Ticket `T3`.
 
 ## Important Scope Note
 
-The current implementation baseline already uses simple review statuses such as `pending`, `approved`, and `blocked`.
+The current implementation baseline still uses simpler runtime review statuses such as `pending`, `approved`, and `blocked`.
 
-This document defines the **target state model** that later registry and reviewer-workflow tickets should implement. It is a hardening spec, not a claim that the full state machine already exists in code.
+Those runtime statuses now coexist with the richer review-state model implemented by the submission, workflow, and reviewer-decision layers. The reviewer workflow that uses these states is documented in [reviewer-workflow.md](./reviewer-workflow.md).
 
 ## Review States
 
@@ -112,7 +112,7 @@ Runtime launch enforcement should eventually map to the target state model as fo
 
 ## Migration Guidance
 
-Because the current implementation uses simpler review states, later tickets should migrate carefully:
+Because runtime launch checks still rely on simpler approval statuses, later tickets should keep the review-state model and the runtime gating model aligned carefully:
 
 1. add new state fields without breaking current launch checks
 2. keep `approved` equivalent to `approved_production` during transition

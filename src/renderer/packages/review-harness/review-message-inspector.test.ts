@@ -4,7 +4,7 @@ import {
   exampleAppHeartbeatMessage,
   exampleAppStateUpdateMessage,
   exampleHostBootstrapMessage,
-} from '../../../shared/contracts/v1/runtime-messages'
+} from '@shared/contracts/v1/runtime-messages'
 
 const context = {
   expectedOrigin: 'https://apps.chatbridge.dev',
