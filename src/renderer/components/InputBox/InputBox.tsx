@@ -24,18 +24,15 @@ import { formatNumber } from '@shared/utils'
 import {
   IconAdjustmentsHorizontal,
   IconAlertCircle,
-  IconArrowBackUp,
   IconArrowUp,
   IconChevronRight,
   IconCirclePlus,
-  IconFilePencil,
   IconFolder,
   IconHammer,
   IconLink,
   IconMicrophone,
   IconPhoto,
   IconPlayerStopFilled,
-  IconPlus,
   IconSettings,
   IconVocabulary,
   IconWorldWww,
@@ -139,8 +136,6 @@ export type InputBoxProps = {
   onSelectModel?(provider: string, model: string): void
   onSubmit?(payload: InputBoxPayload): Promise<void>
   onStopGenerating?(): boolean
-  onStartNewThread?(): boolean
-  onRollbackThread?(): boolean
   onClickSessionSettings?(): boolean | Promise<boolean>
 }
 
@@ -155,8 +150,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       onSelectModel,
       onSubmit,
       onStopGenerating,
-      onStartNewThread,
-      onRollbackThread,
       onClickSessionSettings,
     },
     ref
@@ -466,18 +459,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       }
     }, [showSelectModelErrorTip])
 
-    const [showRollbackThreadButton, setShowRollbackThreadButton] = useState(false)
-    useEffect(() => {
-      if (showRollbackThreadButton) {
-        const tid = setTimeout(() => {
-          setShowRollbackThreadButton(false)
-        }, 5000)
-        return () => {
-          clearTimeout(tid)
-        }
-      }
-    }, [showRollbackThreadButton])
-
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
     const composerContainerRef = useRef<HTMLDivElement | null>(null)
     const [composerWidth, setComposerWidth] = useState<number | null>(null)
@@ -675,7 +656,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               },
               message: undefined,
             })
-            setShowRollbackThreadButton(false)
             if (platform.type !== 'mobile' && messageTextForHistory) {
               addInputBoxHistory(messageTextForHistory)
             }
@@ -752,20 +732,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             setTimeout(() => inputRef.current?.select(), 10)
           }
         }
-      }
-    }
-
-    const startNewThread = () => {
-      const res = onStartNewThread?.()
-      if (res) {
-        setShowRollbackThreadButton(true)
-      }
-    }
-
-    const rollbackThread = () => {
-      const res = onRollbackThread?.()
-      if (res) {
-        setShowRollbackThreadButton(false)
       }
     }
 
@@ -1278,36 +1244,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   </UnstyledButton>
                 </Tooltip>
 
-                {!isCompactComposer &&
-                  (showRollbackThreadButton ? (
-                    <Tooltip label={t('Rollback Thread')} position="top" withArrow>
-                      <UnstyledButton
-                        onClick={rollbackThread}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors"
-                      >
-                        <IconArrowBackUp
-                          size={toolbarIconSize}
-                          strokeWidth={1.8}
-                          className="text-[var(--chatbox-tint-secondary)]"
-                        />
-                      </UnstyledButton>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip label={t('New Thread')} position="top" withArrow>
-                      <UnstyledButton
-                        onClick={startNewThread}
-                        disabled={!onStartNewThread}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors disabled:opacity-50"
-                      >
-                        <IconFilePencil
-                          size={toolbarIconSize}
-                          strokeWidth={1.8}
-                          className="text-[var(--chatbox-tint-secondary)]"
-                        />
-                      </UnstyledButton>
-                    </Tooltip>
-                  ))}
-
                 {!isCompactComposer && (
                   <Tooltip
                     label={t('Conversation Mode and Settings')}
@@ -1364,9 +1300,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       size={toolbarIconSize}
                       strokeWidth={1.8}
                       className={cn(
-                        isVoiceInputListening
-                          ? 'text-red-500 animate-pulse'
-                          : 'text-[var(--chatbox-tint-secondary)]'
+                        isVoiceInputListening ? 'text-red-500 animate-pulse' : 'text-[var(--chatbox-tint-secondary)]'
                       )}
                     />
                   </UnstyledButton>
@@ -1394,9 +1328,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       </UnstyledButton>
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Item leftSection={<ScalableIcon icon={IconPlus} size={16} />} onClick={startNewThread}>
-                        {t('New Thread')}
-                      </Menu.Item>
                       <Menu.Item
                         leftSection={<ScalableIcon icon={IconAdjustmentsHorizontal} size={16} />}
                         onClick={handleConversationModeClick}
