@@ -45,9 +45,8 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     tags: ['lms', 'secondary', 'assignments', 'course-management'],
     vendorUrl: 'https://www.instructure.com/canvas/login',
     loadingFallback: {
-      title: 'This library card is not a live TutorMeAI runtime yet',
-      body: 'Canvas and similar district-managed tools need a school-specific launch integration before they can run inside the governed TutorMeAI sidebar runtime.',
-      actionLabel: 'Open Canvas login',
+      title: 'Canvas needs a school-specific embedded launch link',
+      body: 'Canvas and similar district-managed tools need a verified school iframe launch URL before they can run inside the TutorMeAI sidebar.',
     },
   },
   {
@@ -402,7 +401,6 @@ export const approvedApps: ApprovedApp[] = [
   ...tutorMeAiApps,
   ...curatedApprovedAppCatalog.map((app) => ({
     ...app,
-    launchUrl: `/embedded-apps/catalog/${app.id}`,
     vendorUrl: app.vendorUrl ?? app.launchUrl,
     experience: 'approved-library' as const,
   })),
