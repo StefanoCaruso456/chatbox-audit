@@ -47,6 +47,13 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     isApproved: true,
     tags: ['lms', 'secondary', 'assignments', 'course-management'],
     vendorUrl: 'https://www.instructure.com/canvas/login',
+    integrationConfig: {
+      configurableLaunchUrl: true,
+      launchUrlLabel: 'District Canvas launch URL',
+      launchUrlPlaceholder: 'https://district.instructure.com/login/canvas',
+      helpUrl: 'https://canvas.instructure.com/doc/api/',
+      helpLabel: 'Canvas API docs',
+    },
     loadingFallback: {
       title: 'Canvas needs a school-specific embedded launch link',
       body: 'Canvas and similar district-managed tools need a verified school iframe launch URL before they can run inside the TutorMeAI sidebar.',
@@ -156,6 +163,11 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     integrationMode: 'partner-embed',
     isApproved: true,
     tags: ['math', 'conceptual-learning', 'calculator', 'activities'],
+    integrationConfig: {
+      defaultLaunchUrl: 'https://www.desmos.com/calculator',
+      helpUrl: 'https://www.desmos.com/api/v1.6/docs/index.html',
+      helpLabel: 'Desmos API docs',
+    },
   },
   {
     id: 'newsela',
@@ -236,6 +248,13 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     integrationMode: 'partner-embed',
     isApproved: true,
     tags: ['flashcards', 'study', 'review', 'memorization'],
+    integrationConfig: {
+      configurableLaunchUrl: true,
+      launchUrlLabel: 'Quizlet set or embed URL',
+      launchUrlPlaceholder: 'https://quizlet.com/... or https://quizlet.com/.../embed',
+      helpUrl: 'https://help.quizlet.com/hc/en-us/articles/360032935851-Embedding-sets',
+      helpLabel: 'Quizlet embed docs',
+    },
   },
   {
     id: 'nearpod',
@@ -276,6 +295,13 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     integrationMode: 'partner-embed',
     isApproved: true,
     tags: ['collaboration', 'brainstorming', 'discussion', 'projects'],
+    integrationConfig: {
+      configurableLaunchUrl: true,
+      launchUrlLabel: 'Public Padlet URL',
+      launchUrlPlaceholder: 'https://padlet.com/.../public-board',
+      helpUrl: 'https://padlet.help/l/en/article/3933026qoo-public-api',
+      helpLabel: 'Padlet integration docs',
+    },
   },
   {
     id: 'edpuzzle',

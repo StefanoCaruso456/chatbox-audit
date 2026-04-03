@@ -7,7 +7,7 @@ import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
-import type { ApprovedApp } from '@/types/apps'
+import { appIntegrationModeMeta, type ApprovedApp } from '@/types/apps'
 import AppIcon from './AppIcon'
 import { buildSidebarEmbeddedAppRuntime, resolveAppPanelLaunchUrl } from './app-panel-runtime'
 
@@ -26,6 +26,33 @@ const APP_LOAD_TIMEOUT_MS = 7000
 type AppLoadState = 'loading' | 'ready' | 'blocked'
 
 function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>['t']) {
+  if (app.integrationMode === 'browser-session') {
+    return {
+      title: t('{{name}} needs a governed browser session', { name: app.name }),
+      description: t(
+        'This vendor usually blocks standard iframe embedding. Keep it inside ChatBridge by launching it through a browser-session style flow instead of a raw vendor iframe.'
+      ),
+    }
+  }
+
+  if (app.integrationMode === 'api-adapter') {
+    return {
+      title: t('{{name}} uses an adapter workspace', { name: app.name }),
+      description: t(
+        'This app is intended to run through a ChatBridge-owned adapter UI backed by APIs and school configuration, not by loading the vendor homepage directly.'
+      ),
+    }
+  }
+
+  if (app.integrationMode === 'native-replacement') {
+    return {
+      title: t('{{name}} will use a ChatBridge-native experience', { name: app.name }),
+      description: t(
+        'This learning workflow is better represented by a ChatBridge-built experience than by embedding the vendor product directly.'
+      ),
+    }
+  }
+
   if (app.embedStatus === 'needs-district-url') {
     return {
       title: t('This app needs a school-specific launch link'),
@@ -52,50 +79,26 @@ function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTransl
   }
 }
 
-function AppPanelHeader({
-  app,
-  onClose,
-  onReload,
-  onSwitchApps,
-}: {
-  app: ApprovedApp
-  onClose: () => void
-  onReload: () => void
-  onSwitchApps: () => void
-}) {
+function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
   const { t } = useTranslation()
 
   return (
     <Flex justify="space-between" align="center" gap="sm">
       <Flex align="center" gap="sm" className="min-w-0">
-        <AppIcon app={app} w={32} h={32} radius="lg" />
+        <AppIcon app={app} w={38} h={38} radius="lg" />
         <Stack gap={0} className="min-w-0">
-          <Title order={4} fz="sm" className="truncate">
+          <Title order={4} fz="md" className="truncate">
             {app.name}
           </Title>
-          <Text size="10px" c="chatbox-secondary" className="truncate leading-none">
-            {app.experience === 'tutormeai-runtime' ? t('TutorMeAI app') : t('Embedded app')}
+          <Text size="xs" c="chatbox-secondary" className="truncate">
+            {app.experience === 'tutormeai-runtime' ? t('TutorMeAI runtime') : appIntegrationModeMeta[app.integrationMode].label}
           </Text>
         </Stack>
       </Flex>
 
-      <Group gap={6} wrap="nowrap" className="shrink-0">
-        <Button
-          size="xs"
-          variant="light"
-          color="chatbox-brand"
-          leftSection={<IconLayoutGrid size={14} />}
-          onClick={onSwitchApps}
-        >
-          {t('Switch apps')}
-        </Button>
-        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onReload} aria-label={t('Reload app')}>
-          <IconReload size={16} />
-        </ActionIcon>
-        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
-          <IconX size={16} />
-        </ActionIcon>
-      </Group>
+      <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
+        <IconX size={18} />
+      </ActionIcon>
     </Flex>
   )
 }
@@ -244,8 +247,22 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }
 
   return (
-    <Stack gap="sm" className="h-full min-h-0 p-3">
-      <AppPanelHeader app={app} onClose={closeApprovedApp} onReload={handleReload} onSwitchApps={handleSwitchApps} />
+    <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
+      <AppPanelHeader app={app} onClose={closeApprovedApp} />
+
+      <Group gap="xs" wrap="wrap">
+        <Button
+          variant="light"
+          color="chatbox-brand"
+          leftSection={<IconLayoutGrid size={16} />}
+          onClick={handleSwitchApps}
+        >
+          {t('Switch apps')}
+        </Button>
+        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
+          <IconReload size={17} />
+        </ActionIcon>
+      </Group>
 
       {usesEmbeddedRuntime && embeddedRuntime ? (
         <Box className="min-h-0 flex-1 overflow-hidden">
