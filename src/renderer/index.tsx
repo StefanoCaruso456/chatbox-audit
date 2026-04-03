@@ -153,16 +153,19 @@ const shouldFastBootEmbeddedApps =
 
 let hasRenderedAppRoot = false
 
-async function renderAppRoot() {
+async function hydrateAppStores() {
+  const [settings] = await Promise.all([initSettingsStore(), initLastUsedModelStore()])
+  i18n.changeLanguage(settings.language)
+  return settings
+}
+
+async function renderAppRoot(options?: { deferStoreHydration?: boolean }) {
   if (hasRenderedAppRoot) {
     return
   }
 
   hasRenderedAppRoot = true
   clearTimeout(tid)
-
-  const [settings] = await Promise.all([initSettingsStore(), initLastUsedModelStore()])
-  i18n.changeLanguage(settings.language)
 
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <StrictMode>
@@ -176,6 +179,16 @@ async function renderAppRoot() {
 
   finishSplashScreen()
   persistBrowserStorage()
+
+  if (options?.deferStoreHydration) {
+    void hydrateAppStores().catch((e) => {
+      Sentry.captureException(e)
+      log.error('hydrateAppStores error', e)
+    })
+    return
+  }
+
+  await hydrateAppStores()
 }
 
 const initializationPromise = initializeApp().catch((e) => {
@@ -185,7 +198,7 @@ const initializationPromise = initializeApp().catch((e) => {
 })
 
 if (shouldFastBootEmbeddedApps) {
-  void renderAppRoot()
+  void renderAppRoot({ deferStoreHydration: true })
   void initializationPromise
 } else {
   void initializationPromise.finally(async () => {
