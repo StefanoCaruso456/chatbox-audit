@@ -42,6 +42,8 @@ import { ThemeProvider } from '@mui/material/styles'
 import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
 import { useSetAtom } from 'jotai'
 import { useEffect, useMemo, useRef } from 'react'
+import AppsModal from '@/components/apps/AppsModal'
+import { isEmbeddedAppPath } from '@/lib/root-layout-utils'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
 import { getOS } from '@/packages/navigator'
 import * as remote from '@/packages/remote'
@@ -62,12 +64,16 @@ function Root() {
   const spellCheck = useSettingsStore((state) => state.spellCheck)
   const language = useLanguage()
   const initialized = useRef(false)
+  const isEmbeddedAppRoute = isEmbeddedAppPath(location.pathname)
 
   const setOpenAboutDialog = useUIStore((s) => s.setOpenAboutDialog)
 
   const setRemoteConfig = useSetAtom(atoms.remoteConfigAtom)
 
   useEffect(() => {
+    if (isEmbeddedAppRoute) {
+      return
+    }
     if (initialized.current) {
       return
     }
@@ -96,7 +102,7 @@ function Root() {
     }, 2000)
 
     return () => clearTimeout(tid)
-  }, [setOpenAboutDialog, setRemoteConfig, location.pathname])
+  }, [isEmbeddedAppRoute, setOpenAboutDialog, setRemoteConfig, location.pathname])
 
   const showSidebar = useUIStore((s) => s.showSidebar)
   const sidebarWidth = useSidebarWidth()
@@ -115,6 +121,9 @@ function Root() {
   }, [_theme])
 
   useEffect(() => {
+    if (isEmbeddedAppRoute) {
+      return
+    }
     ;(() => {
       const { startupPage } = settingsStore.getState()
       const sid = JSON.parse(localStorage.getItem('_currentSessionIdCachedAtom') || '""') as string
@@ -125,7 +134,7 @@ function Root() {
         })
       }
     })()
-  }, [])
+  }, [isEmbeddedAppRoute])
 
   useEffect(() => {
     if (platform.capabilities.navigationEvents && platform.onNavigate) {
@@ -157,12 +166,12 @@ function Root() {
     <Box className="box-border App" spellCheck={spellCheck} dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {platform.type === 'desktop' && (getOS() === 'Windows' || getOS() === 'Linux') && <ExitFullscreenButton />}
       <Grid container className="h-full">
-        <Sidebar />
+        {!isEmbeddedAppRoute && <Sidebar />}
         <Box
           className="h-full w-full"
           sx={{
             flexGrow: 1,
-            ...(showSidebar
+            ...(!isEmbeddedAppRoute && showSidebar
               ? language === 'ar'
                 ? { paddingRight: { sm: `${sidebarWidth}px` } }
                 : { paddingLeft: { sm: `${sidebarWidth}px` } }
@@ -198,6 +207,7 @@ function Root() {
       {/* <ReportContentDialog /> */}
       {/* 搜索 */}
       <SearchDialog />
+      <AppsModal />
       {/* 没有配置模型时的欢迎弹窗 */}
       {/* <WelcomeDialog /> */}
       <Toasts /> {/* mui */}
