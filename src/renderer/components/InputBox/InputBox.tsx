@@ -32,6 +32,7 @@ import {
   IconFolder,
   IconHammer,
   IconLink,
+  IconMicrophone,
   IconPhoto,
   IconPlayerStopFilled,
   IconPlus,
@@ -105,6 +106,15 @@ import {
   storeLinkPromise,
 } from './preprocessState'
 import TokenCountMenu from './TokenCountMenu'
+import {
+  appendVoiceTranscript,
+  getSpeechRecognitionConstructor,
+  isVoiceInputSupported,
+  readSpeechRecognitionTranscript,
+  resolveVoiceInputLanguage,
+  type SpeechRecognitionLike,
+  type VoiceInputWindow,
+} from './voice-input'
 
 export type InputBoxPayload = {
   constructedMessage: Message
@@ -155,6 +165,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const isSmallScreen = useIsSmallScreen()
     const toolbarIconSize = isSmallScreen ? 22 : 18
     const { height: viewportHeight } = useViewportSize()
+    const language = useSettingsStore((state) => state.language)
     const pasteLongTextAsAFile = useSettingsStore((state) => state.pasteLongTextAsAFile)
     const shortcuts = useSettingsStore((state) => state.shortcuts)
     const widthFull = useUIStore((s) => s.widthFull) || fullWidth
@@ -468,6 +479,14 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     }, [showRollbackThreadButton])
 
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
+    const voiceRecognitionRef = useRef<SpeechRecognitionLike | null>(null)
+    const voiceBaseTextRef = useRef('')
+    const voiceFinalTranscriptRef = useRef('')
+    const [isVoiceInputListening, setIsVoiceInputListening] = useState(false)
+    const voiceInputSupported = useMemo(
+      () => (typeof window !== 'undefined' ? isVoiceInputSupported(window as VoiceInputWindow) : false),
+      []
+    )
 
     useImperativeHandle(
       ref,
@@ -482,10 +501,100 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       [setMessageInput]
     )
 
+    const stopVoiceInput = useCallback(() => {
+      voiceRecognitionRef.current?.stop()
+    }, [])
+
+    useEffect(() => {
+      return () => {
+        voiceRecognitionRef.current?.abort()
+        voiceRecognitionRef.current = null
+      }
+    }, [])
+
+    const getVoiceInputErrorMessage = useCallback(
+      (error: string) => {
+        switch (error) {
+          case 'audio-capture':
+            return t('No microphone was found on this device.')
+          case 'language-not-supported':
+            return t('Voice input language is not supported.')
+          case 'network':
+            return t('Voice input failed. Please check your connection and try again.')
+          case 'no-speech':
+            return t('No speech was detected. Please try again.')
+          case 'not-allowed':
+          case 'service-not-allowed':
+            return t('Microphone access was denied. Please allow microphone access and try again.')
+          default:
+            return t('Voice input failed. Please try again.')
+        }
+      },
+      [t]
+    )
+
+    const handleVoiceInputToggle = useCallback(() => {
+      if (isVoiceInputListening) {
+        stopVoiceInput()
+        return
+      }
+
+      const recognitionConstructor =
+        typeof window !== 'undefined' ? getSpeechRecognitionConstructor(window as VoiceInputWindow) : null
+      if (!recognitionConstructor) {
+        toastActions.add(t('Voice input is not supported in this browser.'))
+        return
+      }
+
+      try {
+        const recognition = new recognitionConstructor()
+        voiceBaseTextRef.current = messageInput
+        voiceFinalTranscriptRef.current = ''
+        recognition.continuous = true
+        recognition.interimResults = true
+        recognition.lang = resolveVoiceInputLanguage(
+          language,
+          typeof navigator !== 'undefined' ? navigator.language : undefined
+        )
+        recognition.onresult = (event) => {
+          const { finalTranscript, interimTranscript } = readSpeechRecognitionTranscript(event)
+          if (finalTranscript) {
+            voiceFinalTranscriptRef.current = appendVoiceTranscript(voiceFinalTranscriptRef.current, finalTranscript)
+          }
+          const nextTranscript = appendVoiceTranscript(voiceFinalTranscriptRef.current, interimTranscript)
+          setMessageInput(appendVoiceTranscript(voiceBaseTextRef.current, nextTranscript))
+        }
+        recognition.onerror = (event) => {
+          if (event.error !== 'aborted') {
+            toastActions.add(getVoiceInputErrorMessage(event.error))
+          }
+          setIsVoiceInputListening(false)
+          voiceRecognitionRef.current = null
+        }
+        recognition.onend = () => {
+          setIsVoiceInputListening(false)
+          voiceRecognitionRef.current = null
+          dom.focusMessageInput()
+        }
+        recognition.start()
+        voiceRecognitionRef.current = recognition
+        setIsVoiceInputListening(true)
+        dom.focusMessageInput()
+      } catch (error) {
+        console.error('Failed to start voice input', error)
+        toastActions.add(t('Voice input failed. Please try again.'))
+        setIsVoiceInputListening(false)
+        voiceRecognitionRef.current = null
+      }
+    }, [getVoiceInputErrorMessage, isVoiceInputListening, language, messageInput, setMessageInput, stopVoiceInput, t])
+
     const { addInputBoxHistory, getPreviousHistoryInput, getNextHistoryInput, resetHistoryIndex } = useInputBoxHistory()
 
     const closeSelectModelErrorTipCb = useRef<NodeJS.Timeout>()
     const handleSubmit = async (needGenerating = true) => {
+      if (isVoiceInputListening) {
+        stopVoiceInput()
+      }
       if (disableSubmit || generating || isSubmitting || isPreprocessing) {
         return
       }
@@ -1197,6 +1306,39 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     </UnstyledButton>
                   </Tooltip>
                 )}
+
+                <Tooltip
+                  label={
+                    voiceInputSupported
+                      ? isVoiceInputListening
+                        ? t('Stop Voice Input')
+                        : t('Voice Input')
+                      : t('Voice input is not supported in this browser.')
+                  }
+                  position="top"
+                  withArrow
+                >
+                  <UnstyledButton
+                    onClick={handleVoiceInputToggle}
+                    disabled={!voiceInputSupported}
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded-lg transition-colors disabled:opacity-50',
+                      isVoiceInputListening
+                        ? 'bg-[var(--chatbox-background-tertiary)]'
+                        : 'hover:bg-[var(--chatbox-background-tertiary)]'
+                    )}
+                  >
+                    <IconMicrophone
+                      size={toolbarIconSize}
+                      strokeWidth={1.8}
+                      className={cn(
+                        isVoiceInputListening
+                          ? 'text-red-500 animate-pulse'
+                          : 'text-[var(--chatbox-tint-secondary)]'
+                      )}
+                    />
+                  </UnstyledButton>
+                </Tooltip>
 
                 {/* Mobile: Settings menu */}
                 {isSmallScreen && (
