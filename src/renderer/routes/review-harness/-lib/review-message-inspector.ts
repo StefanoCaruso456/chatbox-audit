@@ -1,5 +1,5 @@
-import { type EmbeddedAppMessage, validateEmbeddedAppMessage } from '../../../shared/contracts/v1/runtime-messages'
-import { normalizeOrigin, OriginSchema } from '../../../shared/contracts/v1/shared'
+import { type EmbeddedAppMessage, validateEmbeddedAppMessage } from '../../../../shared/contracts/v1/runtime-messages'
+import { normalizeOrigin, OriginSchema } from '../../../../shared/contracts/v1/shared'
 
 export type ReviewMessageDecision = 'accept' | 'flag' | 'reject'
 

@@ -4,7 +4,7 @@ import {
   exampleAppStateUpdateMessage,
   exampleHostBootstrapMessage,
 } from '../../../shared/contracts/v1/runtime-messages'
-import { inspectReviewMessage } from './review-message-inspector'
+import { inspectReviewMessage } from './-lib/review-message-inspector'
 
 const context = {
   expectedOrigin: 'https://apps.chatbridge.dev',

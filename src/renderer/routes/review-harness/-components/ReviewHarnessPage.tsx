@@ -2,7 +2,7 @@ import { Alert, Badge, Code, Divider, Group, Paper, ScrollArea, SimpleGrid, Stac
 import { IconAlertTriangle, IconShieldSearch } from '@tabler/icons-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
-import type { ReviewHarnessConfig } from '../review-harness'
+import type { ReviewHarnessConfig } from '../-lib/review-harness'
 import {
   appendCompletionEvent,
   appendHeartbeatTimeoutEvent,
@@ -16,8 +16,8 @@ import {
   type ReviewHarnessLog,
   type ReviewHarnessReviewSeverity,
   summarizeReviewHarnessLog,
-} from '../review-harness-log'
-import { inspectReviewMessage, type ReviewMessageInspectionResult } from '../review-message-inspector'
+} from '../-lib/review-harness-log'
+import { inspectReviewMessage, type ReviewMessageInspectionResult } from '../-lib/review-message-inspector'
 
 type LoggedRawMessagePayload = {
   inspection: ReviewMessageInspectionResult
