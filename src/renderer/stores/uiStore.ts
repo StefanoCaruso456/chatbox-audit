@@ -44,6 +44,7 @@ export const uiStore = createStore(
         widthFull: false, // Stored UI preference
         showCopilotsInNewSession: false,
         sidebarWidth: null as number | null, // Custom sidebar width, null means use default
+        approvedAppPanelWidth: null as number | null, // Custom approved app panel width, null means use default
         pendingConversationModeHintId: null as number | null,
         approvedAppsModalOpen: false,
         activeApprovedAppId: null as string | null,
@@ -202,6 +203,10 @@ export const uiStore = createStore(
           set({ sidebarWidth })
         },
 
+        setApprovedAppPanelWidth: (approvedAppPanelWidth: number | null) => {
+          set({ approvedAppPanelWidth })
+        },
+
         triggerConversationModeHint: () => {
           set({ pendingConversationModeHintId: Date.now() })
         },
@@ -235,6 +240,7 @@ export const uiStore = createStore(
         widthFull: state.widthFull,
         showCopilotsInNewSession: state.showCopilotsInNewSession,
         sidebarWidth: state.sidebarWidth,
+        approvedAppPanelWidth: state.approvedAppPanelWidth,
         sessionWebBrowsingMap: state.sessionWebBrowsingMap,
       }),
       storage: safeStorage,
