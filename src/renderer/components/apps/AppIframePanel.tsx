@@ -1,6 +1,6 @@
 import { ActionIcon, Badge, Box, Button, Divider, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
-import { IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
-import { useEffect, useMemo, useState } from 'react'
+import { IconExternalLink, IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
 import { getApprovedAppById } from '@/data/approvedApps'
@@ -22,6 +22,37 @@ const iframeSandbox = [
   'allow-same-origin',
   'allow-scripts',
 ].join(' ')
+
+const APP_LOAD_TIMEOUT_MS = 7000
+
+type AppLoadState = 'loading' | 'ready' | 'blocked'
+
+function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>['t']) {
+  if (app.embedStatus === 'needs-district-url') {
+    return {
+      title: t('This app needs a school-specific launch link'),
+      description: t(
+        'Canvas and similar district-managed tools often need a verified school launch URL before they can open beside chat. You can open it in a new tab for now or switch to a different app.'
+      ),
+    }
+  }
+
+  if (app.experience === 'tutormeai-runtime') {
+    return {
+      title: t('Need to open {{name}} outside the panel?', { name: app.name }),
+      description: t(
+        'This TutorMeAI runtime is still booting. You can reload the panel, switch tools, or open it in a new tab while the embedded session finishes loading.'
+      ),
+    }
+  }
+
+  return {
+    title: t('Need to open {{name}} outside the panel?', { name: app.name }),
+    description: t(
+      'Some approved tools block iframe embedding or take longer to initialize. You can reload the panel, switch tools, or open this app in a new tab right now.'
+    ),
+  }
+}
 
 function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
   const { t } = useTranslation()
@@ -106,44 +137,59 @@ function AppTrustNotice({ app }: { app: ApprovedApp }) {
 
 function AppLoadingFallback({
   app,
+  onOpenVendor,
   onRetry,
   onSwitchApps,
+  showRetryButton,
 }: {
   app: ApprovedApp
+  onOpenVendor: () => void
   onRetry: () => void
   onSwitchApps: () => void
+  showRetryButton: boolean
 }) {
   const { t } = useTranslation()
-  const fallbackTitle = app.loadingFallback?.title ?? t('Still loading?')
-  const fallbackBody =
-    app.loadingFallback?.body ??
-    (app.experience === 'tutormeai-runtime'
-      ? t(
-          'This TutorMeAI runtime is still booting inside the sidebar. Retry the session or switch to another app while we keep the governed launch flow intact.'
-        )
-      : t(
-          'This library card is still a governed preview. Retry the preview route or switch to a fully integrated TutorMeAI runtime app.'
-        ))
+  const defaultCopy = getDefaultFallbackCopy(app, t)
+  const fallbackTitle = app.loadingFallback?.title ?? defaultCopy.title
+  const fallbackBody = app.loadingFallback?.body ?? defaultCopy.description
+  const vendorActionLabel = app.loadingFallback?.actionLabel ?? t('Open in new tab')
 
   return (
-    <div className="absolute inset-x-4 bottom-4 rounded-2xl border border-white/12 bg-slate-950/88 p-3 shadow-xl">
-      <Stack gap={6}>
-        <Text size="sm" fw={600} c="white">
+    <div
+      data-testid="app-iframe-panel-fallback"
+      className="absolute inset-0 flex items-end justify-center bg-slate-950/52 p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
+    >
+      <Stack
+        gap="sm"
+        className="w-full max-w-sm rounded-[1.25rem] border border-white/12 bg-slate-950/92 p-4 shadow-[0_24px_60px_rgba(15,23,42,0.4)]"
+      >
+        <Text size="sm" fw={700} c="white">
           {fallbackTitle}
         </Text>
-        <Text size="xs" c="rgba(255,255,255,0.72)">
+        <Text size="xs" c="rgba(255,255,255,0.74)">
           {fallbackBody}
         </Text>
-        <Group gap="xs" mt={4}>
+        <Group gap={6} wrap="wrap">
           <Button
             size="xs"
             variant="light"
             color="chatbox-brand"
-            leftSection={<IconReload size={14} />}
-            onClick={onRetry}
+            leftSection={<IconExternalLink size={14} />}
+            onClick={onOpenVendor}
           >
-            {t('Retry')}
+            {vendorActionLabel}
           </Button>
+          {showRetryButton ? (
+            <Button
+              size="xs"
+              variant="default"
+              color="gray"
+              leftSection={<IconReload size={14} />}
+              onClick={onRetry}
+            >
+              {t('Reload panel')}
+            </Button>
+          ) : null}
           <Button
             size="xs"
             variant="subtle"
@@ -164,40 +210,99 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
   const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
 
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const loadTimeoutRef = useRef<number | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [showLoadNotice, setShowLoadNotice] = useState(false)
-  const resolvedLaunchUrl = useMemo(() => (app ? resolveAppPanelLaunchUrl(app.launchUrl) : ''), [app])
+  const [loadState, setLoadState] = useState<AppLoadState>(
+    app.embedStatus === 'needs-district-url' ? 'blocked' : 'loading'
+  )
+
+  const iframeInstanceKey = `${app.id}:${reloadNonce}`
+  const resolvedLaunchUrl = useMemo(() => resolveAppPanelLaunchUrl(app.launchUrl), [app.launchUrl])
+  const resolvedVendorUrl = useMemo(
+    () => resolveAppPanelLaunchUrl(app.vendorUrl ?? app.launchUrl),
+    [app.launchUrl, app.vendorUrl]
+  )
   const embeddedRuntime = useMemo(
     () => buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
     [app, reloadNonce, resolvedLaunchUrl]
   )
   const usesEmbeddedRuntime = app.experience === 'tutormeai-runtime' && Boolean(embeddedRuntime)
 
-  useEffect(() => {
-    if (!app || usesEmbeddedRuntime) {
+  const clearLoadTimeout = useCallback(() => {
+    if (loadTimeoutRef.current !== null) {
+      window.clearTimeout(loadTimeoutRef.current)
+      loadTimeoutRef.current = null
+    }
+  }, [])
+
+  const startLoadingAttempt = useCallback(() => {
+    clearLoadTimeout()
+
+    if (usesEmbeddedRuntime) {
+      setLoadState('ready')
       return
     }
 
-    setIsLoading(true)
-    setShowLoadNotice(false)
-    const timeoutId = window.setTimeout(() => {
-      setShowLoadNotice(true)
-    }, 7000)
+    if (app.embedStatus === 'needs-district-url') {
+      setLoadState('blocked')
+      return
+    }
+
+    setLoadState('loading')
+    loadTimeoutRef.current = window.setTimeout(() => {
+      setLoadState((currentState) => (currentState === 'loading' ? 'blocked' : currentState))
+      loadTimeoutRef.current = null
+    }, APP_LOAD_TIMEOUT_MS)
+  }, [app.embedStatus, clearLoadTimeout, usesEmbeddedRuntime])
+
+  useEffect(() => {
+    startLoadingAttempt()
 
     return () => {
-      window.clearTimeout(timeoutId)
+      clearLoadTimeout()
     }
-  }, [app, usesEmbeddedRuntime])
+  }, [startLoadingAttempt, clearLoadTimeout])
 
   const handleReload = () => {
-    setIsLoading(true)
-    setShowLoadNotice(false)
     setReloadNonce((value) => value + 1)
+    startLoadingAttempt()
+  }
+
+  const handleOpenVendor = () => {
+    window.open(resolvedVendorUrl, '_blank', 'noopener,noreferrer')
   }
 
   const handleSwitchApps = () => {
     setApprovedAppsModalOpen(true)
+  }
+
+  const handleIframeLoad = () => {
+    clearLoadTimeout()
+
+    try {
+      const frameHref = iframeRef.current?.contentWindow?.location?.href
+      const frameDocument = iframeRef.current?.contentDocument
+      const bodyText = frameDocument?.body?.textContent?.trim() ?? ''
+
+      if (
+        !frameHref ||
+        frameHref === 'about:blank' ||
+        (!frameDocument?.body?.children.length && bodyText.length === 0)
+      ) {
+        setLoadState('blocked')
+        return
+      }
+    } catch {
+      // Cross-origin vendor frames are expected. If we cannot inspect the frame, assume it loaded.
+    }
+
+    setLoadState('ready')
+  }
+
+  const handleIframeError = () => {
+    clearLoadTimeout()
+    setLoadState('blocked')
   }
 
   return (
@@ -206,7 +311,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       <AppPanelBadges app={app} />
       <AppTrustNotice app={app} />
 
-      <Group gap="xs">
+      <Group gap="xs" wrap="wrap">
         <Button
           variant="light"
           color="chatbox-brand"
@@ -215,7 +320,20 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         >
           {t('Switch apps')}
         </Button>
-        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
+        <Button
+          variant="subtle"
+          color="chatbox-secondary"
+          leftSection={<IconExternalLink size={16} />}
+          onClick={handleOpenVendor}
+        >
+          {t('Open in new tab')}
+        </Button>
+        <ActionIcon
+          variant="subtle"
+          color="chatbox-secondary"
+          onClick={handleReload}
+          aria-label={t('Reload app')}
+        >
           <IconReload size={17} />
         </ActionIcon>
       </Group>
@@ -225,6 +343,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       {usesEmbeddedRuntime && embeddedRuntime ? (
         <Box className="min-h-0 flex-1 overflow-hidden">
           <EmbeddedAppHost
+            key={iframeInstanceKey}
             appId={app.runtimeBridge?.appId ?? app.id}
             appName={app.name}
             appSlug={app.id}
@@ -243,31 +362,44 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         </Box>
       ) : (
         <Box className="relative min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-chatbox-border-primary/70 bg-[#0f172a]">
-          <iframe
-            key={`${app.id}:${reloadNonce}`}
-            src={resolvedLaunchUrl}
-            title={`${app.name} app panel`}
-            className="h-full w-full border-0 bg-white"
-            sandbox={iframeSandbox}
-            allow="clipboard-read; clipboard-write; fullscreen"
-            referrerPolicy="strict-origin-when-cross-origin"
-            onLoad={() => {
-              setIsLoading(false)
-              setShowLoadNotice(false)
-            }}
-          />
+          {app.embedStatus !== 'needs-district-url' ? (
+            <iframe
+              key={iframeInstanceKey}
+              ref={iframeRef}
+              src={resolvedLaunchUrl}
+              title={`${app.name} app panel`}
+              className={cn(
+                'h-full w-full border-0 bg-white transition-opacity duration-200',
+                loadState === 'blocked' ? 'opacity-0' : 'opacity-100'
+              )}
+              sandbox={iframeSandbox}
+              allow="clipboard-read; clipboard-write; fullscreen"
+              referrerPolicy="strict-origin-when-cross-origin"
+              onLoad={handleIframeLoad}
+              onError={handleIframeError}
+            />
+          ) : null}
 
-          {isLoading ? (
+          {loadState === 'loading' ? (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/65 backdrop-blur-sm">
               <Loader color="var(--chatbox-tint-brand)" />
               <Text size="sm" c="white">
                 {t('Loading {{name}}...', { name: app.name })}
               </Text>
+              <Text size="xs" c="rgba(255,255,255,0.68)">
+                {t('This can take a moment while the tool initializes in the panel.')}
+              </Text>
             </div>
           ) : null}
 
-          {showLoadNotice ? (
-            <AppLoadingFallback app={app} onRetry={handleReload} onSwitchApps={handleSwitchApps} />
+          {loadState === 'blocked' ? (
+            <AppLoadingFallback
+              app={app}
+              onOpenVendor={handleOpenVendor}
+              onRetry={handleReload}
+              onSwitchApps={handleSwitchApps}
+              showRetryButton={app.embedStatus !== 'needs-district-url'}
+            />
           ) : null}
         </Box>
       )}

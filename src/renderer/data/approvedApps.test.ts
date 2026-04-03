@@ -39,10 +39,12 @@ describe('approvedApps', () => {
   it('preserves Canvas-specific login guidance for district-managed access', () => {
     expect(getApprovedAppById('canvas-student')).toMatchObject({
       experience: 'approved-library',
+      embedStatus: 'needs-district-url',
       launchUrl: '/embedded-apps/catalog/canvas-student',
       vendorUrl: 'https://www.instructure.com/canvas/login',
       loadingFallback: {
         title: 'This library card is not a live TutorMeAI runtime yet',
+        actionLabel: 'Open Canvas login',
       },
     })
   })

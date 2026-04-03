@@ -40,12 +40,14 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     gradeRanges: ['6-8', '9-12'],
     launchUrl: 'https://www.instructure.com/canvas',
     launchMode: 'iframe',
+    embedStatus: 'needs-district-url',
     isApproved: true,
     tags: ['lms', 'secondary', 'assignments', 'course-management'],
     vendorUrl: 'https://www.instructure.com/canvas/login',
     loadingFallback: {
       title: 'This library card is not a live TutorMeAI runtime yet',
       body: 'Canvas and similar district-managed tools need a school-specific launch integration before they can run inside the governed TutorMeAI sidebar runtime.',
+      actionLabel: 'Open Canvas login',
     },
   },
   {

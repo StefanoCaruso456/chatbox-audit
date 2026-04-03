@@ -13,6 +13,7 @@ export type AppCategory =
   | 'Creativity, Coding & Projects'
 
 export type LaunchMode = 'iframe' | 'external'
+export type AppEmbedStatus = 'verified' | 'needs-district-url'
 export type AppExperience = 'approved-library' | 'tutormeai-runtime'
 
 export interface ApprovedAppRuntimeBridge {
@@ -38,6 +39,7 @@ export interface ApprovedApp {
   gradeRanges: GradeRange[]
   launchUrl: string
   launchMode: LaunchMode
+  embedStatus?: AppEmbedStatus
   isApproved: boolean
   tags: string[]
   vendorUrl?: string
