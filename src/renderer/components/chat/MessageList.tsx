@@ -8,13 +8,12 @@ import {
   IconArrowUp,
   IconChevronLeft,
   IconChevronRight,
-  IconListTree,
   IconMessagePlus,
   IconPencil,
   IconSwitch3,
   IconTrash,
 } from '@tabler/icons-react'
-import { useAtomValue, useSetAtom } from 'jotai'
+import { useAtomValue } from 'jotai'
 import {
   type FC,
   forwardRef,
@@ -33,7 +32,6 @@ import { platformTypeAtom } from '@/hooks/useNeedRoomForWinControls'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { buildEmbeddedAppConversationIndicators } from '@/packages/tutormeai-apps/conversation-state'
-import * as atoms from '@/stores/atoms'
 import {
   deleteFork,
   expandFork,
@@ -473,11 +471,6 @@ type ThreadLabelProps = {
 }
 const ThreadLabel: FC<ThreadLabelProps> = memo(({ thread, sessionId }) => {
   const { t } = useTranslation()
-  const setShowHistoryDrawer = useSetAtom(atoms.showThreadHistoryDrawerAtom)
-
-  const handleOpenHistoryDrawer = useCallback(() => {
-    setShowHistoryDrawer(thread.id || true)
-  }, [setShowHistoryDrawer, thread.id])
 
   const handleEditThreadName = useCallback(async () => {
     if (!thread.id) return
@@ -510,11 +503,6 @@ const ThreadLabel: FC<ThreadLabelProps> = memo(({ thread, sessionId }) => {
             onClick: handleEditThreadName,
           },
           {
-            text: t('Show in Thread List'),
-            icon: IconListTree,
-            onClick: handleOpenHistoryDrawer,
-          },
-          {
             text: t('Continue this thread'),
             icon: IconSwitch3,
             onClick: handleContinueThread,
@@ -533,11 +521,7 @@ const ThreadLabel: FC<ThreadLabelProps> = memo(({ thread, sessionId }) => {
           },
         ]}
       >
-        <span
-          className="cursor-pointer font-bold border-solid border rounded-xxl py-2 px-3 border-slate-400/25"
-          onDoubleClick={handleOpenHistoryDrawer}
-          // onClick={onClick}
-        >
+        <span className="cursor-pointer font-bold border-solid border rounded-xxl py-2 px-3 border-slate-400/25">
           <span className="pr-1 opacity-60">#</span>
           <span className="truncate inline-block align-bottom max-w-[calc(50%-4rem)] md:max-w-[calc(30%-4rem)]">
             {thread.name || t('New Thread')}

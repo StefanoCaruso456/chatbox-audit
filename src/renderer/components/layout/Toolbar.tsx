@@ -1,30 +1,20 @@
 import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Button, Flex } from '@mantine/core'
-import {
-  IconClearAll,
-  IconCode,
-  IconDeviceFloppy,
-  IconDots,
-  IconHistory,
-  IconSearch,
-  IconTrash,
-} from '@tabler/icons-react'
-import { useSetAtom } from 'jotai'
+import { IconClearAll, IconCode, IconDeviceFloppy, IconDots, IconSearch, IconTrash } from '@tabler/icons-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useIsLargeScreen, useIsSmallScreen } from '@/hooks/useScreenChange'
 import platform from '@/platform'
 import { router } from '@/router'
-import * as atoms from '@/stores/atoms'
 import { deleteSession, getSession } from '@/stores/chatStore'
 import { clear as clearSession } from '@/stores/sessionActions'
 import { useUIStore } from '@/stores/uiStore'
 import ActionMenu from '../ActionMenu'
 import AppsTrigger from '../apps/AppsTrigger'
+import { ScalableIcon } from '../common/ScalableIcon'
 import Broom from '../icons/Broom'
 import LayoutExpand from '../icons/LayoutExpand'
 import LayoutShrink from '../icons/LayoutShrink'
-import { ScalableIcon } from '../common/ScalableIcon'
 import UpdateAvailableButton from '../UpdateAvailableButton'
 
 /**
@@ -38,7 +28,6 @@ export default function Toolbar({ sessionId }: { sessionId: string }) {
 
   const [showUpdateNotification, setShowUpdateNotification] = useState(false)
   const setOpenSearchDialog = useUIStore((s) => s.setOpenSearchDialog)
-  const setThreadHistoryDrawerOpen = useSetAtom(atoms.showThreadHistoryDrawerAtom)
   const widthFull = useUIStore((s) => s.widthFull)
   const setWidthFull = useUIStore((s) => s.setWidthFull)
 
@@ -104,28 +93,6 @@ export default function Toolbar({ sessionId }: { sessionId: string }) {
         </ActionIcon>
       )}
 
-      <ActionIcon variant="subtle" size={28} color="chatbox-secondary" onClick={() => setThreadHistoryDrawerOpen(true)}>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="lucide lucide-table-of-contents-icon lucide-table-of-contents"
-        >
-          <path d="M16 5H3" />
-          <path d="M16 12H3" />
-          <path d="M16 19H3" />
-          <path d="M21 5h.01" />
-          <path d="M21 12h.01" />
-          <path d="M21 19h.01" />
-        </svg>
-      </ActionIcon>
-
       <ActionMenu
         position="bottom-end"
         items={[
@@ -180,12 +147,6 @@ export default function Toolbar({ sessionId }: { sessionId: string }) {
       <ActionMenu
         position="bottom-end"
         items={[
-          {
-            text: t('Thread History'),
-            icon: IconHistory,
-            onClick: () => setThreadHistoryDrawerOpen(true),
-          },
-
           {
             text: t('Export Chat'),
             icon: IconDeviceFloppy,
