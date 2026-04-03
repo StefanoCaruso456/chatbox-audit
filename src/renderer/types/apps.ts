@@ -37,6 +37,15 @@ export interface ApprovedAppRuntimeBridge {
   }
 }
 
+export interface ApprovedAppIntegrationConfig {
+  defaultLaunchUrl?: string
+  configurableLaunchUrl?: boolean
+  launchUrlLabel?: string
+  launchUrlPlaceholder?: string
+  helpUrl?: string
+  helpLabel?: string
+}
+
 export interface ApprovedApp {
   id: string
   name: string
@@ -53,6 +62,7 @@ export interface ApprovedApp {
   vendorUrl?: string
   experience?: AppExperience
   runtimeBridge?: ApprovedAppRuntimeBridge
+  integrationConfig?: ApprovedAppIntegrationConfig
   loadingFallback?: {
     title: string
     body: string

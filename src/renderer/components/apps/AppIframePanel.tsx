@@ -7,7 +7,7 @@ import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/stores/uiStore'
-import type { ApprovedApp } from '@/types/apps'
+import { appIntegrationModeMeta, type ApprovedApp } from '@/types/apps'
 import AppIcon from './AppIcon'
 import { buildSidebarEmbeddedAppRuntime, resolveAppPanelLaunchUrl } from './app-panel-runtime'
 
@@ -26,6 +26,33 @@ const APP_LOAD_TIMEOUT_MS = 7000
 type AppLoadState = 'loading' | 'ready' | 'blocked'
 
 function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>['t']) {
+  if (app.integrationMode === 'browser-session') {
+    return {
+      title: t('{{name}} needs a governed browser session', { name: app.name }),
+      description: t(
+        'This vendor usually blocks standard iframe embedding. Keep it inside ChatBridge by launching it through a browser-session style flow instead of a raw vendor iframe.'
+      ),
+    }
+  }
+
+  if (app.integrationMode === 'api-adapter') {
+    return {
+      title: t('{{name}} uses an adapter workspace', { name: app.name }),
+      description: t(
+        'This app is intended to run through a ChatBridge-owned adapter UI backed by APIs and school configuration, not by loading the vendor homepage directly.'
+      ),
+    }
+  }
+
+  if (app.integrationMode === 'native-replacement') {
+    return {
+      title: t('{{name}} will use a ChatBridge-native experience', { name: app.name }),
+      description: t(
+        'This learning workflow is better represented by a ChatBridge-built experience than by embedding the vendor product directly.'
+      ),
+    }
+  }
+
   if (app.embedStatus === 'needs-district-url') {
     return {
       title: t('This app needs a school-specific launch link'),
@@ -64,7 +91,7 @@ function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => voi
             {app.name}
           </Title>
           <Text size="xs" c="chatbox-secondary" className="truncate">
-            {app.experience === 'tutormeai-runtime' ? t('TutorMeAI app') : t('Embedded app')}
+            {app.experience === 'tutormeai-runtime' ? t('TutorMeAI runtime') : appIntegrationModeMeta[app.integrationMode].label}
           </Text>
         </Stack>
       </Flex>
