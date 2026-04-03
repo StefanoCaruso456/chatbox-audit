@@ -180,13 +180,7 @@ function AppLoadingFallback({
             {vendorActionLabel}
           </Button>
           {showRetryButton ? (
-            <Button
-              size="xs"
-              variant="default"
-              color="gray"
-              leftSection={<IconReload size={14} />}
-              onClick={onRetry}
-            >
+            <Button size="xs" variant="default" color="gray" leftSection={<IconReload size={14} />} onClick={onRetry}>
               {t('Reload panel')}
             </Button>
           ) : null}
@@ -328,12 +322,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         >
           {t('Open in new tab')}
         </Button>
-        <ActionIcon
-          variant="subtle"
-          color="chatbox-secondary"
-          onClick={handleReload}
-          aria-label={t('Reload app')}
-        >
+        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
           <IconReload size={17} />
         </ActionIcon>
       </Group>
