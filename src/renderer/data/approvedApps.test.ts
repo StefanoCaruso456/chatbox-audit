@@ -51,6 +51,22 @@ describe('approvedApps', () => {
     })
   })
 
+  it('seeds preview-capable apps with a default launch target', () => {
+    expect(getApprovedAppById('khan-academy')).toMatchObject({
+      integrationMode: 'browser-session',
+      integrationConfig: {
+        defaultLaunchUrl: 'https://www.khanacademy.org/',
+      },
+    })
+
+    expect(getApprovedAppById('desmos')).toMatchObject({
+      integrationMode: 'partner-embed',
+      integrationConfig: {
+        defaultLaunchUrl: 'https://www.desmos.com/calculator',
+      },
+    })
+  })
+
   it('gives every approved library app an integration workspace config', () => {
     const approvedLibraryApps = approvedApps.filter((app) => app.experience === 'approved-library')
 
