@@ -1,6 +1,6 @@
 import { Alert, Badge, Box, Button, Group, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import type { CompletionSignal } from '@shared/contracts/v1'
-import { Chess, type PieceSymbol, type Square } from 'chess.js'
+import { Chess, type Square } from 'chess.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
 
@@ -71,61 +71,26 @@ function buildCompletionSignal(input: {
 function getSquareColor(square: Square) {
   const file = square.charCodeAt(0) - 97
   const rank = Number(square[1]) - 1
-  return (file + rank) % 2 === 0 ? '#F4E3C3' : '#8B5E3C'
+  return (file + rank) % 2 === 0 ? '#f1f5f9' : '#cbd5e1'
 }
 
 const boardSquares = (['8', '7', '6', '5', '4', '3', '2', '1'] as const).flatMap((rank) =>
   (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const).map((file) => `${file}${rank}` as Square)
 )
 
-const chessPieceSymbols: Record<'w' | 'b', Record<PieceSymbol, string>> = {
-  w: {
-    p: '♙',
-    n: '♘',
-    b: '♗',
-    r: '♖',
-    q: '♕',
-    k: '♔',
-  },
-  b: {
-    p: '♟',
-    n: '♞',
-    b: '♝',
-    r: '♜',
-    q: '♛',
-    k: '♚',
-  },
-}
-
-function getPieceSymbol(square: Square, chess: Chess) {
-  const piece = chess.get(square)
-  if (!piece) {
-    return ''
-  }
-
-  return chessPieceSymbols[piece.color][piece.type]
-}
-
-function getPieceTone(square: Square, chess: Chess) {
-  const piece = chess.get(square)
-  if (!piece) {
-    return {
-      color: '#0F172A',
-      shadow: 'none',
-    }
-  }
-
-  if (piece.color === 'w') {
-    return {
-      color: '#F8FAFC',
-      shadow: '0 1px 0 rgba(15, 23, 42, 0.75), 0 0 10px rgba(15, 23, 42, 0.22)',
-    }
-  }
-
-  return {
-    color: '#111827',
-    shadow: '0 1px 0 rgba(255, 255, 255, 0.15)',
-  }
+const pieceGlyphs: Record<string, string> = {
+  wp: '♙',
+  wr: '♖',
+  wn: '♘',
+  wb: '♗',
+  wq: '♕',
+  wk: '♔',
+  bp: '♟',
+  br: '♜',
+  bn: '♞',
+  bb: '♝',
+  bq: '♛',
+  bk: '♚',
 }
 
 export function ChessAppPage() {
@@ -189,7 +154,7 @@ export function ChessAppPage() {
 
   const pieces = useMemo(() => {
     const board = chess.board()
-    const map = new Map<Square, string>()
+    const map = new Map<Square, { label: string; glyph: string; color: 'w' | 'b' }>()
 
     board.forEach((rank, rankIndex) => {
       rank.forEach((piece, fileIndex) => {
@@ -198,7 +163,11 @@ export function ChessAppPage() {
         }
 
         const square = `${String.fromCharCode(97 + fileIndex)}${8 - rankIndex}` as Square
-        map.set(square, `${piece.color === 'w' ? 'White' : 'Black'} ${piece.type.toUpperCase()}`)
+        map.set(square, {
+          label: `${piece.color === 'w' ? 'White' : 'Black'} ${piece.type.toUpperCase()}`,
+          glyph: pieceGlyphs[`${piece.color}${piece.type}`] ?? piece.type.toUpperCase(),
+          color: piece.color,
+        })
       })
     })
 
@@ -287,23 +256,25 @@ export function ChessAppPage() {
 
   return (
     <Box
-      p="sm"
-      h="100%"
+      p="md"
       mih="100vh"
-      bg="linear-gradient(180deg, #111827 0%, #0f172a 55%, #020617 100%)"
-      style={{ overflowY: 'auto' }}
+      c="#e5eefb"
+      style={{
+        background: 'linear-gradient(180deg, #020617 0%, #0f172a 46%, #111827 100%)',
+        overflowX: 'hidden',
+      }}
     >
-      <Stack gap="sm">
-        <Group justify="space-between" align="start">
+      <Stack gap="md">
+        <Group justify="space-between">
           <div>
             <Title order={3} c="white">
               Chess Tutor
             </Title>
-            <Text c="rgba(226,232,240,0.75)" size="sm">
+            <Text c="rgba(226,232,240,0.78)" size="sm">
               Practice or analyze a live chess board without leaving the chat.
             </Text>
           </div>
-          <Badge color={chess.isGameOver() ? 'teal' : 'blue'} variant="light" radius="xl">
+          <Badge color={chess.isGameOver() ? 'teal' : 'blue'} variant="light">
             {chess.isGameOver() ? 'Game Over' : `${formatTurn(chess.turn())} to move`}
           </Badge>
         </Group>
@@ -314,76 +285,93 @@ export function ChessAppPage() {
           </Alert>
         )}
 
-        <Paper withBorder radius="xl" p="xs" shadow="sm" bg="#111827" style={{ borderColor: 'rgba(148,163,184,0.2)' }}>
+        <Paper
+          withBorder
+          radius="xl"
+          p="sm"
+          shadow="sm"
+          style={{
+            background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%)',
+            borderColor: 'rgba(148, 163, 184, 0.22)',
+          }}
+        >
           <Box
             data-testid="chess-board-grid"
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(8, minmax(0, 1fr))',
-              gap: 4,
-              width: '100%',
+              gap: '4px',
               aspectRatio: '1 / 1',
+              width: '100%',
             }}
           >
             {boardSquares.map((square) => {
               const isSelected = selection.from === square
-              const pieceTone = getPieceTone(square, chess)
+              const piece = pieces.get(square)
+              const isLightSquare = getSquareColor(square) === '#f1f5f9'
+
               return (
                 <UnstyledButton
                   key={square}
-                  data-testid={`chess-square-${square}`}
-                  aria-label={`${square.toUpperCase()} ${pieces.get(square) ?? 'empty square'}`}
+                  type="button"
                   onClick={() => handleSquareClick(square)}
+                  aria-label={
+                    piece ? `${piece.label} on ${square.toUpperCase()}` : `Empty square ${square.toUpperCase()}`
+                  }
+                  data-testid={`chess-square-${square}`}
                   style={{
-                    background: isSelected ? '#38BDF8' : getSquareColor(square),
-                    border: isSelected ? '2px solid rgba(224, 242, 254, 0.95)' : '1px solid rgba(15, 23, 42, 0.14)',
-                    borderRadius: 12,
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     width: '100%',
                     aspectRatio: '1 / 1',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    padding: 6,
-                    boxShadow: isSelected ? '0 0 0 1px rgba(14, 165, 233, 0.25)' : 'none',
-                    transition: 'transform 120ms ease, box-shadow 120ms ease',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.08)',
+                    background: isSelected ? '#bfdbfe' : isLightSquare ? '#f8fafc' : '#94a3b8',
+                    boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
+                    color: piece?.color === 'w' ? '#f8fafc' : '#0f172a',
+                    overflow: 'hidden',
                   }}
                 >
                   <Text
+                    component="span"
+                    style={{
+                      fontSize: 'clamp(1.15rem, 3vw, 1.9rem)',
+                      lineHeight: 1,
+                      textShadow: piece?.color === 'w' ? '0 1px 1px rgba(15,23,42,0.55)' : 'none',
+                    }}
+                  >
+                    {piece?.glyph ?? ''}
+                  </Text>
+                  <Text
+                    component="span"
                     size="10px"
                     fw={700}
-                    c={
-                      isSelected
-                        ? '#082F49'
-                        : square.charCodeAt(0) % 2 === 0
-                          ? 'rgba(15,23,42,0.55)'
-                          : 'rgba(248,250,252,0.72)'
-                    }
+                    style={{
+                      position: 'absolute',
+                      right: 6,
+                      bottom: 4,
+                      color: isLightSquare ? 'rgba(15,23,42,0.52)' : 'rgba(248,250,252,0.8)',
+                    }}
                   >
                     {square.toUpperCase()}
                   </Text>
-                  <Text
-                    aria-hidden
-                    fw={700}
-                    style={{
-                      width: '100%',
-                      textAlign: 'center',
-                      fontSize: 'clamp(1.35rem, 4vw, 2rem)',
-                      lineHeight: 1,
-                      color: pieceTone.color,
-                      textShadow: pieceTone.shadow,
-                    }}
-                  >
-                    {getPieceSymbol(square, chess)}
-                  </Text>
-                  <Box h={10} />
                 </UnstyledButton>
               )
             })}
           </Box>
         </Paper>
 
-        <Paper withBorder radius="xl" p="md" bg="rgba(15,23,42,0.92)" style={{ borderColor: 'rgba(148,163,184,0.16)' }}>
+        <Paper
+          withBorder
+          radius="xl"
+          p="md"
+          style={{
+            background: 'rgba(15, 23, 42, 0.64)',
+            borderColor: 'rgba(148, 163, 184, 0.18)',
+          }}
+        >
           <Stack gap="xs">
             <Text fw={600} c="white">
               Board state for the chat
@@ -395,6 +383,7 @@ export function ChessAppPage() {
               <Button onClick={handleShareBoard}>Send board summary to chat</Button>
               <Button
                 variant="default"
+                color="gray"
                 onClick={() => {
                   const nextChess = new Chess()
                   setChess(nextChess)

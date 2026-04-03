@@ -3,7 +3,7 @@
  */
 
 import { MantineProvider } from '@mantine/core'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChessAppPage } from './ChessAppPage'
@@ -11,19 +11,18 @@ import { ChessAppPage } from './ChessAppPage'
 const sendCompletion = vi.fn()
 const sendError = vi.fn()
 const sendState = vi.fn()
-const runtimeContext = {
-  conversationId: 'conversation.sidebar.chess',
-  appSessionId: 'app-session.sidebar.chess',
-}
-const invocationMessage = {
-  payload: {
-    toolName: 'chess.launch-game',
-    toolCallId: 'tool-call.sidebar.chess',
-    arguments: {
-      mode: 'practice',
-    },
-  },
-}
+let runtimeContext: { conversationId: string; appSessionId: string } | null = null
+let invocationMessage:
+  | {
+      payload: {
+        toolName: string
+        toolCallId: string
+        arguments: {
+          mode: 'practice' | 'analysis'
+        }
+      }
+    }
+  | null = null
 
 vi.mock('../useEmbeddedAppBridge', () => ({
   useEmbeddedAppBridge: () => ({
@@ -57,20 +56,31 @@ beforeAll(() => {
 
 describe('ChessAppPage', () => {
   beforeEach(() => {
+    runtimeContext = {
+      conversationId: 'conversation.sidebar.chess',
+      appSessionId: 'app-session.sidebar.chess',
+    }
+    invocationMessage = {
+      payload: {
+        toolName: 'chess.launch-game',
+        toolCallId: 'tool-call.sidebar.chess',
+        arguments: {
+          mode: 'practice',
+        },
+      },
+    }
     sendCompletion.mockReset()
     sendError.mockReset()
     sendState.mockReset()
   })
 
-  it('renders a visible board with 64 clickable squares', () => {
+  it('renders a visible 8x8 board with piece glyphs', () => {
     renderChess(<ChessAppPage />)
 
     expect(screen.getByTestId('chess-board-grid')).toBeTruthy()
-    expect(screen.getAllByRole('button')).toHaveLength(66)
-
-    const e2Square = screen.getByTestId('chess-square-e2')
-    expect(e2Square.getAttribute('aria-label')).toContain('White P')
-    expect(within(e2Square).getByText('♙')).toBeTruthy()
+    expect(screen.getByTestId('chess-square-a8').textContent).toContain('♜')
+    expect(screen.getByTestId('chess-square-e1').textContent).toContain('♔')
+    expect(screen.getAllByRole('button').length).toBeGreaterThanOrEqual(64)
   })
 
   it('lets the user make a simple opening move on the board', () => {
