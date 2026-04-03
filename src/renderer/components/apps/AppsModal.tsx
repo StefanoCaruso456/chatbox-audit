@@ -1,7 +1,7 @@
 import { Badge, Button, Modal, ScrollArea, Stack, Text, Title } from '@mantine/core'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { approvedApps } from '@/data/approvedApps'
+import { APP_MILESTONE_ORDER, approvedApps } from '@/data/approvedApps'
 import { useUIStore } from '@/stores/uiStore'
 import { APP_CATEGORY_OPTIONS, type AppCategory, type GradeRange, gradeRangeMeta, isMultiLevelApp } from '@/types/apps'
 import AppCard from './AppCard'
@@ -19,7 +19,7 @@ function matchesGradeFilter(app: (typeof approvedApps)[number], gradeRange: Grad
 
   return app.gradeRanges.includes(gradeRange)
 }
-
+const milestoneOrderIndex = new Map(APP_MILESTONE_ORDER.map((appId, index) => [appId, index]))
 export default function AppsModal() {
   const { t } = useTranslation()
   const approvedAppsModalOpen = useUIStore((state) => state.approvedAppsModalOpen)
@@ -61,6 +61,12 @@ export default function AppsModal() {
         const rightIsActive = right.id === activeApprovedAppId ? 1 : 0
         if (leftIsActive !== rightIsActive) {
           return rightIsActive - leftIsActive
+        }
+
+        const leftMilestoneIndex = milestoneOrderIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER
+        const rightMilestoneIndex = milestoneOrderIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER
+        if (leftMilestoneIndex !== rightMilestoneIndex) {
+          return leftMilestoneIndex - rightMilestoneIndex
         }
         const categoryDelta = APP_CATEGORY_OPTIONS.indexOf(left.category) - APP_CATEGORY_OPTIONS.indexOf(right.category)
         if (categoryDelta !== 0) {

@@ -716,6 +716,36 @@ const tutorMeAiApps: ApprovedApp[] = [
   },
 ]
 
+export const APP_MILESTONE_ORDER = [
+  'chess-tutor',
+  'flashcards-coach',
+  'planner-connect',
+  'desmos',
+  'padlet',
+  'google-classroom',
+  'canvas-student',
+  'schoology',
+  'quizlet',
+  'seesaw',
+  'ixl',
+  'prodigy-math',
+  'splashlearn',
+  'newsela',
+  'epic',
+  'kahoot',
+  'nearpod',
+  'quizizz',
+  'edpuzzle',
+  'pear-deck',
+  'classdojo',
+  'khan-academy',
+  'duolingo',
+  'abcmouse',
+  'canva-for-education',
+  'codespark-academy',
+  'khan-academy-kids',
+  'scratchjr',
+] as const
 export const approvedApps: ApprovedApp[] = [
   ...tutorMeAiApps,
   ...curatedApprovedAppCatalog.map((app) => {

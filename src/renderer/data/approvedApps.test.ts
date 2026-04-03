@@ -28,7 +28,7 @@ describe('approvedApps', () => {
     })
   })
 
-  it('keeps approved library apps pointed at their real iframe launch urls', () => {
+  it('keeps approved library apps pointed at their governed workspace routes', () => {
     expect(getApprovedAppById('google-classroom')).toMatchObject({
       experience: 'approved-library',
       launchUrl: '/embedded-apps/catalog/google-classroom',
