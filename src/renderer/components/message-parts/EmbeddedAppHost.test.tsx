@@ -138,6 +138,36 @@ describe('EmbeddedAppHost', () => {
     expect(invokeMessage.type).toBe('host.invoke')
   })
 
+  it('reveals the iframe as soon as it loads instead of waiting for runtime ready state', async () => {
+    renderHost(
+      <EmbeddedAppHost
+        appId="chess.internal"
+        appName="Chess Tutor"
+        src="https://example.com/chess"
+        runtime={{
+          expectedOrigin: 'https://example.com',
+          conversationId: 'conversation.reveal.1',
+          appSessionId: 'app-session.chess.reveal.1',
+          handshakeToken: 'nonce-chess-reveal-1',
+          bootstrap: {
+            launchReason: 'manual-open',
+          },
+        }}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+    attachIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('embedded-app-host-overlay')).toBeNull()
+    })
+
+    expect(iframe.className).toContain('opacity-100')
+  })
+
   it('updates the visible summary when the embedded app sends a state message', async () => {
     const onStateUpdate = vi.fn()
 
