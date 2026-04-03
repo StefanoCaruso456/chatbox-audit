@@ -52,26 +52,50 @@ function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTransl
   }
 }
 
-function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => void }) {
+function AppPanelHeader({
+  app,
+  onClose,
+  onReload,
+  onSwitchApps,
+}: {
+  app: ApprovedApp
+  onClose: () => void
+  onReload: () => void
+  onSwitchApps: () => void
+}) {
   const { t } = useTranslation()
 
   return (
     <Flex justify="space-between" align="center" gap="sm">
       <Flex align="center" gap="sm" className="min-w-0">
-        <AppIcon app={app} w={38} h={38} radius="lg" />
+        <AppIcon app={app} w={32} h={32} radius="lg" />
         <Stack gap={0} className="min-w-0">
-          <Title order={4} fz="md" className="truncate">
+          <Title order={4} fz="sm" className="truncate">
             {app.name}
           </Title>
-          <Text size="xs" c="chatbox-secondary" className="truncate">
+          <Text size="10px" c="chatbox-secondary" className="truncate leading-none">
             {app.experience === 'tutormeai-runtime' ? t('TutorMeAI app') : t('Embedded app')}
           </Text>
         </Stack>
       </Flex>
 
-      <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
-        <IconX size={18} />
-      </ActionIcon>
+      <Group gap={6} wrap="nowrap" className="shrink-0">
+        <Button
+          size="xs"
+          variant="light"
+          color="chatbox-brand"
+          leftSection={<IconLayoutGrid size={14} />}
+          onClick={onSwitchApps}
+        >
+          {t('Switch apps')}
+        </Button>
+        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onReload} aria-label={t('Reload app')}>
+          <IconReload size={16} />
+        </ActionIcon>
+        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={onClose} aria-label={t('Close app')}>
+          <IconX size={16} />
+        </ActionIcon>
+      </Group>
     </Flex>
   )
 }
@@ -220,22 +244,8 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }
 
   return (
-    <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
-      <AppPanelHeader app={app} onClose={closeApprovedApp} />
-
-      <Group gap="xs" wrap="wrap">
-        <Button
-          variant="light"
-          color="chatbox-brand"
-          leftSection={<IconLayoutGrid size={16} />}
-          onClick={handleSwitchApps}
-        >
-          {t('Switch apps')}
-        </Button>
-        <ActionIcon variant="subtle" color="chatbox-secondary" onClick={handleReload} aria-label={t('Reload app')}>
-          <IconReload size={17} />
-        </ActionIcon>
-      </Group>
+    <Stack gap="sm" className="h-full min-h-0 p-3">
+      <AppPanelHeader app={app} onClose={closeApprovedApp} onReload={handleReload} onSwitchApps={handleSwitchApps} />
 
       {usesEmbeddedRuntime && embeddedRuntime ? (
         <Box className="min-h-0 flex-1 overflow-hidden">
