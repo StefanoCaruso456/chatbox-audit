@@ -144,28 +144,39 @@ function supportsLaunchConfig(app: ApprovedApp) {
 }
 
 function canPreviewUrl(app: ApprovedApp) {
-  return app.integrationMode === 'district-adapter' || app.integrationMode === 'partner-embed'
+  return (
+    app.integrationMode === 'district-adapter' ||
+    app.integrationMode === 'partner-embed' ||
+    app.integrationMode === 'browser-session'
+  )
 }
 
 function EmbeddedPreviewFrame({
   appName,
   url,
   blockedCopy,
+  onStatusChange,
 }: {
   appName: string
   url: string
   blockedCopy: string
+  onStatusChange?: (status: 'loading' | 'ready' | 'blocked') => void
 }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'blocked'>('loading')
 
   useEffect(() => {
     setStatus('loading')
+    onStatusChange?.('loading')
     const timeout = window.setTimeout(() => {
-      setStatus((current) => (current === 'loading' ? 'blocked' : current))
+      setStatus((current) => {
+        const next = current === 'loading' ? 'blocked' : current
+        onStatusChange?.(next)
+        return next
+      })
     }, PREVIEW_TIMEOUT_MS)
 
     return () => window.clearTimeout(timeout)
-  }, [url])
+  }, [onStatusChange, url])
 
   return (
     <Box className="relative min-h-[30rem] overflow-hidden rounded-[1.5rem] border border-white/12 bg-[#0f172a]">
@@ -176,8 +187,14 @@ function EmbeddedPreviewFrame({
         sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
         allow="clipboard-read; clipboard-write; fullscreen"
         referrerPolicy="strict-origin-when-cross-origin"
-        onLoad={() => setStatus('ready')}
-        onError={() => setStatus('blocked')}
+        onLoad={() => {
+          setStatus('ready')
+          onStatusChange?.('ready')
+        }}
+        onError={() => {
+          setStatus('blocked')
+          onStatusChange?.('blocked')
+        }}
       />
 
       {status === 'loading' ? (
@@ -316,6 +333,11 @@ function ApprovedAppPlaceholderRoute() {
   const app = getApprovedAppById(appId)
   const [savedUrl, setSavedUrl] = useState('')
   const [draftUrl, setDraftUrl] = useState('')
+  const [previewStatus, setPreviewStatus] = useState<'loading' | 'ready' | 'blocked'>('blocked')
+  const resolvedPreviewUrl = useMemo(() => (app ? getResolvedPreviewUrl(app, savedUrl) : ''), [app, savedUrl])
+  const launchConfigEnabled = app ? supportsLaunchConfig(app) : false
+  const showPreview = Boolean(app && canPreviewUrl(app) && resolvedPreviewUrl)
+  const showWorkspaceNotes = !showPreview || previewStatus === 'blocked'
 
   useEffect(() => {
     if (!app) {
@@ -325,6 +347,10 @@ function ApprovedAppPlaceholderRoute() {
     setSavedUrl(savedValue)
     setDraftUrl(savedValue || getDefaultLaunchUrl(app))
   }, [appId, app])
+
+  useEffect(() => {
+    setPreviewStatus(showPreview ? 'loading' : 'blocked')
+  }, [showPreview, resolvedPreviewUrl])
 
   if (!app) {
     return (
@@ -341,9 +367,6 @@ function ApprovedAppPlaceholderRoute() {
 
   const modeMeta = appIntegrationModeMeta[app.integrationMode]
   const modeCopy = getModeCopy(app)
-  const resolvedPreviewUrl = useMemo(() => getResolvedPreviewUrl(app, savedUrl), [app, savedUrl])
-  const launchConfigEnabled = supportsLaunchConfig(app)
-  const showPreview = canPreviewUrl(app) && Boolean(resolvedPreviewUrl)
 
   const handleSaveLaunchUrl = () => {
     const sanitized = sanitizeAbsoluteUrl(draftUrl)
@@ -401,34 +424,18 @@ function ApprovedAppPlaceholderRoute() {
             ))}
           </Flex>
 
-          <Paper radius="xl" p="xl" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
-            <Stack gap="sm">
-              <Title order={3} c="white">
-                {modeCopy.title}
-              </Title>
-              <Text c="rgba(255,255,255,0.76)">{modeCopy.body}</Text>
-              <Text c="rgba(255,255,255,0.66)">
-                This route is the governed in-product launch surface for {app.name}. It keeps the catalog inside the
-                ChatBridge experience while each app moves toward the right integration pattern.
-              </Text>
-              {app.vendorUrl ? (
-                <Text c="rgba(255,255,255,0.72)">
-                  Vendor destination:{' '}
-                  <Anchor href={app.vendorUrl} target="_blank" rel="noreferrer" c="white" underline="always">
-                    {app.vendorUrl}
-                  </Anchor>
-                </Text>
-              ) : null}
-              {app.integrationConfig?.helpUrl ? (
-                <Text c="rgba(255,255,255,0.72)">
-                  Reference:{' '}
-                  <Anchor href={app.integrationConfig.helpUrl} target="_blank" rel="noreferrer" c="white" underline="always">
-                    {app.integrationConfig.helpLabel ?? app.integrationConfig.helpUrl}
-                  </Anchor>
-                </Text>
-              ) : null}
-            </Stack>
-          </Paper>
+          {showPreview ? (
+            <EmbeddedPreviewFrame
+              appName={app.name}
+              url={resolvedPreviewUrl}
+              blockedCopy={
+                app.integrationMode === 'browser-session'
+                  ? 'This vendor is still blocking a normal iframe preview. The next implementation step is a governed browser-session transport.'
+                  : 'This destination is not rendering yet. If the URL is correct, the vendor may still be blocking embed access or expecting district-specific auth.'
+              }
+              onStatusChange={setPreviewStatus}
+            />
+          ) : null}
 
           {launchConfigEnabled ? (
             <Paper radius="xl" p="xl" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}>
@@ -458,21 +465,41 @@ function ApprovedAppPlaceholderRoute() {
             </Paper>
           ) : null}
 
-          <IntegrationDetailsPanel app={app} />
-
-          {showPreview ? (
-            <EmbeddedPreviewFrame
-              appName={app.name}
-              url={resolvedPreviewUrl}
-              blockedCopy={
-                app.integrationMode === 'browser-session'
-                  ? 'This vendor is still blocking a normal iframe preview. The next implementation step is a governed browser-session transport.'
-                  : 'This destination is not rendering yet. If the URL is correct, the vendor may still be blocking embed access or expecting district-specific auth.'
-              }
-            />
+          {showWorkspaceNotes ? (
+            <Paper radius="xl" p="lg" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
+              <Stack gap="xs">
+                <Group gap="xs" wrap="wrap">
+                  <Badge radius="xl" variant="light" color="blue">
+                    {modeCopy.title}
+                  </Badge>
+                  <Badge radius="xl" variant="outline" color="gray">
+                    Governed launch surface
+                  </Badge>
+                </Group>
+                <Text c="rgba(255,255,255,0.76)">{modeCopy.body}</Text>
+                {app.vendorUrl ? (
+                  <Text c="rgba(255,255,255,0.72)">
+                    Vendor destination:{' '}
+                    <Anchor href={app.vendorUrl} target="_blank" rel="noreferrer" c="white" underline="always">
+                      {app.vendorUrl}
+                    </Anchor>
+                  </Text>
+                ) : null}
+                {app.integrationConfig?.helpUrl ? (
+                  <Text c="rgba(255,255,255,0.72)">
+                    Reference:{' '}
+                    <Anchor href={app.integrationConfig.helpUrl} target="_blank" rel="noreferrer" c="white" underline="always">
+                      {app.integrationConfig.helpLabel ?? app.integrationConfig.helpUrl}
+                    </Anchor>
+                  </Text>
+                ) : null}
+              </Stack>
+            </Paper>
           ) : null}
 
-          {app.integrationMode === 'browser-session' ? (
+          <IntegrationDetailsPanel app={app} />
+
+          {app.integrationMode === 'browser-session' && (!showPreview || previewStatus === 'blocked') ? (
             <BrowserSessionWorkspace app={app} resolvedPreviewUrl={resolvedPreviewUrl} />
           ) : null}
 

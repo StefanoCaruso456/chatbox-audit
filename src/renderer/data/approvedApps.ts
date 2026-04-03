@@ -243,9 +243,17 @@ function buildStatusNote(app: ApprovedApp) {
 function buildIntegrationConfig(app: ApprovedApp): NonNullable<ApprovedApp['integrationConfig']> {
   const existing = app.integrationConfig ?? {}
   const override = APP_WORKSPACE_OVERRIDES[app.id] ?? {}
+  const defaultLaunchUrl =
+    existing.defaultLaunchUrl ??
+    override.defaultLaunchUrl ??
+    (app.integrationMode === 'partner-embed' ||
+    app.integrationMode === 'district-adapter' ||
+    app.integrationMode === 'browser-session'
+      ? app.vendorUrl ?? app.launchUrl
+      : undefined)
 
   return {
-    defaultLaunchUrl: existing.defaultLaunchUrl ?? override.defaultLaunchUrl,
+    defaultLaunchUrl,
     configurableLaunchUrl:
       existing.configurableLaunchUrl ??
       override.configurableLaunchUrl ??
