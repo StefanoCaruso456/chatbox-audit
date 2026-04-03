@@ -28,10 +28,10 @@ describe('approvedApps', () => {
     })
   })
 
-  it('routes approved library apps through the shared catalog preview surface', () => {
+  it('keeps approved library apps pointed at their real iframe launch urls', () => {
     expect(getApprovedAppById('google-classroom')).toMatchObject({
       experience: 'approved-library',
-      launchUrl: '/embedded-apps/catalog/google-classroom',
+      launchUrl: 'https://classroom.google.com/',
       vendorUrl: 'https://classroom.google.com/',
     })
   })
@@ -40,11 +40,10 @@ describe('approvedApps', () => {
     expect(getApprovedAppById('canvas-student')).toMatchObject({
       experience: 'approved-library',
       embedStatus: 'needs-district-url',
-      launchUrl: '/embedded-apps/catalog/canvas-student',
+      launchUrl: 'https://www.instructure.com/canvas',
       vendorUrl: 'https://www.instructure.com/canvas/login',
       loadingFallback: {
-        title: 'This library card is not a live TutorMeAI runtime yet',
-        actionLabel: 'Open Canvas login',
+        title: 'Canvas needs a school-specific embedded launch link',
       },
     })
   })
