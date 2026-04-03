@@ -5,6 +5,263 @@ import {
 } from '@shared/contracts/v1'
 import type { ApprovedApp } from '@/types/apps'
 
+const DEFAULT_MODE_CAPABILITIES = {
+  runtime: ['Structured tool bridge', 'Conversation-aware state', 'Completion signals back to chat'],
+  'partner-embed': ['Approved in-app embed', 'Manual launch URL support', 'Teacher-friendly panel preview'],
+  'api-adapter': ['ChatBridge-owned UI shell', 'Structured tool calls', 'API-backed state and context retention'],
+  'district-adapter': ['District launch support', 'School-managed auth path', 'K-12 workflow shell inside ChatBridge'],
+  'browser-session': ['Governed browser-session shell', 'In-product vendor launch target', 'Policy-aware fallback surface'],
+  'native-replacement': ['ChatBridge-native workflow shell', 'Focused learning flow', 'Conversation-aware replacement UX'],
+} as const
+
+const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['integrationConfig']>>> = {
+  'google-classroom': {
+    helpUrl: 'https://developers.google.com/workspace/classroom/reference/rest',
+    helpLabel: 'Google Classroom API docs',
+    authModel: 'oauth',
+    capabilities: ['Classroom course context', 'Assignments and announcements shell', 'Chat-guided workflow handoff'],
+    samplePrompts: [
+      'Open Google Classroom and summarize what I need to review.',
+      'Show me the class workflow shell for Google Classroom.',
+      'Help me plan a ChatBridge adapter for Classroom assignments.',
+    ],
+  },
+  classdojo: {
+    helpUrl: 'https://www.classdojo.com/',
+    helpLabel: 'ClassDojo product site',
+    authModel: 'vendor-session',
+    statusNote: 'ClassDojo does not expose a friendly third-party API path, so this stays on the governed browser-session track.',
+  },
+  'canvas-student': {
+    authModel: 'district-sso',
+    capabilities: ['District launch URL save', 'Sidebar launch workspace', 'Canvas-specific LMS guidance'],
+    samplePrompts: [
+      'Open our Canvas district workspace and show the launch checklist.',
+      'What Canvas launch URL do I need to configure for this school?',
+      'Keep Canvas beside chat and walk me through the LMS setup.',
+    ],
+  },
+  seesaw: {
+    helpUrl: 'https://web.seesaw.me/',
+    helpLabel: 'Seesaw product site',
+    authModel: 'district-sso',
+  },
+  schoology: {
+    helpUrl: 'https://developers.schoology.com/api',
+    helpLabel: 'Schoology API docs',
+    authModel: 'oauth',
+  },
+  'khan-academy': {
+    helpUrl: 'https://support.khanacademy.org/hc/en-us/community/posts/360055082872-API-removal-notice',
+    helpLabel: 'Khan Academy API notice',
+    authModel: 'vendor-session',
+  },
+  'khan-academy-kids': {
+    authModel: 'native',
+  },
+  ixl: {
+    helpUrl: 'https://www.ixl.com/',
+    helpLabel: 'IXL product site',
+    authModel: 'district-sso',
+  },
+  'prodigy-math': {
+    helpUrl: 'https://prodigygame.zendesk.com/hc/en-us/articles/26418988073876-Google-Classroom-Add-On',
+    helpLabel: 'Prodigy Classroom add-on',
+    authModel: 'district-sso',
+  },
+  splashlearn: {
+    helpUrl: 'https://support.splashlearn.com/hc/en-us/articles/12274707283346-Enhancing-platform-compatibility-SplashLearn-integration',
+    helpLabel: 'SplashLearn integration guide',
+    authModel: 'district-sso',
+  },
+  desmos: {
+    capabilities: ['Live calculator preview', 'Official partner embed path', 'Math workflow shell inside ChatBridge'],
+    samplePrompts: [
+      'Open Desmos in the app panel and keep the calculator beside chat.',
+      'Launch the Desmos workspace and help me reason through this graph.',
+      'Keep Desmos open while we work through a function problem.',
+    ],
+  },
+  newsela: {
+    helpUrl: 'https://newsela.com/',
+    helpLabel: 'Newsela product site',
+    authModel: 'district-sso',
+  },
+  epic: {
+    helpUrl: 'https://www.getepic.com/',
+    helpLabel: 'Epic product site',
+    authModel: 'district-sso',
+  },
+  duolingo: {
+    authModel: 'vendor-session',
+    samplePrompts: [
+      'Open the Duolingo browser-session workspace inside ChatBridge.',
+      'Keep the Duolingo shell open and explain why the vendor iframe is blocked.',
+      'Show me the governed browser-session plan for Duolingo.',
+    ],
+  },
+  abcmouse: {
+    authModel: 'vendor-session',
+  },
+  kahoot: {
+    helpUrl: 'https://kahoot.com/schools-u/',
+    helpLabel: 'Kahoot for schools',
+    authModel: 'district-sso',
+  },
+  quizlet: {
+    capabilities: ['Saved set/embed URL', 'Partner embed workspace', 'Study flow kept beside chat'],
+    samplePrompts: [
+      'Open a Quizlet set beside chat.',
+      'Launch the Quizlet embed workspace for this study set.',
+      'Keep Quizlet open while we review key terms.',
+    ],
+  },
+  nearpod: {
+    helpUrl: 'https://nearpod.com/lms-integrations',
+    helpLabel: 'Nearpod LMS integrations',
+    authModel: 'district-sso',
+  },
+  quizizz: {
+    helpUrl: 'https://support.quizizz.com/hc/en-us/articles/37222826330265-All-LMS-Platforms-You-Can-Integrate-With-Quizizz',
+    helpLabel: 'Quizizz LMS integrations',
+    authModel: 'district-sso',
+  },
+  padlet: {
+    capabilities: ['Saved Padlet board URL', 'Partner embed preview', 'Collaboration shell inside ChatBridge'],
+    samplePrompts: [
+      'Open our Padlet board inside ChatBridge.',
+      'Keep the Padlet collaboration space beside chat.',
+      'Launch Padlet and help me summarize what the group posted.',
+    ],
+  },
+  edpuzzle: {
+    helpUrl: 'https://support.edpuzzle.com/hc/en-us/articles/10617629370765-Integrating-with-Google-Classroom',
+    helpLabel: 'Edpuzzle Classroom integration',
+    authModel: 'district-sso',
+  },
+  'pear-deck': {
+    helpUrl: 'https://www.peardeck.com/googleslides-addon',
+    helpLabel: 'Pear Deck for Google Slides',
+    authModel: 'district-sso',
+  },
+  'canva-for-education': {
+    helpUrl: 'https://www.canva.dev/docs/apps/quickstart/',
+    helpLabel: 'Canva apps docs',
+    authModel: 'vendor-session',
+  },
+  scratchjr: {
+    authModel: 'native',
+    samplePrompts: [
+      'Open the ScratchJr replacement workspace inside ChatBridge.',
+      'Show me the native coding-workflow plan for ScratchJr.',
+      'Help me design a ChatBridge-native ScratchJr style lesson flow.',
+    ],
+  },
+  'codespark-academy': {
+    authModel: 'vendor-session',
+  },
+}
+
+function defaultAuthModelForMode(app: ApprovedApp): NonNullable<ApprovedApp['integrationConfig']>['authModel'] {
+  switch (app.integrationMode) {
+    case 'runtime':
+    case 'partner-embed':
+      return 'none'
+    case 'api-adapter':
+      return 'oauth'
+    case 'district-adapter':
+      return 'district-sso'
+    case 'browser-session':
+      return 'vendor-session'
+    case 'native-replacement':
+      return 'native'
+  }
+}
+
+function buildDefaultSetupChecklist(app: ApprovedApp) {
+  switch (app.integrationMode) {
+    case 'partner-embed':
+      return [
+        `Confirm the approved ${app.name} embed or public share URL.`,
+        'Save the launch target inside ChatBridge.',
+        'Verify the app preview renders cleanly beside chat.',
+      ]
+    case 'api-adapter':
+      return [
+        `Define the ChatBridge-owned ${app.name} adapter UI shell.`,
+        'Connect the required API or OAuth path on the backend.',
+        'Map the app workflow into structured tool calls and chat context.',
+      ]
+    case 'district-adapter':
+      return [
+        `Collect the school-specific ${app.name} launch URL or district entry point.`,
+        'Confirm the LMS or SSO flow expected by the district.',
+        'Save the launch target and validate the in-app panel experience.',
+      ]
+    case 'browser-session':
+      return [
+        `Save the primary ${app.name} launch target for the governed browser session.`,
+        'Keep the workflow inside the ChatBridge browser-session shell instead of a raw iframe.',
+        'Decide whether this app should later stay browser-session or move to a native replacement.',
+      ]
+    case 'native-replacement':
+      return [
+        `Define the minimum workflow ChatBridge must recreate for ${app.name}.`,
+        'Design the focused native lesson experience.',
+        'Wire the replacement UI back into chat context and completion summaries.',
+      ]
+    case 'runtime':
+      return ['Open the runtime beside chat.', 'Invoke the app tool flow.', 'Return completion context to the conversation.']
+  }
+}
+
+function buildDefaultSamplePrompts(app: ApprovedApp) {
+  return [
+    `Open ${app.name} beside chat.`,
+    `Use ${app.name} to help with this ${app.category.toLowerCase()} workflow.`,
+    `Keep ${app.name} open while we work through the next step together.`,
+  ]
+}
+
+function buildStatusNote(app: ApprovedApp) {
+  switch (app.integrationMode) {
+    case 'partner-embed':
+      return `${app.name} is configured to use an approved embed-style workspace inside ChatBridge.`
+    case 'api-adapter':
+      return `${app.name} now opens on a governed adapter workspace route instead of a raw vendor iframe.`
+    case 'district-adapter':
+      return `${app.name} now opens on a district launch workspace so school-specific setup can stay inside ChatBridge.`
+    case 'browser-session':
+      return `${app.name} now opens on a governed browser-session workspace instead of failing straight into a blocked vendor iframe.`
+    case 'native-replacement':
+      return `${app.name} now opens on a native replacement workspace that keeps the learning flow inside ChatBridge.`
+    case 'runtime':
+      return `${app.name} runs through the TutorMeAI runtime bridge.`
+  }
+}
+
+function buildIntegrationConfig(app: ApprovedApp): NonNullable<ApprovedApp['integrationConfig']> {
+  const existing = app.integrationConfig ?? {}
+  const override = APP_WORKSPACE_OVERRIDES[app.id] ?? {}
+
+  return {
+    defaultLaunchUrl: existing.defaultLaunchUrl ?? override.defaultLaunchUrl,
+    configurableLaunchUrl:
+      existing.configurableLaunchUrl ??
+      override.configurableLaunchUrl ??
+      (app.integrationMode !== 'api-adapter' && app.integrationMode !== 'native-replacement'),
+    launchUrlLabel: existing.launchUrlLabel ?? override.launchUrlLabel,
+    launchUrlPlaceholder: existing.launchUrlPlaceholder ?? override.launchUrlPlaceholder,
+    helpUrl: existing.helpUrl ?? override.helpUrl ?? app.vendorUrl ?? app.launchUrl,
+    helpLabel: existing.helpLabel ?? override.helpLabel ?? 'Vendor reference',
+    authModel: existing.authModel ?? override.authModel ?? defaultAuthModelForMode(app),
+    capabilities: existing.capabilities ?? override.capabilities ?? [...DEFAULT_MODE_CAPABILITIES[app.integrationMode]],
+    setupChecklist: existing.setupChecklist ?? override.setupChecklist ?? buildDefaultSetupChecklist(app),
+    samplePrompts: existing.samplePrompts ?? override.samplePrompts ?? buildDefaultSamplePrompts(app),
+    statusNote: existing.statusNote ?? override.statusNote ?? buildStatusNote(app),
+  }
+}
+
 const curatedApprovedAppCatalog: ApprovedApp[] = [
   {
     id: 'google-classroom',
@@ -453,11 +710,20 @@ const tutorMeAiApps: ApprovedApp[] = [
 
 export const approvedApps: ApprovedApp[] = [
   ...tutorMeAiApps,
-  ...curatedApprovedAppCatalog.map((app) => ({
-    ...app,
-    vendorUrl: app.vendorUrl ?? app.launchUrl,
-    experience: 'approved-library' as const,
-  })),
+  ...curatedApprovedAppCatalog.map((app) => {
+    const vendorUrl = app.vendorUrl ?? app.launchUrl
+    const workspaceApp: ApprovedApp = {
+      ...app,
+      launchUrl: `/embedded-apps/catalog/${app.id}`,
+      vendorUrl,
+      experience: 'approved-library',
+    }
+
+    return {
+      ...workspaceApp,
+      integrationConfig: buildIntegrationConfig(workspaceApp),
+    }
+  }),
 ]
 
 export const approvedAppsById = new Map(approvedApps.map((app) => [app.id, app] as const))

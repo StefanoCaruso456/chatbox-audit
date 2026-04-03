@@ -23,6 +23,8 @@ export type AppIntegrationMode =
   | 'browser-session'
   | 'native-replacement'
 
+export type AppIntegrationAuthModel = 'none' | 'oauth' | 'district-sso' | 'vendor-session' | 'native'
+
 export interface ApprovedAppRuntimeBridge {
   appId: string
   authState?: AppSessionAuthState
@@ -44,6 +46,11 @@ export interface ApprovedAppIntegrationConfig {
   launchUrlPlaceholder?: string
   helpUrl?: string
   helpLabel?: string
+  authModel?: AppIntegrationAuthModel
+  capabilities?: string[]
+  setupChecklist?: string[]
+  samplePrompts?: string[]
+  statusNote?: string
 }
 
 export interface ApprovedApp {

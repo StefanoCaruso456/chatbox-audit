@@ -108,15 +108,15 @@ describe('AppIframePanel', () => {
     expect(screen.queryByText('Loading Duolingo...')).toBeNull()
   })
 
-  it('loads approved library apps in the real iframe surface without preview chrome', () => {
+  it('loads approved library apps in the governed ChatBridge workspace surface', () => {
     uiStore.setState({ activeApprovedAppId: 'duolingo' })
 
     renderPanel(<AppIframePanel />)
 
     const iframe = screen.getByTitle('Duolingo app panel') as HTMLIFrameElement
 
-    expect(iframe.getAttribute('src')).toBe('https://www.duolingo.com/')
-    expect(screen.queryByText('Governed library preview')).toBeNull()
+    expect(iframe.getAttribute('src')).toBe('http://localhost:3000/embedded-apps/catalog/duolingo')
+    expect(screen.queryByText('Governed browser-session workspace')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open in new tab' })).toBeNull()
   })
 
