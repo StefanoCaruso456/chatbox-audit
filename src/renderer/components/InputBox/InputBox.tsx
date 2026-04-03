@@ -95,6 +95,7 @@ import ModelSelector from '../ModelSelector'
 import MCPMenu from '../mcp/MCPMenu'
 import { FileMiniCard, ImageMiniCard, LinkMiniCard } from './Attachments'
 import { ImageUploadInput } from './ImageUploadInput'
+import { shouldUseCompactComposerLayout } from './input-layout'
 import {
   cleanupFile,
   cleanupLink,
@@ -163,7 +164,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const { t } = useTranslation()
     const navigate = useNavigate()
     const isSmallScreen = useIsSmallScreen()
-    const toolbarIconSize = isSmallScreen ? 22 : 18
     const { height: viewportHeight } = useViewportSize()
     const language = useSettingsStore((state) => state.language)
     const pasteLongTextAsAFile = useSettingsStore((state) => state.pasteLongTextAsAFile)
@@ -479,6 +479,13 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     }, [showRollbackThreadButton])
 
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
+    const composerContainerRef = useRef<HTMLDivElement | null>(null)
+    const [composerWidth, setComposerWidth] = useState<number | null>(null)
+    const isCompactComposer = useMemo(
+      () => shouldUseCompactComposerLayout({ isSmallScreen, composerWidth }),
+      [composerWidth, isSmallScreen]
+    )
+    const toolbarIconSize = isCompactComposer ? 22 : 18
     const voiceRecognitionRef = useRef<SpeechRecognitionLike | null>(null)
     const voiceBaseTextRef = useRef('')
     const voiceFinalTranscriptRef = useRef('')
@@ -500,6 +507,23 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       }),
       [setMessageInput]
     )
+
+    useEffect(() => {
+      const element = composerContainerRef.current
+      if (!element || typeof ResizeObserver === 'undefined') {
+        return
+      }
+
+      setComposerWidth(element.getBoundingClientRect().width)
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0]
+        if (entry) {
+          setComposerWidth(entry.contentRect.width)
+        }
+      })
+      observer.observe(element)
+      return () => observer.disconnect()
+    }, [])
 
     const stopVoiceInput = useCallback(() => {
       voiceRecognitionRef.current?.stop()
@@ -1033,7 +1057,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     return (
       <Box pt={0} pb={isSmallScreen ? 'md' : 'sm'} px="sm" id={dom.InputBoxID} {...getRootProps()}>
         <input className="hidden" {...getInputProps()} />
-        <Stack className={cn(widthFull ? 'w-full' : 'max-w-4xl mx-auto')} gap="xs">
+        <Stack ref={composerContainerRef} className={cn(widthFull ? 'w-full' : 'max-w-4xl mx-auto')} gap="xs">
           {currentSessionId && <CompactionStatus sessionId={currentSessionId} />}
           <Stack
             className={cn(
@@ -1171,7 +1195,13 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             )}
 
             {/* Toolbar Row */}
-            <Flex align="center" gap={0} className="shrink-0 w-full" justify="space-between">
+            <Flex
+              align={isCompactComposer ? 'stretch' : 'center'}
+              gap={isCompactComposer ? 4 : 0}
+              className="shrink-0 w-full"
+              justify="space-between"
+              wrap={isCompactComposer ? 'wrap' : 'nowrap'}
+            >
               {/* Hidden file inputs */}
               <ImageUploadInput ref={pictureInputRef} onChange={onFileInputChange} />
               <input
@@ -1184,8 +1214,9 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               />
 
               {/* Left Group: Tool Buttons */}
-              <Flex align="center" gap={0}>
+              <Flex align="center" gap={0} wrap={isCompactComposer ? 'wrap' : 'nowrap'} className={cn(isCompactComposer && 'w-full')}>
                 <AttachmentMenu
+                  compact={isCompactComposer}
                   onImageUploadClick={onImageUploadClick}
                   onFileUploadClick={onFileUploadClick}
                   handleAttachLink={handleAttachLink}
@@ -1215,7 +1246,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   </MCPMenu>
                 )}
 
-                {featureFlags.knowledgeBase && !isSmallScreen && (
+                {featureFlags.knowledgeBase && !isCompactComposer && (
                   <KnowledgeBaseMenu currentKnowledgeBaseId={knowledgeBase?.id} onSelect={handleKnowledgeBaseSelect}>
                     <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
                       <IconVocabulary
@@ -1229,7 +1260,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   </KnowledgeBaseMenu>
                 )}
 
-                <Tooltip label={t('Web Search')} position="top" withArrow disabled={isSmallScreen}>
+                <Tooltip label={t('Web Search')} position="top" withArrow disabled={isCompactComposer}>
                   <UnstyledButton
                     onClick={() => {
                       setWebBrowsingMode(!webBrowsingMode)
@@ -1247,7 +1278,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   </UnstyledButton>
                 </Tooltip>
 
-                {!isSmallScreen &&
+                {!isCompactComposer &&
                   (showRollbackThreadButton ? (
                     <Tooltip label={t('Rollback Thread')} position="top" withArrow>
                       <UnstyledButton
@@ -1277,7 +1308,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     </Tooltip>
                   ))}
 
-                {!isSmallScreen && (
+                {!isCompactComposer && (
                   <Tooltip
                     label={t('Conversation Mode and Settings')}
                     position="top"
@@ -1317,6 +1348,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   }
                   position="top"
                   withArrow
+                  disabled={isCompactComposer}
                 >
                   <UnstyledButton
                     onClick={handleVoiceInputToggle}
@@ -1341,7 +1373,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                 </Tooltip>
 
                 {/* Mobile: Settings menu */}
-                {isSmallScreen && (
+                {isCompactComposer && (
                   <Menu
                     trigger="click"
                     openDelay={100}
@@ -1377,7 +1409,11 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               </Flex>
 
               {/* Right Group: Token Count + Model Selector */}
-              <Flex align="center" gap={0}>
+              <Flex
+                align="center"
+                gap={0}
+                className={cn(isCompactComposer && 'w-full justify-between pt-1')}
+              >
                 <TokenCountMenu
                   currentInputTokens={currentInputTokens}
                   contextTokens={contextTokens}
@@ -1406,7 +1442,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     <Text span size="xs" className="whitespace-nowrap" c="inherit">
                       {isCalculating ? '~' : ''}
                       {formatNumber(totalTokens)}
-                      {tokenPercentage !== null && tokenPercentage > 10 && ` (${tokenPercentage}%)`}
+                      {!isCompactComposer && tokenPercentage !== null && tokenPercentage > 10 && ` (${tokenPercentage}%)`}
                     </Text>
                   </Flex>
                 </TokenCountMenu>
@@ -1441,7 +1477,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                         size="sm"
                         className={cn(
                           'text-[var(--chatbox-tint-secondary)] truncate',
-                          isSmallScreen ? 'max-w-[100px]' : 'max-w-[160px]'
+                          isCompactComposer ? 'max-w-[88px]' : 'max-w-[160px]'
                         )}
                       >
                         {modelSelectorDisplayText}
@@ -1471,17 +1507,17 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
 
 // Reusable attachment menu component with lightweight style
 const AttachmentMenu: React.FC<{
+  compact: boolean
   onImageUploadClick: () => void
   onFileUploadClick: () => void
   handleAttachLink: () => void
   t: (key: string) => string
-}> = ({ onImageUploadClick, onFileUploadClick, handleAttachLink, t }) => {
-  const isSmallScreen = useIsSmallScreen()
-  const toolbarIconSize = isSmallScreen ? 22 : 18
+}> = ({ compact, onImageUploadClick, onFileUploadClick, handleAttachLink, t }) => {
+  const toolbarIconSize = compact ? 22 : 18
   return (
     <Menu
       shadow="md"
-      trigger={isSmallScreen ? 'click' : 'hover'}
+      trigger={compact ? 'click' : 'hover'}
       position="top-start"
       openDelay={100}
       closeDelay={100}
