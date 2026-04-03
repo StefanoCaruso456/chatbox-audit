@@ -49,6 +49,7 @@ import RemoteDialogWindow from '@/pages/RemoteDialogWindow'
 import SearchDialog from '@/pages/SearchDialog'
 import platform from '@/platform'
 import { router } from '@/router'
+import { isEmbeddedAppPath } from '@/routes/root-layout-utils'
 import Sidebar from '@/Sidebar'
 import * as premiumActions from '@/stores/premiumActions'
 import { initRemoteConfigStore, remoteConfigStore, useRemoteConfigStore } from '@/stores/remoteConfigStore'
@@ -61,6 +62,7 @@ function Root() {
   const spellCheck = useSettingsStore((state) => state.spellCheck)
   const language = useLanguage()
   const initialized = useRef(false)
+  const isEmbeddedAppRoute = isEmbeddedAppPath(location.pathname)
 
   const setOpenAboutDialog = useUIStore((s) => s.setOpenAboutDialog)
   const mergeRemoteConfig = useRemoteConfigStore((state) => state.mergeRemoteConfig)
@@ -70,6 +72,9 @@ function Root() {
   }, [])
 
   useEffect(() => {
+    if (isEmbeddedAppRoute) {
+      return
+    }
     if (initialized.current) {
       return
     }
@@ -112,7 +117,7 @@ function Root() {
     }, 2000)
 
     return () => clearTimeout(tid)
-  }, [location.pathname, mergeRemoteConfig, setOpenAboutDialog])
+  }, [isEmbeddedAppRoute, location.pathname, mergeRemoteConfig, setOpenAboutDialog])
 
   const showSidebar = useUIStore((s) => s.showSidebar)
   const sidebarWidth = useSidebarWidth()
@@ -131,6 +136,9 @@ function Root() {
   }, [_theme])
 
   useEffect(() => {
+    if (isEmbeddedAppRoute) {
+      return
+    }
     ;(() => {
       const { startupPage } = settingsStore.getState()
       const sid = JSON.parse(localStorage.getItem('_currentSessionIdCachedAtom') || '""') as string
@@ -141,7 +149,7 @@ function Root() {
         })
       }
     })()
-  }, [])
+  }, [isEmbeddedAppRoute])
 
   useEffect(() => {
     if (platform.capabilities.navigationEvents && platform.onNavigate) {
@@ -173,12 +181,12 @@ function Root() {
     <Box className="box-border App" spellCheck={spellCheck} dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {platform.type === 'desktop' && (getOS() === 'Windows' || getOS() === 'Linux') && <ExitFullscreenButton />}
       <Grid container className="h-full">
-        <Sidebar />
+        {!isEmbeddedAppRoute && <Sidebar />}
         <Box
           className="h-full w-full"
           sx={{
             flexGrow: 1,
-            ...(showSidebar
+            ...(!isEmbeddedAppRoute && showSidebar
               ? language === 'ar'
                 ? { paddingRight: { sm: `${sidebarWidth}px` } }
                 : { paddingLeft: { sm: `${sidebarWidth}px` } }
