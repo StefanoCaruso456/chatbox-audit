@@ -1,4 +1,4 @@
-import { Alert, Badge, Box, Button, Grid, Group, Paper, Stack, Text, Title } from '@mantine/core'
+import { Alert, Badge, Box, Button, Group, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import type { CompletionSignal } from '@shared/contracts/v1'
 import { Chess, type Square } from 'chess.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -78,6 +78,21 @@ const boardSquares = (['8', '7', '6', '5', '4', '3', '2', '1'] as const).flatMap
   (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const).map((file) => `${file}${rank}` as Square)
 )
 
+const pieceGlyphs: Record<string, string> = {
+  wp: '♙',
+  wr: '♖',
+  wn: '♘',
+  wb: '♗',
+  wq: '♕',
+  wk: '♔',
+  bp: '♟',
+  br: '♜',
+  bn: '♞',
+  bb: '♝',
+  bq: '♛',
+  bk: '♚',
+}
+
 export function ChessAppPage() {
   const { runtimeContext, invocationMessage, sendCompletion, sendError, sendState } =
     useEmbeddedAppBridge('chess.internal')
@@ -139,7 +154,7 @@ export function ChessAppPage() {
 
   const pieces = useMemo(() => {
     const board = chess.board()
-    const map = new Map<Square, string>()
+    const map = new Map<Square, { label: string; glyph: string; color: 'w' | 'b' }>()
 
     board.forEach((rank, rankIndex) => {
       rank.forEach((piece, fileIndex) => {
@@ -148,7 +163,11 @@ export function ChessAppPage() {
         }
 
         const square = `${String.fromCharCode(97 + fileIndex)}${8 - rankIndex}` as Square
-        map.set(square, `${piece.color === 'w' ? 'White' : 'Black'} ${piece.type.toUpperCase()}`)
+        map.set(square, {
+          label: `${piece.color === 'w' ? 'White' : 'Black'} ${piece.type.toUpperCase()}`,
+          glyph: pieceGlyphs[`${piece.color}${piece.type}`] ?? piece.type.toUpperCase(),
+          color: piece.color,
+        })
       })
     })
 
@@ -236,12 +255,22 @@ export function ChessAppPage() {
   }, [chess, invocationMessage?.payload.toolCallId, runtimeContext, sendCompletion, sendError])
 
   return (
-    <Box p="md" bg="linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)" mih="100vh">
+    <Box
+      p="md"
+      mih="100vh"
+      c="#e5eefb"
+      style={{
+        background: 'linear-gradient(180deg, #020617 0%, #0f172a 46%, #111827 100%)',
+        overflowX: 'hidden',
+      }}
+    >
       <Stack gap="md">
         <Group justify="space-between">
           <div>
-            <Title order={3}>Chess Tutor</Title>
-            <Text c="dimmed" size="sm">
+            <Title order={3} c="white">
+              Chess Tutor
+            </Title>
+            <Text c="rgba(226,232,240,0.78)" size="sm">
               Practice or analyze a live chess board without leaving the chat.
             </Text>
           </div>
@@ -256,44 +285,105 @@ export function ChessAppPage() {
           </Alert>
         )}
 
-        <Paper withBorder radius="lg" p="sm" shadow="sm">
-          <Grid gutter={4}>
+        <Paper
+          withBorder
+          radius="xl"
+          p="sm"
+          shadow="sm"
+          style={{
+            background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%)',
+            borderColor: 'rgba(148, 163, 184, 0.22)',
+          }}
+        >
+          <Box
+            data-testid="chess-board-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(8, minmax(0, 1fr))',
+              gap: '4px',
+              aspectRatio: '1 / 1',
+              width: '100%',
+            }}
+          >
             {boardSquares.map((square) => {
               const isSelected = selection.from === square
+              const piece = pieces.get(square)
+              const isLightSquare = getSquareColor(square) === '#f1f5f9'
+
               return (
-                <Grid.Col span={1.5} key={square}>
-                  <Button
-                    variant="subtle"
-                    fullWidth
-                    h={72}
-                    onClick={() => handleSquareClick(square)}
+                <UnstyledButton
+                  key={square}
+                  type="button"
+                  onClick={() => handleSquareClick(square)}
+                  aria-label={
+                    piece ? `${piece.label} on ${square.toUpperCase()}` : `Empty square ${square.toUpperCase()}`
+                  }
+                  data-testid={`chess-square-${square}`}
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '100%',
+                    aspectRatio: '1 / 1',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.08)',
+                    background: isSelected ? '#bfdbfe' : isLightSquare ? '#f8fafc' : '#94a3b8',
+                    boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
+                    color: piece?.color === 'w' ? '#f8fafc' : '#0f172a',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Text
+                    component="span"
                     style={{
-                      background: isSelected ? '#bfdbfe' : getSquareColor(square),
-                      color: '#0f172a',
-                      border: '1px solid rgba(15, 23, 42, 0.08)',
+                      fontSize: 'clamp(1.15rem, 3vw, 1.9rem)',
+                      lineHeight: 1,
+                      textShadow: piece?.color === 'w' ? '0 1px 1px rgba(15,23,42,0.55)' : 'none',
                     }}
                   >
-                    <Stack gap={2} align="center">
-                      <Text fw={700}>{pieces.get(square)?.split(' ')[1] ?? ''}</Text>
-                      <Text size="xs" c="dimmed">
-                        {square.toUpperCase()}
-                      </Text>
-                    </Stack>
-                  </Button>
-                </Grid.Col>
+                    {piece?.glyph ?? ''}
+                  </Text>
+                  <Text
+                    component="span"
+                    size="10px"
+                    fw={700}
+                    style={{
+                      position: 'absolute',
+                      right: 6,
+                      bottom: 4,
+                      color: isLightSquare ? 'rgba(15,23,42,0.52)' : 'rgba(248,250,252,0.8)',
+                    }}
+                  >
+                    {square.toUpperCase()}
+                  </Text>
+                </UnstyledButton>
               )
             })}
-          </Grid>
+          </Box>
         </Paper>
 
-        <Paper withBorder radius="lg" p="md">
+        <Paper
+          withBorder
+          radius="xl"
+          p="md"
+          style={{
+            background: 'rgba(15, 23, 42, 0.64)',
+            borderColor: 'rgba(148, 163, 184, 0.18)',
+          }}
+        >
           <Stack gap="xs">
-            <Text fw={600}>Board state for the chat</Text>
-            <Text size="sm">{formatSummary(chess)}</Text>
+            <Text fw={600} c="white">
+              Board state for the chat
+            </Text>
+            <Text size="sm" c="rgba(226,232,240,0.82)">
+              {formatSummary(chess)}
+            </Text>
             <Group>
               <Button onClick={handleShareBoard}>Send board summary to chat</Button>
               <Button
                 variant="default"
+                color="gray"
                 onClick={() => {
                   const nextChess = new Chess()
                   setChess(nextChess)
