@@ -1,6 +1,6 @@
 import { type RemoteConfig, Theme } from '@shared/types'
-import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import AppsModal from '@/components/apps/AppsModal'
+import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import Toasts from '@/components/common/Toasts'
 import ExitFullscreenButton from '@/components/layout/ExitFullscreenButton'
 import useAppTheme from '@/hooks/useAppTheme'
@@ -41,6 +41,7 @@ import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef } from 'react'
+import { isEmbeddedAppPath } from '@/lib/root-layout-utils'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
 import { getOS } from '@/packages/navigator'
 import * as remote from '@/packages/remote'
@@ -61,6 +62,7 @@ function Root() {
   const spellCheck = useSettingsStore((state) => state.spellCheck)
   const language = useLanguage()
   const initialized = useRef(false)
+  const isEmbeddedAppRoute = isEmbeddedAppPath(location.pathname)
 
   const setOpenAboutDialog = useUIStore((s) => s.setOpenAboutDialog)
   const mergeRemoteConfig = useRemoteConfigStore((state) => state.mergeRemoteConfig)
@@ -70,6 +72,9 @@ function Root() {
   }, [])
 
   useEffect(() => {
+    if (isEmbeddedAppRoute) {
+      return
+    }
     if (initialized.current) {
       return
     }
@@ -112,7 +117,7 @@ function Root() {
     }, 2000)
 
     return () => clearTimeout(tid)
-  }, [location.pathname, mergeRemoteConfig, setOpenAboutDialog])
+  }, [isEmbeddedAppRoute, location.pathname, mergeRemoteConfig, setOpenAboutDialog])
 
   const showSidebar = useUIStore((s) => s.showSidebar)
   const sidebarWidth = useSidebarWidth()
@@ -131,6 +136,9 @@ function Root() {
   }, [_theme])
 
   useEffect(() => {
+    if (isEmbeddedAppRoute) {
+      return
+    }
     ;(() => {
       const { startupPage } = settingsStore.getState()
       const sid = JSON.parse(localStorage.getItem('_currentSessionIdCachedAtom') || '""') as string
@@ -141,7 +149,7 @@ function Root() {
         })
       }
     })()
-  }, [])
+  }, [isEmbeddedAppRoute])
 
   useEffect(() => {
     if (platform.capabilities.navigationEvents && platform.onNavigate) {
@@ -173,12 +181,12 @@ function Root() {
     <Box className="box-border App" spellCheck={spellCheck} dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {platform.type === 'desktop' && (getOS() === 'Windows' || getOS() === 'Linux') && <ExitFullscreenButton />}
       <Grid container className="h-full">
-        <Sidebar />
+        {!isEmbeddedAppRoute && <Sidebar />}
         <Box
           className="h-full w-full"
           sx={{
             flexGrow: 1,
-            ...(showSidebar
+            ...(!isEmbeddedAppRoute && showSidebar
               ? language === 'ar'
                 ? { paddingRight: { sm: `${sidebarWidth}px` } }
                 : { paddingLeft: { sm: `${sidebarWidth}px` } }

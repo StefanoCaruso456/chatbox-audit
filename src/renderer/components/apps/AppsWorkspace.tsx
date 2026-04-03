@@ -21,10 +21,12 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
   const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
   const approvedAppPanelWidth = useUIStore((state) => state.approvedAppPanelWidth)
   const setApprovedAppPanelWidth = useUIStore((state) => state.setApprovedAppPanelWidth)
+  const setShowSidebar = useUIStore((state) => state.setShowSidebar)
 
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const resizeStartX = useRef(0)
   const resizeStartWidth = useRef(0)
+  const hadActiveApprovedAppRef = useRef(Boolean(activeApprovedAppId))
   const [containerWidth, setContainerWidth] = useState(0)
   const [isResizing, setIsResizing] = useState(false)
 
@@ -44,6 +46,14 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
 
     updateContainerWidth()
 
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateContainerWidth)
+
+      return () => {
+        window.removeEventListener('resize', updateContainerWidth)
+      }
+    }
+
     const observer = new ResizeObserver(() => {
       updateContainerWidth()
     })
@@ -53,6 +63,16 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
       observer.disconnect()
     }
   }, [isCompactScreen, activeApprovedAppId])
+
+  useEffect(() => {
+    const hasActiveApprovedApp = Boolean(activeApprovedAppId)
+
+    if (!isCompactScreen && hasActiveApprovedApp && !hadActiveApprovedAppRef.current) {
+      setShowSidebar(false)
+    }
+
+    hadActiveApprovedAppRef.current = hasActiveApprovedApp
+  }, [activeApprovedAppId, isCompactScreen, setShowSidebar])
 
   const resolvedPanelWidth = useMemo(() => {
     if (isCompactScreen || !activeApprovedAppId || containerWidth <= 0) {

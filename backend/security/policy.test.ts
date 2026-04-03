@@ -49,5 +49,6 @@ describe('security policy helpers', () => {
     expect(result.value.headers['x-content-type-options']).toBe('nosniff')
     expect(result.value.headers['referrer-policy']).toBe('no-referrer')
     expect(result.value.headers['permissions-policy']).toContain('camera=()')
+    expect(result.value.headers['permissions-policy']).toContain('microphone=(self)')
   })
 })

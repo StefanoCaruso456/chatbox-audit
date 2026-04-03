@@ -35,16 +35,14 @@ describe('app panel runtime helpers', () => {
     })
   })
 
-  it('does not fabricate embedded runtime state for governed preview apps', () => {
+  it('does not fabricate embedded runtime state for approved library apps', () => {
     const app = getApprovedAppById('canvas-student')
     expect(app).toBeDefined()
     if (!app) {
       return
     }
 
-    expect(
-      buildSidebarEmbeddedAppRuntime(app, 'https://example.com/embedded-apps/catalog/canvas-student', 1)
-    ).toBeNull()
+    expect(buildSidebarEmbeddedAppRuntime(app, 'https://www.instructure.com/canvas', 1)).toBeNull()
   })
 
   it('avoids the live runtime path when the launch url is not a web origin', () => {

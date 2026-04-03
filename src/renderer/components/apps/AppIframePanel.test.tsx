@@ -76,13 +76,17 @@ afterEach(() => {
 describe('AppIframePanel', () => {
   it('shows a district launch fallback for apps that need a school-specific URL', () => {
     uiStore.setState({ activeApprovedAppId: 'canvas-student' })
+    vi.useFakeTimers()
 
     renderPanel(<AppIframePanel />)
 
+    act(() => {
+      vi.advanceTimersByTime(8_000)
+    })
+
     expect(screen.getByTestId('app-iframe-panel-fallback')).toBeTruthy()
-    expect(screen.getByText('This library card is not a live TutorMeAI runtime yet')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Open Canvas login' })).toBeTruthy()
-    expect(screen.queryByTitle('Canvas Student app panel')).toBeNull()
+    expect(screen.getByText('Canvas needs a school-specific embedded launch link')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open Canvas login' })).toBeNull()
   })
 
   it('clears the load timeout after a successful iframe load', () => {
@@ -102,6 +106,18 @@ describe('AppIframePanel', () => {
 
     expect(screen.queryByTestId('app-iframe-panel-fallback')).toBeNull()
     expect(screen.queryByText('Loading Duolingo...')).toBeNull()
+  })
+
+  it('loads approved library apps in the real iframe surface without preview chrome', () => {
+    uiStore.setState({ activeApprovedAppId: 'duolingo' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Duolingo app panel') as HTMLIFrameElement
+
+    expect(iframe.getAttribute('src')).toBe('https://www.duolingo.com/')
+    expect(screen.queryByText('Governed library preview')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open in new tab' })).toBeNull()
   })
 
   it('keeps TutorMeAI runtime apps on the embedded host path', () => {
