@@ -11,6 +11,18 @@ describe('app panel runtime helpers', () => {
     expect(resolveAppPanelLaunchUrl('/embedded-apps/chess')).toBe(`${window.location.origin}/embedded-apps/chess`)
   })
 
+  it('adds a cache-busting launch token for internal app routes', () => {
+    expect(resolveAppPanelLaunchUrl('/embedded-apps/chess', { cacheBustKey: 'runtime-123' })).toBe(
+      `${window.location.origin}/embedded-apps/chess?chatbridge_panel=1&chatbridge_launch=runtime-123`
+    )
+  })
+
+  it('keeps third-party vendor urls stable when resolving panel launches', () => {
+    expect(resolveAppPanelLaunchUrl('https://www.duolingo.com/', { cacheBustKey: 'runtime-123' })).toBe(
+      'https://www.duolingo.com/'
+    )
+  })
+
   it('builds a live embedded runtime config for TutorMeAI apps', () => {
     const app = getApprovedAppById('flashcards-coach')
     expect(app).toBeDefined()

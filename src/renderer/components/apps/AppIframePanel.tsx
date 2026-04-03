@@ -168,11 +168,18 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const loadTimeoutRef = useRef<number | null>(null)
+  const [launchSessionKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
-  const resolvedLaunchUrl = useMemo(() => resolveAppPanelLaunchUrl(app.launchUrl), [app.launchUrl])
+  const resolvedLaunchUrl = useMemo(
+    () =>
+      resolveAppPanelLaunchUrl(app.launchUrl, {
+        cacheBustKey: `${launchSessionKey}-${reloadNonce}`,
+      }),
+    [app.launchUrl, launchSessionKey, reloadNonce]
+  )
   const embeddedRuntime = useMemo(
     () => buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
     [app, reloadNonce, resolvedLaunchUrl]
