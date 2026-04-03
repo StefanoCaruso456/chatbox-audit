@@ -1,3 +1,8 @@
+import type { AppSessionAuthState } from '@shared/contracts/v1/app-session-state'
+import type { AppPermissions } from '@shared/contracts/v1/permissions'
+import type { JsonObject } from '@shared/contracts/v1/shared'
+import type { ToolSchema } from '@shared/contracts/v1/tool-schema'
+
 export type GradeRange = 'Pre-K-2' | '3-5' | '6-8' | '9-12' | 'Multi-level'
 
 export type AppCategory =
@@ -10,6 +15,20 @@ export type AppCategory =
 export type LaunchMode = 'iframe' | 'external'
 export type AppEmbedStatus = 'verified' | 'needs-district-url'
 export type AppExperience = 'approved-library' | 'tutormeai-runtime'
+
+export interface ApprovedAppRuntimeBridge {
+  appId: string
+  authState?: AppSessionAuthState
+  grantedPermissions?: AppPermissions
+  availableTools?: ToolSchema[]
+  initialState?: JsonObject
+  pendingInvocation?: {
+    toolName: string
+    arguments?: JsonObject
+    timeoutMs?: number
+    toolCallId?: string
+  }
+}
 
 export interface ApprovedApp {
   id: string
@@ -25,6 +44,12 @@ export interface ApprovedApp {
   tags: string[]
   vendorUrl?: string
   experience?: AppExperience
+  runtimeBridge?: ApprovedAppRuntimeBridge
+  loadingFallback?: {
+    title: string
+    body: string
+    actionLabel?: string
+  }
 }
 
 export const GRADE_RANGE_OPTIONS: GradeRange[] = ['Pre-K-2', '3-5', '6-8', '9-12', 'Multi-level']

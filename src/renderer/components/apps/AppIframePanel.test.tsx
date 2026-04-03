@@ -9,6 +9,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { uiStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
 
+vi.mock('@/components/message-parts/EmbeddedAppHost', () => ({
+  default: ({ title }: { title: string }) => <div data-testid="embedded-app-host">{title}</div>,
+}))
+
 vi.mock('@/hooks/useScreenChange', () => ({
   useScreenDownToMD: () => false,
 }))
@@ -76,7 +80,8 @@ describe('AppIframePanel', () => {
     renderPanel(<AppIframePanel />)
 
     expect(screen.getByTestId('app-iframe-panel-fallback')).toBeTruthy()
-    expect(screen.getByText('This app needs a school-specific launch link')).toBeTruthy()
+    expect(screen.getByText('This library card is not a live TutorMeAI runtime yet')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open Canvas login' })).toBeTruthy()
     expect(screen.queryByTitle('Canvas Student app panel')).toBeNull()
   })
 
@@ -97,5 +102,14 @@ describe('AppIframePanel', () => {
 
     expect(screen.queryByTestId('app-iframe-panel-fallback')).toBeNull()
     expect(screen.queryByText('Loading Duolingo...')).toBeNull()
+  })
+
+  it('keeps TutorMeAI runtime apps on the embedded host path', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    expect(screen.getByTestId('embedded-app-host').textContent).toContain('Chess Tutor live session')
+    expect(screen.queryByTitle('Chess Tutor app panel')).toBeNull()
   })
 })
