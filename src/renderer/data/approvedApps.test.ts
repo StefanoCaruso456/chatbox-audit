@@ -31,8 +31,11 @@ describe('approvedApps', () => {
   it('keeps approved library apps pointed at their real iframe launch urls', () => {
     expect(getApprovedAppById('google-classroom')).toMatchObject({
       experience: 'approved-library',
-      launchUrl: 'https://classroom.google.com/',
+      launchUrl: '/embedded-apps/catalog/google-classroom',
       vendorUrl: 'https://classroom.google.com/',
+      integrationConfig: {
+        authModel: 'oauth',
+      },
     })
   })
 
@@ -40,11 +43,24 @@ describe('approvedApps', () => {
     expect(getApprovedAppById('canvas-student')).toMatchObject({
       experience: 'approved-library',
       embedStatus: 'needs-district-url',
-      launchUrl: 'https://www.instructure.com/canvas',
+      launchUrl: '/embedded-apps/catalog/canvas-student',
       vendorUrl: 'https://www.instructure.com/canvas/login',
       loadingFallback: {
         title: 'Canvas needs a school-specific embedded launch link',
       },
+    })
+  })
+
+  it('gives every approved library app an integration workspace config', () => {
+    const approvedLibraryApps = approvedApps.filter((app) => app.experience === 'approved-library')
+
+    expect(approvedLibraryApps).toHaveLength(25)
+    approvedLibraryApps.forEach((app) => {
+      expect(app.launchUrl).toBe(`/embedded-apps/catalog/${app.id}`)
+      expect(app.integrationConfig?.capabilities?.length).toBeGreaterThan(0)
+      expect(app.integrationConfig?.setupChecklist?.length).toBeGreaterThan(0)
+      expect(app.integrationConfig?.samplePrompts?.length).toBeGreaterThan(0)
+      expect(app.vendorUrl).toBeTruthy()
     })
   })
 })

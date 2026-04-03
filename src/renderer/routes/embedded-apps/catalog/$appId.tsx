@@ -144,11 +144,7 @@ function supportsLaunchConfig(app: ApprovedApp) {
 }
 
 function canPreviewUrl(app: ApprovedApp) {
-  return (
-    app.integrationMode === 'district-adapter' ||
-    app.integrationMode === 'partner-embed' ||
-    app.integrationMode === 'browser-session'
-  )
+  return app.integrationMode === 'district-adapter' || app.integrationMode === 'partner-embed'
 }
 
 function EmbeddedPreviewFrame({
@@ -206,6 +202,112 @@ function EmbeddedPreviewFrame({
         </div>
       ) : null}
     </Box>
+  )
+}
+
+function IntegrationDetailsPanel({ app }: { app: ApprovedApp }) {
+  const integrationConfig = app.integrationConfig
+  if (!integrationConfig) {
+    return null
+  }
+
+  return (
+    <Paper radius="xl" p="xl" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}>
+      <Stack gap="md">
+        <Group gap="xs">
+          <Badge radius="xl" variant="light" color="blue">
+            {appIntegrationModeMeta[app.integrationMode].label}
+          </Badge>
+          {integrationConfig.authModel ? (
+            <Badge radius="xl" variant="outline" color="gray">
+              Auth: {integrationConfig.authModel}
+            </Badge>
+          ) : null}
+        </Group>
+
+        {integrationConfig.statusNote ? (
+          <Text c="rgba(255,255,255,0.74)">{integrationConfig.statusNote}</Text>
+        ) : null}
+
+        {integrationConfig.capabilities?.length ? (
+          <Stack gap="xs">
+            <Title order={4} c="white">
+              Workspace capabilities
+            </Title>
+            <Group gap="xs">
+              {integrationConfig.capabilities.map((capability) => (
+                <Badge key={`${app.id}:capability:${capability}`} radius="xl" variant="light" color="chatbox-brand">
+                  {capability}
+                </Badge>
+              ))}
+            </Group>
+          </Stack>
+        ) : null}
+
+        {integrationConfig.setupChecklist?.length ? (
+          <Stack gap="xs">
+            <Title order={4} c="white">
+              Setup checklist
+            </Title>
+            <Stack gap={6}>
+              {integrationConfig.setupChecklist.map((item) => (
+                <Text key={`${app.id}:setup:${item}`} size="sm" c="rgba(255,255,255,0.74)">
+                  • {item}
+                </Text>
+              ))}
+            </Stack>
+          </Stack>
+        ) : null}
+
+        {integrationConfig.samplePrompts?.length ? (
+          <Stack gap="xs">
+            <Title order={4} c="white">
+              Try asking the chat
+            </Title>
+            <Stack gap={6}>
+              {integrationConfig.samplePrompts.map((prompt) => (
+                <Text key={`${app.id}:prompt:${prompt}`} size="sm" c="rgba(255,255,255,0.74)">
+                  “{prompt}”
+                </Text>
+              ))}
+            </Stack>
+          </Stack>
+        ) : null}
+      </Stack>
+    </Paper>
+  )
+}
+
+function BrowserSessionWorkspace({ app, resolvedPreviewUrl }: { app: ApprovedApp; resolvedPreviewUrl: string }) {
+  return (
+    <Paper radius="xl" p="xl" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}>
+      <Stack gap="md">
+        <Title order={3} c="white">
+          Governed browser-session workspace
+        </Title>
+        <Text c="rgba(255,255,255,0.74)">
+          {app.name} stays inside the ChatBridge surface through a governed browser-session approach instead of a raw iframe. This keeps the app in-product even when the vendor blocks standard embed headers.
+        </Text>
+        <Box className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#0b1120]">
+          <div className="flex items-center gap-2 border-b border-white/10 bg-white/5 px-4 py-3">
+            <div className="h-3 w-3 rounded-full bg-red-400/80" />
+            <div className="h-3 w-3 rounded-full bg-amber-300/80" />
+            <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
+            <Text size="xs" c="rgba(255,255,255,0.62)" className="truncate">
+              {resolvedPreviewUrl || app.vendorUrl || app.name}
+            </Text>
+          </div>
+          <Stack gap="sm" p="lg">
+            <Text size="sm" c="rgba(255,255,255,0.8)">
+              Browser-session mode keeps the vendor flow visible inside ChatBridge while preserving policy and trust boundaries.
+            </Text>
+            <Text size="sm" c="rgba(255,255,255,0.7)">
+              This workspace is ready for the next browser-session transport layer instead of dropping the user into a blocked iframe.
+            </Text>
+          </Stack>
+        </Box>
+      </Stack>
+    </Paper>
   )
 }
 
@@ -356,6 +458,8 @@ function ApprovedAppPlaceholderRoute() {
             </Paper>
           ) : null}
 
+          <IntegrationDetailsPanel app={app} />
+
           {showPreview ? (
             <EmbeddedPreviewFrame
               appName={app.name}
@@ -366,6 +470,10 @@ function ApprovedAppPlaceholderRoute() {
                   : 'This destination is not rendering yet. If the URL is correct, the vendor may still be blocking embed access or expecting district-specific auth.'
               }
             />
+          ) : null}
+
+          {app.integrationMode === 'browser-session' ? (
+            <BrowserSessionWorkspace app={app} resolvedPreviewUrl={resolvedPreviewUrl} />
           ) : null}
 
           {app.integrationMode === 'api-adapter' ? (
