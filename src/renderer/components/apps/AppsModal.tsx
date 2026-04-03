@@ -19,9 +19,7 @@ function matchesGradeFilter(app: (typeof approvedApps)[number], gradeRange: Grad
 
   return app.gradeRanges.includes(gradeRange)
 }
-
 const milestoneOrderIndex = new Map(APP_MILESTONE_ORDER.map((appId, index) => [appId, index]))
-
 export default function AppsModal() {
   const { t } = useTranslation()
   const approvedAppsModalOpen = useUIStore((state) => state.approvedAppsModalOpen)
@@ -70,7 +68,6 @@ export default function AppsModal() {
         if (leftMilestoneIndex !== rightMilestoneIndex) {
           return leftMilestoneIndex - rightMilestoneIndex
         }
-
         const categoryDelta = APP_CATEGORY_OPTIONS.indexOf(left.category) - APP_CATEGORY_OPTIONS.indexOf(right.category)
         if (categoryDelta !== 0) {
           return categoryDelta

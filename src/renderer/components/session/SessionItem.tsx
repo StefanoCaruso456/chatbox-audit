@@ -87,7 +87,17 @@ function SessionItem(props: Props) {
             await deleteSessionStore(session.id)
             // Only navigate if deleting the currently selected session
             if (selected) {
-              router.navigate({ to: '/', replace: true })
+              if (session.projectId) {
+                router.navigate({
+                  to: '/projects/$projectId',
+                  params: {
+                    projectId: session.projectId,
+                  },
+                  replace: true,
+                })
+              } else {
+                router.navigate({ to: '/', replace: true })
+              }
             }
           } catch (error) {
             console.error('Failed to delete session:', error)

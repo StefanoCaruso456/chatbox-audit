@@ -138,6 +138,36 @@ describe('EmbeddedAppHost', () => {
     expect(invokeMessage.type).toBe('host.invoke')
   })
 
+  it('reveals the iframe as soon as it loads instead of waiting for runtime ready state', async () => {
+    renderHost(
+      <EmbeddedAppHost
+        appId="chess.internal"
+        appName="Chess Tutor"
+        src="https://example.com/chess"
+        runtime={{
+          expectedOrigin: 'https://example.com',
+          conversationId: 'conversation.reveal.1',
+          appSessionId: 'app-session.chess.reveal.1',
+          handshakeToken: 'nonce-chess-reveal-1',
+          bootstrap: {
+            launchReason: 'manual-open',
+          },
+        }}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+    attachIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('embedded-app-host-overlay')).toBeNull()
+    })
+
+    expect(iframe.className).toContain('opacity-100')
+  })
+
   it('updates the visible summary when the embedded app sends a state message', async () => {
     const onStateUpdate = vi.fn()
 
@@ -278,7 +308,7 @@ describe('EmbeddedAppHost', () => {
     fireEvent.load(iframe)
 
     act(() => {
-      vi.advanceTimersByTime(1_100)
+      vi.advanceTimersByTime(2_700)
     })
 
     expect(screen.getByText(/stopped responding/i)).toBeTruthy()
@@ -422,6 +452,80 @@ describe('EmbeddedAppHost', () => {
     await waitFor(() => {
       expect(retriedWindow.postMessage).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('replays the initial runtime handshake until the embedded app responds', async () => {
+    vi.useFakeTimers()
+
+    renderHost(
+      <EmbeddedAppHost
+        appId="chess.internal"
+        appName="Chess Tutor"
+        src="https://example.com/chess"
+        runtime={{
+          expectedOrigin: 'https://example.com',
+          conversationId: 'conversation.5',
+          appSessionId: 'app-session.chess.5',
+          handshakeToken: 'nonce-chess-5',
+          bootstrap: {
+            launchReason: 'manual-open',
+          },
+          pendingInvocation: {
+            toolCallId: 'tool-call.chess.5',
+            toolName: 'chess.launch-game',
+            arguments: {
+              mode: 'practice',
+            },
+            timeoutMs: 10_000,
+          },
+        }}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+    const contentWindow = attachIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(contentWindow.postMessage).toHaveBeenCalledTimes(2)
+
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+
+    expect(contentWindow.postMessage).toHaveBeenCalledTimes(4)
+
+    dispatchRuntimeMessage(iframe, {
+      version: 'v1',
+      messageId: 'msg.runtime.chess.5',
+      conversationId: 'conversation.5',
+      appSessionId: 'app-session.chess.5',
+      appId: 'chess.internal',
+      sequence: 5,
+      sentAt: '2026-04-01T12:05:00.000Z',
+      security: {
+        handshakeToken: 'nonce-chess-5',
+        expectedOrigin: 'https://example.com',
+      },
+      source: 'app',
+      type: 'app.state',
+      payload: {
+        status: 'active',
+        summary: 'Chess board is ready.',
+        state: {
+          moveCount: 0,
+        },
+      },
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(2_000)
+    })
+
+    expect(contentWindow.postMessage).toHaveBeenCalledTimes(4)
   })
 
   it('shows a blocked state when the iframe src is invalid', () => {

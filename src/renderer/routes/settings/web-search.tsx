@@ -1,4 +1,4 @@
-import { Button, Flex, PasswordInput, Stack, Text, Title } from '@mantine/core'
+import { Button, Flex, PasswordInput, Select, Stack, Text, Title, Tooltip } from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
 import { ofetch } from 'ofetch'
 import { useState } from 'react'
@@ -6,6 +6,9 @@ import { useTranslation } from 'react-i18next'
 import { AdaptiveSelect } from '@/components/AdaptiveSelect'
 import platform from '@/platform'
 import { useSettingsStore } from '@/stores/settingsStore'
+import type { ExtensionSettings } from '@shared/types/settings'
+
+type WebSearchProvider = ExtensionSettings['webSearch']['provider']
 
 export const Route = createFileRoute('/settings/web-search')({
   component: RouteComponent,
@@ -37,7 +40,7 @@ export function RouteComponent() {
           },
         })
         setTavilyAvaliable(true)
-      } catch (e) {
+      } catch (_error) {
         setTavilyAvaliable(false)
       } finally {
         setCheckingTavily(false)
@@ -64,7 +67,7 @@ export function RouteComponent() {
               ...extension,
               webSearch: {
                 ...extension.webSearch,
-                provider: e as any,
+                provider: e as WebSearchProvider,
               },
             },
           })

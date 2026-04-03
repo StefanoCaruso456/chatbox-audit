@@ -18,8 +18,8 @@ const log = getLogger('settings-store')
 
 /**
  * Returns platform-specific default document parser configuration.
- * - Desktop: 'local' (has full Node.js environment for local parsing)
- * - Mobile/Web: 'none' (only basic text file support by default, user can enable chatbox-ai)
+ * - Desktop: 'local' (uses the built-in parser with full filesystem access)
+ * - Web: 'local' (uses browser-side parsers for common rich document formats)
  */
 export function getPlatformDefaultDocumentParser(): DocumentParserConfig {
   return { type: getPreferredDocumentParserType(platform.capabilities) }
@@ -62,7 +62,7 @@ export const settingsStore = createStore<Settings & Action>()(
           },
           removeItem: async (name) => await storage.removeItem(name),
         })),
-        version: 2,
+        version: 3,
         partialize: (state) => {
           try {
             return SettingsSchema.parse(state)
@@ -88,6 +88,13 @@ export const settingsStore = createStore<Settings & Action>()(
               if (settings.licenseKey && !settings.licenseActivationMethod) {
                 settings.licenseActivationMethod = 'manual'
                 settings.memorizedManualLicenseKey = settings.licenseKey
+              }
+            case 2:
+              if (
+                settings.extension?.documentParser?.type === 'none' &&
+                platform.capabilities.advancedLocalDocumentParsing
+              ) {
+                settings.extension.documentParser = getPlatformDefaultDocumentParser()
               }
             default:
               break

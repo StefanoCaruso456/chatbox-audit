@@ -172,7 +172,7 @@ function Index() {
   return (
     <Page title="" right={<AppsTrigger />}>
       <AppsWorkspace>
-        <div className="p-0 flex flex-col h-full">
+        <div className="p-0 flex h-full min-h-0 flex-col">
           <Stack align="center" justify="center" gap="sm" flex={1}>
             <HomepageIcon className="h-8" />
             <Text fw="600" size={isSmallScreen ? 'sm' : 'md'}>
@@ -244,8 +244,9 @@ function Index() {
                   </Flex>
 
                   <Text c="chatbox-secondary" className="line-clamp-5">
-                    {session.messages[0]?.contentParts?.map((part) => (part.type === 'text' ? part.text : '')).join('') ||
-                      ''}
+                    {session.messages[0]?.contentParts
+                      ?.map((part) => (part.type === 'text' ? part.text : ''))
+                      .join('') || ''}
                   </Text>
                 </Stack>
               </Box>

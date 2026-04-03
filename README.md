@@ -1,284 +1,377 @@
-<p align="right">
-  <a href="README.md">English</a> |
-  <a href="./doc/README-CN.md">简体中文</a>
-</p>
+# Chatbox Community Edition
 
-This is the repository for the Chatbox Community Edition, open-sourced under the GPLv3 license.
+Chatbox Community Edition is a multi-provider AI workspace built on top of a desktop-first shell and extended with a newer TutorMeAI / ChatBridge platform direction.
 
-[Chatbox is going open-source Again!](https://github.com/chatboxai/chatbox/issues/2266)
+This repository now supports two connected goals:
 
-We regularly sync code from the pro repo to this repo, and vice versa.
+- a strong everyday AI workspace for chat, files, history, projects, and provider switching
+- a trusted app-aware platform where approved third-party tools can run beside chat in a controlled way
+
+## What This Repository Is
+
+This repo is the working codebase for:
+
+- the original Chatbox product experience
+- the newer TutorMeAI / ChatBridge app platform work
+
+In plain English, this is no longer only a chatbot.
+
+It is becoming an AI workspace where:
+
+- users can chat with many models in one place
+- work can be organized into chats and projects
+- approved apps can open beside the conversation
+- app results can feed back into later chat turns
+- trust and review rules can control which apps are allowed to launch
+
+## Product Direction
+
+The current direction is simple:
+
+1. keep the core Chatbox workspace strong
+2. add trusted app support on top of it
+3. move app orchestration, trust, and logging into a backend-owned platform layer
+
+That means the long-term product is not just "AI chat on desktop."
+
+It is:
+
+- a multi-provider AI workspace
+- a tool-aware and app-aware assistant shell
+- a foundation for trusted education and productivity workflows
 
 ## Overview
 
-The system uses a web-based Next.js client deployed on Vercel and a dedicated Node.js backend deployed on Railway. The Railway backend owns orchestration, app registration, tool routing, OAuth flows, app session management, and invocation logging. Persistent data is stored in PostgreSQL. Embedded third-party apps render inside iframe containers and communicate with the host via `postMessage`. Chat responses stream to the client over SSE.
+Today, the repository includes:
 
-## TutorMeAI Case Study Docs
+- multi-provider chat
+- local-first session history
+- files, links, and image inputs
+- knowledge base and MCP-style tool flows
+- projects and organized chat lists
+- conversation mode presets and onboarding
+- voice input in the composer
+- a responsive compose bar
+- a right-side approved app panel
+- example runtime apps such as Chess Tutor, Flashcards Coach, and Planner Connect
+- backend foundations for registry, orchestration, security review, and tool invocation logging
 
-- Setup guide: [docs/tutormeai-setup-guide.md](./docs/tutormeai-setup-guide.md)
-- Architecture: [docs/architecture.md](./docs/architecture.md)
-- Trust governance roadmap: [tasks/roadmap-tutormeai-trust-governance.md](./tasks/roadmap-tutormeai-trust-governance.md)
-- Third-party developer guide: [docs/tutormeai-third-party-developer-guide.md](./docs/tutormeai-third-party-developer-guide.md)
-- Cost analysis: [docs/tutormeai-cost-analysis.md](./docs/tutormeai-cost-analysis.md)
-- Demo checklist: [docs/tutormeai-demo-checklist.md](./docs/tutormeai-demo-checklist.md)
+## Current Stack
 
-### Download for Desktop
+### Current repo implementation
 
-<table style="width: 100%">
-  <tr>
-    <td width="25%" align="center">
-      <b>Windows</b>
-    </td>
-    <td width="25%" align="center" colspan="2">
-      <b>MacOS</b>
-    </td>
-    <td width="25%" align="center">
-      <b>Linux</b>
-    </td>
-  </tr>
-  <tr style="text-align: center">
-    <td align="center" valign="middle">
-      <a href='https://chatboxai.app/?c=download-windows'>
-        <img src='./doc/statics/windows.png' style="height:24px; width: 24px" />
-        <br />
-        <b>Setup.exe</b>
-      </a>
-    </td>
-    <td align="center" valign="middle">
-      <a href='https://chatboxai.app/?c=download-mac-intel'>
-        <img src='./doc/statics/mac.png' style="height:24px; width: 24px" />
-        <br />
-        <b>Intel</b>
-      </a>
-    </td>
-    <td align="center" valign="middle">
-      <a href='https://chatboxai.app/?c=download-mac-aarch'>
-        <img src='./doc/statics/mac.png' style="height:24px; width: 24px" />
-        <br />
-        <b style="white-space: nowrap;">Apple Silicon</b>
-      </a>
-    </td>
-    <td align="center" valign="middle">
-      <a href='https://chatboxai.app/?c=download-linux'>
-        <img src='./doc/statics/linux.png' style="height:24px; width: 24px" />
-        <br />
-        <b>AppImage</b>
-      </a>
-    </td>
-  </tr>
-</table>
+- Language: TypeScript
+- UI: React
+- Desktop shell: Electron
+- Build tool: `electron-vite`
+- Routing: TanStack Router
+- Data fetching: TanStack React Query
+- State: Zustand and Jotai
+- UI libraries: Mantine, MUI, Tailwind-style utility classes
+- Testing: Vitest
+- Packaging: `electron-builder`
 
-### Download for iOS/Android
+### Platform direction
 
-<a href='https://apps.apple.com/app/chatbox-ai/id6471368056' style='margin-right: 4px'>
-<img src='./doc/statics/app_store.webp' style="height:38px;" />
-</a>
-<a href='https://play.google.com/store/apps/details?id=xyz.chatboxapp.chatbox' style='margin-right: 4px'>
-<img src='./doc/statics/google_play.png' style="height:38px;" />
-</a>
-<a href='https://chatboxai.app/install?download=android_apk' style='margin-right: 4px; display: inline-flex; justify-content: center'>
-<img src='./doc/statics/android.png' style="height:28px; display: inline-block" />
-.APK
-</a>
+The intended production split is:
 
-For more information: [chatboxai.app](https://chatboxai.app/)
+- client surface on Vercel
+- backend orchestration service on Railway
+- PostgreSQL for persistence
 
----
-<div align="center" markdown="1">
-  <a href="https://go.warp.dev/chatbox">
-    <img alt="Warp sponsorship" width="400" src="https://raw.githubusercontent.com/warpdotdev/brand-assets/refs/heads/main/Github/Sponsor/Warp-Github-LG-02.png">
-  </a>
+Inside this repository, those responsibilities are still modeled together in one codebase.
 
-### [Warp, built for coding with multiple AI agents.](https://go.warp.dev/chatbox)
-[Available for MacOS, Linux, & Windows](https://go.warp.dev/chatbox)<br>
-</div>
+## Architecture
 
-<hr>
+The easiest way to understand the system is:
 
-<h1 align="center">
-<img src='./doc/statics/icon.png' width='30'>
-<span>
-    Chatbox
-    <span style="font-size:8px; font-weight: normal;">(Community Edition)</span>
-</span>
-</h1>
-<p align="center">
-    <em>Your Ultimate AI Copilot on the Desktop. <br />Chatbox is a desktop client for ChatGPT, Claude and other LLMs, available on Windows, Mac, Linux</em>
-</p>
+```mermaid
+flowchart LR
+  U["User"]
 
-<p align="center">
-<a href="https://github.com/chatboxai/chatbox/releases" target="_blank">
-<img alt="macOS" src="https://img.shields.io/badge/-macOS-black?style=flat-square&logo=apple&logoColor=white" />
-</a>
-<a href="https://github.com/chatboxai/chatbox/releases" target="_blank">
-<img alt="Windows" src="https://img.shields.io/badge/-Windows-blue?style=flat-square&logo=windows&logoColor=white" />
-</a>
-<a href="https://github.com/chatboxai/chatbox/releases" target="_blank">
-<img alt="Linux" src="https://img.shields.io/badge/-Linux-yellow?style=flat-square&logo=linux&logoColor=white" />
-</a>
-<a href="https://github.com/chatboxai/chatbox/releases" target="_blank">
-<img alt="Downloads" src="https://img.shields.io/github/downloads/chatboxai/chatbox/total.svg?style=flat" />
-</a>
-</p>
+  subgraph DESKTOP["Desktop Shell"]
+    EM["Electron Main<br/>window, files, proxy, OS integrations"]
+    PL["Preload Bridge<br/>safe renderer bridge"]
+  end
 
-<a href="https://www.producthunt.com/posts/chatbox?utm_source=badge-featured&utm_medium=badge&utm_souce=badge-chatbox" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=429547&theme=light" alt="Chatbox - Better&#0032;UI&#0032;&#0038;&#0032;Desktop&#0032;App&#0032;for&#0032;ChatGPT&#0044;&#0032;Claude&#0032;and&#0032;other&#0032;LLMs&#0046; | Product Hunt" style="width: 150px; height: 30px;" width="100" height="40" /></a>
+  subgraph APP["Main App UI"]
+    R["Renderer App<br/>chat, sidebar, settings, composer, app panel"]
+    A["Approved App Surface<br/>iframe or controlled app workspace"]
+  end
 
-<a href="./doc/statics/snapshot_light.png">
-<img src="./doc/statics/snapshot_light.png" width="400"/>
-</a>
-<a href="./doc/statics/snapshot_dark.png">
-<img src="./doc/statics/snapshot_dark.png" width="400"/>
-</a>
+  subgraph SHARED["Shared Domain Layer"]
+    S["Types, contracts, providers, model metadata"]
+  end
 
-<!-- <table>
-<tr>
-<td>
-<img src="./dec/../doc/demo_mobile_1.png" alt="App Screenshot" style="box-shadow: 2px 2px 10px rgba(0,0,0,0.1); border: 1px solid #ddd; border-radius: 8px; height: 300px" />
-</td>
-<td>
-<img src="./dec/../doc/demo_mobile_2.png" alt="App Screenshot" style="box-shadow: 2px 2px 10px rgba(0,0,0,0.1); border: 1px solid #ddd; border-radius: 8px; height: 300px" />
-</td>
-</tr>
-</table> -->
+  subgraph BACKEND["TutorMeAI Platform Backend"]
+    REG["Registry"]
+    ORCH["Orchestration"]
+    SEC["Security and Review"]
+    LOG["Tool Invocation Logging"]
+    DB["PostgreSQL"]
+  end
 
-## Features
-
--   **Local Data Storage**  
-    :floppy_disk: Your data remains on your device, ensuring it never gets lost and maintains your privacy.
-
--   **No-Deployment Installation Packages**  
-    :package: Get started quickly with downloadable installation packages. No complex setup necessary!
-
--   **Support for Multiple LLM Providers**  
-    :gear: Seamlessly integrate with a variety of cutting-edge language models:
-
-    -   OpenAI (ChatGPT)
-    -   Azure OpenAI
-    -   Claude
-    -   Google Gemini Pro
-    -   Ollama (enable access to local models like llama2, Mistral, Mixtral, codellama, vicuna, yi, and solar)
-    -   ChatGLM-6B
-
--   **Image Generation with Dall-E-3**  
-    :art: Create the images of your imagination with Dall-E-3.
-
--   **Enhanced Prompting**  
-    :speech_balloon: Advanced prompting features to refine and focus your queries for better responses.
-
--   **Keyboard Shortcuts**  
-    :keyboard: Stay productive with shortcuts that speed up your workflow.
-
--   **Markdown, Latex & Code Highlighting**  
-    :scroll: Generate messages with the full power of Markdown and Latex formatting, coupled with syntax highlighting for various programming languages, enhancing readability and presentation.
-
--   **Prompt Library & Message Quoting**  
-    :books: Save and organize prompts for reuse, and quote messages for context in discussions.
-
--   **Streaming Reply**  
-    :arrow_forward: Provide rapid responses to your interactions with immediate, progressive replies.
-
--   **Ergonomic UI & Dark Theme**  
-    :new_moon: A user-friendly interface with a night mode option for reduced eye strain during extended use.
-
--   **Team Collaboration**  
-    :busts_in_silhouette: Collaborate with ease and share OpenAI API resources among your team. [Learn More](./team-sharing/README.md)
-
--   **Cross-Platform Availability**  
-    :computer: Chatbox is ready for Windows, Mac, Linux users.
-
--   **Access Anywhere with the Web Version**  
-    :globe_with_meridians: Use the web application on any device with a browser, anywhere.
-
--   **iOS & Android**  
-    :phone: Use the mobile applications that will bring this power to your fingertips on the go.
-
--   **Multilingual Support**  
-    :earth_americas: Catering to a global audience by offering support in multiple languages:
-
-    -   English
-    -   简体中文 (Simplified Chinese)
-    -   繁體中文 (Traditional Chinese)
-    -   日本語 (Japanese)
-    -   한국어 (Korean)
-    -   Français (French)
-    -   Deutsch (German)
-    -   Русский (Russian)
-    -   Español (Spanish)
-
--   **And More...**  
-    :sparkles: Constantly enhancing the experience with new features!
-
-## FAQ
-
--   [Frequently Asked Questions](./doc/FAQ.md)
-
-## Why I made Chatbox?
-
-I developed Chatbox initially because I was debugging some prompts and found myself in need of a simple and easy-to-use prompt and API debugging tool. I thought there might be more people who needed such a tool, so I open-sourced it.
-
-At first, I didn't know that it would be so popular. I listened to the feedback from the open-source community and continued to develop and improve it. Now, it has become a very useful AI desktop application. There are many users who love Chatbox, and they not only use it for developing and debugging prompts, but also for daily chatting, and even to do some more interesting things like using well-designed prompts to make AI play various professional roles to assist them in everyday work...
-
-## How to Contribute
-
-Any form of contribution is welcome, including but not limited to:
-
--   Submitting issues
--   Submitting pull requests
--   Submitting feature requests
--   Submitting bug reports
--   Submitting documentation revisions
--   Submitting translations
--   Submitting any other forms of contribution
-
-## Prerequisites
-
-- Node.js (v20.x – v22.x)
-- pnpm (required – package scripts and engine checks assume pnpm)
-
-## Codex Skills
-
-For Codex-based development setup, install the local skill baseline described in [docs/skills.md](./docs/skills.md).
-
-## Build Instructions
-
-1. Clone the repository from Github
-
-```bash
-git clone https://github.com/chatboxai/chatbox.git
+  U --> R
+  EM --> PL
+  PL --> R
+  R --> A
+  R --> S
+  R --> ORCH
+  ORCH --> REG
+  ORCH --> SEC
+  ORCH --> LOG
+  REG --> DB
+  SEC --> DB
+  LOG --> DB
 ```
 
-2. Install the required dependencies
+### Architecture in plain English
+
+- `src/main` owns native desktop behavior
+- `src/preload` exposes a limited safe bridge to the UI
+- `src/renderer` contains most product behavior and screens
+- `src/shared` holds shared types, model contracts, and provider definitions
+- `backend/` contains the newer platform services for app trust, orchestration, registry, and logging
+
+## ICP And Personas
+
+### Ideal customer profile
+
+The best current fit is:
+
+- AI power users who want one workspace for many model providers
+- developers and prompt engineers who need files, tools, structured output, and iteration history
+- researchers and analysts who work across long threads, documents, and web context
+- education and workflow teams who need a trusted app-aware assistant shell, not just plain chat
+
+### Key personas
+
+#### 1. AI power user
+
+Needs:
+
+- fast model switching
+- saved history
+- reusable conversations
+- strong keyboard and workflow support
+
+#### 2. Developer or prompt engineer
+
+Needs:
+
+- provider comparison
+- code and markdown-friendly rendering
+- file and link context
+- local models, MCP, and tool support
+
+#### 3. Researcher or analyst
+
+Needs:
+
+- long-running context
+- retrieval and document workflows
+- saved threads and follow-up continuity
+
+#### 4. Education workflow owner
+
+Needs:
+
+- safe approved app launches
+- clear trust boundaries
+- structured app context that can flow back into chat
+
+#### 5. Everyday user
+
+Needs:
+
+- simple onboarding
+- a clean composer
+- voice input
+- a workspace that feels polished without advanced setup
+
+## What Is Implemented Today
+
+### Core Chatbox workspace
+
+- multi-provider AI chat
+- local-first storage and durable session history
+- threads, forks, exports, and settings depth
+- files, links, images, web search, and knowledge-base support
+
+### Workspace and UX improvements
+
+- projects and chat grouping
+- ChatGPT-style left sidebar structure
+- clearer conversation mode entry point
+- onboarding hint for conversation mode
+- voice microphone input in the composer
+- responsive narrow-layout composer behavior
+
+### Approved app platform work
+
+- approved app catalog
+- multiple app integration modes
+- right-side approved app panel
+- automatic left-sidebar collapse when apps open
+- resizable app panel
+- embedded route fixes so the main shell does not render inside app views
+- mode-aware approved app runtime behavior
+
+### Example runtime app patterns
+
+- Chess Tutor
+- Flashcards Coach
+- Planner Connect
+
+### Shared platform contracts
+
+- app manifest
+- app session state
+- tool schema
+- runtime message envelope
+- completion signal
+- conversation app context
+
+### Backend platform foundations
+
+- app registry service
+- orchestration service layer
+- trust and review policy helpers
+- launchability and origin checks
+- reviewer workflow foundations
+- tool invocation logging service
+
+## Repo Map
+
+### Main areas
+
+- [`src/main`](./src/main): Electron main-process code
+- [`src/preload`](./src/preload): preload bridge
+- [`src/renderer`](./src/renderer): main product UI and workflows
+- [`src/shared`](./src/shared): shared types, providers, contracts, utilities
+- [`backend`](./backend): TutorMeAI platform backend domains
+- [`docs`](./docs): architecture, trust, setup, audit, and planning docs
+
+### Important renderer areas
+
+- [`src/renderer/components/InputBox`](./src/renderer/components/InputBox): composer, attachments, voice input, responsive behavior
+- [`src/renderer/components/apps`](./src/renderer/components/apps): approved app panel and workspace
+- [`src/renderer/components/message-parts`](./src/renderer/components/message-parts): embedded app host and message rendering
+- [`src/renderer/routes/embedded-apps`](./src/renderer/routes/embedded-apps): example embedded app routes
+- [`src/renderer/packages/tutormeai-apps`](./src/renderer/packages/tutormeai-apps): local runtime app orchestration helpers
+
+### Important backend areas
+
+- [`backend/registry`](./backend/registry): approved app registration and lookup
+- [`backend/orchestration`](./backend/orchestration): tool discovery, app context, injection, routing
+- [`backend/security`](./backend/security): trust, launchability, review, policies
+- [`backend/tool-invocations`](./backend/tool-invocations): invocation lifecycle logging
+- [`backend/db`](./backend/db): schema and migrations
+
+## Getting Started
+
+### Requirements
+
+- Node.js `^20.19.0 || >=22.12.0 <23.0.0`
+- `pnpm >= 10`
+
+### Install
 
 ```bash
 pnpm install
 ```
 
-3. Start the application (in development mode)
+### Run the desktop shell
 
 ```bash
 pnpm run dev
 ```
 
-4. Build the application, package the installer for current platform
+### Build the desktop app
 
 ```bash
-pnpm run package
+pnpm run build
 ```
 
-5. Build the application, package the installer for all platforms
+### Build and preview the web version
 
 ```bash
-pnpm run package:all
+pnpm run build:web
+pnpm run serve:web
 ```
 
-## Star History
+### Run tests
 
-[![Star History Chart](https://api.star-history.com/svg?repos=chatboxai/chatbox&type=Date)](https://star-history.com/#chatboxai/chatbox&Date)
+```bash
+pnpm run test
+```
 
-## Contact
+### Run lint and type checks
 
-[Twitter](https://x.com/ChatboxAI_HQ) | [Email](mailto:hi@chatboxai.com)
+```bash
+pnpm run lint
+pnpm run check
+```
 
-## License
+## TutorMeAI And App-Platform Verification
 
-[LICENSE](./LICENSE)
+High-value app platform checks:
+
+```bash
+pnpm exec vitest run \
+  src/shared/contracts/v1/index.test.ts \
+  src/renderer/components/message-parts/embedded-app-runtime.test.ts \
+  test/integration/tutormeai/app-lifecycle.test.tsx \
+  test/integration/tutormeai/routing-scenarios.test.ts
+```
+
+## Key Docs
+
+- [TutorMeAI architecture](./docs/architecture.md)
+- [TutorMeAI setup guide](./docs/tutormeai-setup-guide.md)
+- [TutorMeAI third-party developer guide](./docs/tutormeai-third-party-developer-guide.md)
+- [TutorMeAI trust docs](./docs/trust/README.md)
+- [TutorMeAI demo checklist](./docs/tutormeai-demo-checklist.md)
+- [App integration matrix](./docs/app-integration-matrix.md)
+- [Codebase audit](./docs/codebase-audit/README.md)
+- [Storage notes](./docs/storage.md)
+
+## Current State Of The Repo
+
+This repository already contains meaningful working product code.
+
+It also contains platform-foundation work that is preparing for a stronger long-term split between:
+
+- user-facing client experience
+- trusted backend orchestration
+- approved app runtime and governance
+
+So the best way to think about the repo today is:
+
+- mature AI workspace shell
+- active app-platform buildout
+- strong documentation and trust-model direction
+
+## Contributing
+
+Contributions are welcome in:
+
+- product features
+- bug fixes
+- tests
+- documentation
+- architecture cleanup
+- trust and app-platform work
+
+Before opening a PR, it helps to:
+
+1. run the relevant tests
+2. run lint or type checks for the touched area
+3. update docs when changing architecture, contracts, or user-facing behavior
+
+## Bottom Line
+
+Chatbox Community Edition is evolving from a strong AI client into a trusted AI workspace platform.
+
+The core chat experience is already real.
+The app-aware platform layer is now real enough to demo, test, and keep building.

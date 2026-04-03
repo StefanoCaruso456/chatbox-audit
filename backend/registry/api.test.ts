@@ -1,5 +1,6 @@
 import { exampleAuthenticatedPlannerManifest, exampleInternalChessManifest, examplePublicFlashcardsManifest } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
+import { AppSubmissionPackageSchema } from '../security'
 import { createAppRegistryApi } from './api'
 import { InMemoryAppRegistryRepository } from './repository'
 import { AppRegistryService } from './service'
@@ -22,6 +23,33 @@ async function readJson(response: Response) {
   return response.json()
 }
 
+function buildSubmission(manifest: typeof exampleInternalChessManifest | typeof examplePublicFlashcardsManifest | typeof exampleAuthenticatedPlannerManifest, category: string) {
+  return AppSubmissionPackageSchema.parse({
+    submissionVersion: 'v1',
+    category,
+    manifest,
+    owner: {
+      ownerType: 'external-partner',
+      ownerName: 'Partner App Studio',
+      contactName: 'Taylor Brooks',
+      contactEmail: 'taylor@example.com',
+      organization: 'Partner App Studio',
+    },
+    domains: manifest.allowedOrigins,
+    requestedOAuthScopes: manifest.authConfig?.scopes ?? [],
+    stagingUrl: manifest.uiEmbedConfig.entryUrl,
+    privacyPolicyUrl: `${manifest.uiEmbedConfig.targetOrigin}/privacy`,
+    support: {
+      supportEmail: 'support@example.com',
+      responsePolicy: 'School support responses within one business day.',
+      supportUrl: `${manifest.uiEmbedConfig.targetOrigin}/support`,
+    },
+    releaseNotes: `Submission package for ${manifest.appVersion}.`,
+    screenshots: [],
+    submittedAt: '2026-04-02T12:00:00.000Z',
+  })
+}
+
 describe('AppRegistryApi', () => {
   it('forces new registrations into pending review on the API surface', async () => {
     const { api } = createFixture()
@@ -32,10 +60,7 @@ describe('AppRegistryApi', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          manifest: exampleInternalChessManifest,
-          category: 'games',
-        }),
+        body: JSON.stringify(buildSubmission(exampleInternalChessManifest, 'games')),
       })
     )
 
@@ -83,10 +108,7 @@ describe('AppRegistryApi', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          manifest: exampleInternalChessManifest,
-          category: 'games',
-        }),
+        body: JSON.stringify(buildSubmission(exampleInternalChessManifest, 'games')),
       })
     )
 
@@ -96,13 +118,15 @@ describe('AppRegistryApi', () => {
         headers: {
           'content-type': 'application/json',
         },
-        body: JSON.stringify({
-          manifest: {
-            ...examplePublicFlashcardsManifest,
-            slug: exampleInternalChessManifest.slug,
-          },
-          category: 'study',
-        }),
+        body: JSON.stringify(
+          buildSubmission(
+            {
+              ...examplePublicFlashcardsManifest,
+              slug: exampleInternalChessManifest.slug,
+            },
+            'study'
+          )
+        ),
       })
     )
 

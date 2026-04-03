@@ -746,7 +746,6 @@ export const APP_MILESTONE_ORDER = [
   'khan-academy-kids',
   'scratchjr',
 ] as const
-
 export const approvedApps: ApprovedApp[] = [
   ...tutorMeAiApps,
   ...curatedApprovedAppCatalog.map((app) => {

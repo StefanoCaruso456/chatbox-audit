@@ -10,11 +10,10 @@ import MessageList, { type MessageListRef } from '@/components/chat/MessageList'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import InputBox from '@/components/InputBox/InputBox'
 import Header from '@/components/layout/Header'
-import ThreadHistoryDrawer from '@/components/session/ThreadHistoryDrawer'
 import { updateSession as updateSessionStore, useSession } from '@/stores/chatStore'
 import { lastUsedModelStore } from '@/stores/lastUsedModelStore'
 import * as scrollActions from '@/stores/scrollActions'
-import { modifyMessage, removeCurrentThread, startNewThread, submitNewUserMessage } from '@/stores/sessionActions'
+import { modifyMessage, submitNewUserMessage } from '@/stores/sessionActions'
 import { getAllMessageList } from '@/stores/sessionHelpers'
 
 export const Route = createFileRoute('/session/$sessionId')({
@@ -80,22 +79,6 @@ function RouteComponent() {
     },
     [currentSession]
   )
-
-  const onStartNewThread = useCallback(() => {
-    if (!currentSession) {
-      return false
-    }
-    void startNewThread(currentSession.id)
-    return true
-  }, [currentSession])
-
-  const onRollbackThread = useCallback(() => {
-    if (!currentSession) {
-      return false
-    }
-    void removeCurrentThread(currentSession.id)
-    return true
-  }, [currentSession])
 
   const onSubmit = useCallback(
     async ({
@@ -176,8 +159,6 @@ function RouteComponent() {
                     sessionId={currentSession.id}
                     sessionType={currentSession.type}
                     model={model}
-                    onStartNewThread={onStartNewThread}
-                    onRollbackThread={onRollbackThread}
                     onSelectModel={onSelectModel}
                     onClickSessionSettings={onClickSessionSettings}
                     generating={!!lastGeneratingMessage}
@@ -189,7 +170,6 @@ function RouteComponent() {
             </section>
           </AppsWorkspace>
         </div>
-        <ThreadHistoryDrawer session={currentSession} />
       </div>
     </main>
   ) : (

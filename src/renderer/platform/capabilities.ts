@@ -15,6 +15,7 @@ const DISABLED_PLATFORM_CAPABILITIES: PlatformCapabilities = {
 
 export const WEB_PLATFORM_CAPABILITIES: PlatformCapabilities = Object.freeze({
   ...DISABLED_PLATFORM_CAPABILITIES,
+  advancedLocalDocumentParsing: true,
 })
 
 export const DESKTOP_PLATFORM_CAPABILITIES: PlatformCapabilities = Object.freeze({

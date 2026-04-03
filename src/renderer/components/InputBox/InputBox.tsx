@@ -24,17 +24,15 @@ import { formatNumber } from '@shared/utils'
 import {
   IconAdjustmentsHorizontal,
   IconAlertCircle,
-  IconArrowBackUp,
   IconArrowUp,
   IconChevronRight,
   IconCirclePlus,
-  IconFilePencil,
   IconFolder,
   IconHammer,
   IconLink,
+  IconMicrophone,
   IconPhoto,
   IconPlayerStopFilled,
-  IconPlus,
   IconSettings,
   IconVocabulary,
   IconWorldWww,
@@ -88,13 +86,13 @@ import * as toastActions from '../../stores/toastActions'
 import { CompactionStatus } from '../chat/CompactionStatus'
 import { CompressionModal } from '../common/CompressionModal'
 import { ScalableIcon } from '../common/ScalableIcon'
-import Disclaimer from '../Disclaimer'
 import ProviderImageIcon from '../icons/ProviderImageIcon'
 import KnowledgeBaseMenu from '../knowledge-base/KnowledgeBaseMenu'
 import ModelSelector from '../ModelSelector'
 import MCPMenu from '../mcp/MCPMenu'
 import { FileMiniCard, ImageMiniCard, LinkMiniCard } from './Attachments'
 import { ImageUploadInput } from './ImageUploadInput'
+import { shouldUseCompactComposerLayout } from './input-layout'
 import {
   cleanupFile,
   cleanupLink,
@@ -106,6 +104,15 @@ import {
   storeLinkPromise,
 } from './preprocessState'
 import TokenCountMenu from './TokenCountMenu'
+import {
+  appendVoiceTranscript,
+  getSpeechRecognitionConstructor,
+  isVoiceInputSupported,
+  readSpeechRecognitionTranscript,
+  resolveVoiceInputLanguage,
+  type SpeechRecognitionLike,
+  type VoiceInputWindow,
+} from './voice-input'
 
 export type InputBoxPayload = {
   constructedMessage: Message
@@ -129,8 +136,6 @@ export type InputBoxProps = {
   onSelectModel?(provider: string, model: string): void
   onSubmit?(payload: InputBoxPayload): Promise<void>
   onStopGenerating?(): boolean
-  onStartNewThread?(): boolean
-  onRollbackThread?(): boolean
   onClickSessionSettings?(): boolean | Promise<boolean>
 }
 
@@ -145,8 +150,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       onSelectModel,
       onSubmit,
       onStopGenerating,
-      onStartNewThread,
-      onRollbackThread,
       onClickSessionSettings,
     },
     ref
@@ -154,11 +157,13 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const { t } = useTranslation()
     const navigate = useNavigate()
     const isSmallScreen = useIsSmallScreen()
-    const toolbarIconSize = isSmallScreen ? 22 : 18
     const { height: viewportHeight } = useViewportSize()
+    const language = useSettingsStore((state) => state.language)
     const pasteLongTextAsAFile = useSettingsStore((state) => state.pasteLongTextAsAFile)
     const shortcuts = useSettingsStore((state) => state.shortcuts)
     const widthFull = useUIStore((s) => s.widthFull) || fullWidth
+    const pendingConversationModeHintId = useUIStore((s) => s.pendingConversationModeHintId)
+    const clearConversationModeHint = useUIStore((s) => s.clearConversationModeHint)
 
     const currentSessionId = sessionId
     const isNewSession = currentSessionId === 'new'
@@ -213,9 +218,51 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const { knowledgeBase, setKnowledgeBase } = useKnowledgeBase({ isNewSession })
 
     const [showCompressionModal, setShowCompressionModal] = useState(false)
+    const [conversationModeHintActive, setConversationModeHintActive] = useState(false)
+    const [conversationModeHintVisible, setConversationModeHintVisible] = useState(false)
+    const handledConversationModeHintIdRef = useRef<number | null>(null)
 
     const [links, setLinks] = useAtom(atoms.inputBoxLinksFamily(currentSessionId || 'new'))
     const [isSubmitting, setIsSubmitting] = useState(false)
+
+    useEffect(() => {
+      if (sessionType !== 'chat' || !onClickSessionSettings || !pendingConversationModeHintId) {
+        return
+      }
+
+      if (handledConversationModeHintIdRef.current === pendingConversationModeHintId) {
+        return
+      }
+
+      handledConversationModeHintIdRef.current = pendingConversationModeHintId
+      setConversationModeHintActive(true)
+      setConversationModeHintVisible(true)
+
+      const blinkDurationMs = 900
+      const timers = [
+        setTimeout(() => setConversationModeHintVisible(false), blinkDurationMs),
+        setTimeout(() => setConversationModeHintVisible(true), blinkDurationMs * 2),
+        setTimeout(() => setConversationModeHintVisible(false), blinkDurationMs * 3),
+        setTimeout(() => setConversationModeHintVisible(true), blinkDurationMs * 4),
+        setTimeout(() => setConversationModeHintVisible(false), blinkDurationMs * 5),
+        setTimeout(() => {
+          setConversationModeHintActive(false)
+          setConversationModeHintVisible(false)
+          clearConversationModeHint(pendingConversationModeHintId)
+        }, blinkDurationMs * 6),
+      ]
+
+      return () => {
+        timers.forEach(clearTimeout)
+      }
+    }, [clearConversationModeHint, onClickSessionSettings, pendingConversationModeHintId, sessionType])
+
+    const handleConversationModeClick = useCallback(() => {
+      setConversationModeHintActive(false)
+      setConversationModeHintVisible(false)
+      clearConversationModeHint(pendingConversationModeHintId)
+      return onClickSessionSettings?.()
+    }, [clearConversationModeHint, onClickSessionSettings, pendingConversationModeHintId])
 
     useEffect(() => {
       const constructedMessage = sessionHelpers.constructUserMessage(
@@ -412,19 +459,22 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       }
     }, [showSelectModelErrorTip])
 
-    const [showRollbackThreadButton, setShowRollbackThreadButton] = useState(false)
-    useEffect(() => {
-      if (showRollbackThreadButton) {
-        const tid = setTimeout(() => {
-          setShowRollbackThreadButton(false)
-        }, 5000)
-        return () => {
-          clearTimeout(tid)
-        }
-      }
-    }, [showRollbackThreadButton])
-
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
+    const composerContainerRef = useRef<HTMLDivElement | null>(null)
+    const [composerWidth, setComposerWidth] = useState<number | null>(null)
+    const isCompactComposer = useMemo(
+      () => shouldUseCompactComposerLayout({ isSmallScreen, composerWidth }),
+      [composerWidth, isSmallScreen]
+    )
+    const toolbarIconSize = isCompactComposer ? 22 : 18
+    const voiceRecognitionRef = useRef<SpeechRecognitionLike | null>(null)
+    const voiceBaseTextRef = useRef('')
+    const voiceFinalTranscriptRef = useRef('')
+    const [isVoiceInputListening, setIsVoiceInputListening] = useState(false)
+    const voiceInputSupported = useMemo(
+      () => (typeof window !== 'undefined' ? isVoiceInputSupported(window as VoiceInputWindow) : false),
+      []
+    )
 
     useImperativeHandle(
       ref,
@@ -439,10 +489,117 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       [setMessageInput]
     )
 
+    useEffect(() => {
+      const element = composerContainerRef.current
+      if (!element || typeof ResizeObserver === 'undefined') {
+        return
+      }
+
+      setComposerWidth(element.getBoundingClientRect().width)
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0]
+        if (entry) {
+          setComposerWidth(entry.contentRect.width)
+        }
+      })
+      observer.observe(element)
+      return () => observer.disconnect()
+    }, [])
+
+    const stopVoiceInput = useCallback(() => {
+      voiceRecognitionRef.current?.stop()
+    }, [])
+
+    useEffect(() => {
+      return () => {
+        voiceRecognitionRef.current?.abort()
+        voiceRecognitionRef.current = null
+      }
+    }, [])
+
+    const getVoiceInputErrorMessage = useCallback(
+      (error: string) => {
+        switch (error) {
+          case 'audio-capture':
+            return t('No microphone was found on this device.')
+          case 'language-not-supported':
+            return t('Voice input language is not supported.')
+          case 'network':
+            return t('Voice input failed. Please check your connection and try again.')
+          case 'no-speech':
+            return t('No speech was detected. Please try again.')
+          case 'not-allowed':
+          case 'service-not-allowed':
+            return t('Microphone access was denied. Please allow microphone access and try again.')
+          default:
+            return t('Voice input failed. Please try again.')
+        }
+      },
+      [t]
+    )
+
+    const handleVoiceInputToggle = useCallback(() => {
+      if (isVoiceInputListening) {
+        stopVoiceInput()
+        return
+      }
+
+      const recognitionConstructor =
+        typeof window !== 'undefined' ? getSpeechRecognitionConstructor(window as VoiceInputWindow) : null
+      if (!recognitionConstructor) {
+        toastActions.add(t('Voice input is not supported in this browser.'))
+        return
+      }
+
+      try {
+        const recognition = new recognitionConstructor()
+        voiceBaseTextRef.current = messageInput
+        voiceFinalTranscriptRef.current = ''
+        recognition.continuous = true
+        recognition.interimResults = true
+        recognition.lang = resolveVoiceInputLanguage(
+          language,
+          typeof navigator !== 'undefined' ? navigator.language : undefined
+        )
+        recognition.onresult = (event) => {
+          const { finalTranscript, interimTranscript } = readSpeechRecognitionTranscript(event)
+          if (finalTranscript) {
+            voiceFinalTranscriptRef.current = appendVoiceTranscript(voiceFinalTranscriptRef.current, finalTranscript)
+          }
+          const nextTranscript = appendVoiceTranscript(voiceFinalTranscriptRef.current, interimTranscript)
+          setMessageInput(appendVoiceTranscript(voiceBaseTextRef.current, nextTranscript))
+        }
+        recognition.onerror = (event) => {
+          if (event.error !== 'aborted') {
+            toastActions.add(getVoiceInputErrorMessage(event.error))
+          }
+          setIsVoiceInputListening(false)
+          voiceRecognitionRef.current = null
+        }
+        recognition.onend = () => {
+          setIsVoiceInputListening(false)
+          voiceRecognitionRef.current = null
+          dom.focusMessageInput()
+        }
+        recognition.start()
+        voiceRecognitionRef.current = recognition
+        setIsVoiceInputListening(true)
+        dom.focusMessageInput()
+      } catch (error) {
+        console.error('Failed to start voice input', error)
+        toastActions.add(t('Voice input failed. Please try again.'))
+        setIsVoiceInputListening(false)
+        voiceRecognitionRef.current = null
+      }
+    }, [getVoiceInputErrorMessage, isVoiceInputListening, language, messageInput, setMessageInput, stopVoiceInput, t])
+
     const { addInputBoxHistory, getPreviousHistoryInput, getNextHistoryInput, resetHistoryIndex } = useInputBoxHistory()
 
     const closeSelectModelErrorTipCb = useRef<NodeJS.Timeout>()
     const handleSubmit = async (needGenerating = true) => {
+      if (isVoiceInputListening) {
+        stopVoiceInput()
+      }
       if (disableSubmit || generating || isSubmitting || isPreprocessing) {
         return
       }
@@ -499,7 +656,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               },
               message: undefined,
             })
-            setShowRollbackThreadButton(false)
             if (platform.type !== 'mobile' && messageTextForHistory) {
               addInputBoxHistory(messageTextForHistory)
             }
@@ -576,20 +732,6 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             setTimeout(() => inputRef.current?.select(), 10)
           }
         }
-      }
-    }
-
-    const startNewThread = () => {
-      const res = onStartNewThread?.()
-      if (res) {
-        setShowRollbackThreadButton(true)
-      }
-    }
-
-    const rollbackThread = () => {
-      const res = onRollbackThread?.()
-      if (res) {
-        setShowRollbackThreadButton(false)
       }
     }
 
@@ -881,7 +1023,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     return (
       <Box pt={0} pb={isSmallScreen ? 'md' : 'sm'} px="sm" id={dom.InputBoxID} {...getRootProps()}>
         <input className="hidden" {...getInputProps()} />
-        <Stack className={cn(widthFull ? 'w-full' : 'max-w-4xl mx-auto')} gap="xs">
+        <Stack ref={composerContainerRef} className={cn(widthFull ? 'w-full' : 'max-w-4xl mx-auto')} gap="xs">
           {currentSessionId && <CompactionStatus sessionId={currentSessionId} />}
           <Stack
             className={cn(
@@ -1019,7 +1161,13 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             )}
 
             {/* Toolbar Row */}
-            <Flex align="center" gap={0} className="shrink-0 w-full" justify="space-between">
+            <Flex
+              align={isCompactComposer ? 'stretch' : 'center'}
+              gap={isCompactComposer ? 4 : 0}
+              className="shrink-0 w-full"
+              justify="space-between"
+              wrap={isCompactComposer ? 'wrap' : 'nowrap'}
+            >
               {/* Hidden file inputs */}
               <ImageUploadInput ref={pictureInputRef} onChange={onFileInputChange} />
               <input
@@ -1032,8 +1180,9 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               />
 
               {/* Left Group: Tool Buttons */}
-              <Flex align="center" gap={0}>
+              <Flex align="center" gap={0} wrap={isCompactComposer ? 'wrap' : 'nowrap'} className={cn(isCompactComposer && 'w-full')}>
                 <AttachmentMenu
+                  compact={isCompactComposer}
                   onImageUploadClick={onImageUploadClick}
                   onFileUploadClick={onFileUploadClick}
                   handleAttachLink={handleAttachLink}
@@ -1063,7 +1212,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   </MCPMenu>
                 )}
 
-                {featureFlags.knowledgeBase && !isSmallScreen && (
+                {featureFlags.knowledgeBase && !isCompactComposer && (
                   <KnowledgeBaseMenu currentKnowledgeBaseId={knowledgeBase?.id} onSelect={handleKnowledgeBaseSelect}>
                     <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
                       <IconVocabulary
@@ -1077,7 +1226,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   </KnowledgeBaseMenu>
                 )}
 
-                <Tooltip label={t('Web Search')} position="top" withArrow disabled={isSmallScreen}>
+                <Tooltip label={t('Web Search')} position="top" withArrow disabled={isCompactComposer}>
                   <UnstyledButton
                     onClick={() => {
                       setWebBrowsingMode(!webBrowsingMode)
@@ -1095,54 +1244,70 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   </UnstyledButton>
                 </Tooltip>
 
-                {!isSmallScreen &&
-                  (showRollbackThreadButton ? (
-                    <Tooltip label={t('Rollback Thread')} position="top" withArrow>
-                      <UnstyledButton
-                        onClick={rollbackThread}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors"
-                      >
-                        <IconArrowBackUp
-                          size={toolbarIconSize}
-                          strokeWidth={1.8}
-                          className="text-[var(--chatbox-tint-secondary)]"
-                        />
-                      </UnstyledButton>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip label={t('New Thread')} position="top" withArrow>
-                      <UnstyledButton
-                        onClick={startNewThread}
-                        disabled={!onStartNewThread}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors disabled:opacity-50"
-                      >
-                        <IconFilePencil
-                          size={toolbarIconSize}
-                          strokeWidth={1.8}
-                          className="text-[var(--chatbox-tint-secondary)]"
-                        />
-                      </UnstyledButton>
-                    </Tooltip>
-                  ))}
-
-                {!isSmallScreen && (
-                  <Tooltip label={t('Conversation Settings')} position="top" withArrow>
+                {!isCompactComposer && (
+                  <Tooltip
+                    label={t('Conversation Mode and Settings')}
+                    position="top"
+                    withArrow
+                    opened={conversationModeHintActive ? conversationModeHintVisible : undefined}
+                  >
                     <UnstyledButton
-                      onClick={onClickSessionSettings}
+                      onClick={handleConversationModeClick}
                       disabled={!onClickSessionSettings}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors disabled:opacity-50"
+                      className={cn(
+                        'flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-700 disabled:opacity-50',
+                        conversationModeHintVisible
+                          ? 'bg-[var(--chatbox-background-tertiary)] ring-1 ring-[var(--chatbox-tint-brand)] shadow-[0_0_0_4px_rgba(59,130,246,0.12)] scale-[1.03]'
+                          : 'hover:bg-[var(--chatbox-background-tertiary)]'
+                      )}
                     >
                       <IconAdjustmentsHorizontal
                         size={toolbarIconSize}
                         strokeWidth={1.8}
-                        className="text-[var(--chatbox-tint-secondary)]"
+                        className={
+                          conversationModeHintVisible
+                            ? 'text-[var(--chatbox-tint-brand)]'
+                            : 'text-[var(--chatbox-tint-secondary)]'
+                        }
                       />
                     </UnstyledButton>
                   </Tooltip>
                 )}
 
+                <Tooltip
+                  label={
+                    voiceInputSupported
+                      ? isVoiceInputListening
+                        ? t('Stop Voice Input')
+                        : t('Voice Input')
+                      : t('Voice input is not supported in this browser.')
+                  }
+                  position="top"
+                  withArrow
+                  disabled={isCompactComposer}
+                >
+                  <UnstyledButton
+                    onClick={handleVoiceInputToggle}
+                    disabled={!voiceInputSupported}
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded-lg transition-colors disabled:opacity-50',
+                      isVoiceInputListening
+                        ? 'bg-[var(--chatbox-background-tertiary)]'
+                        : 'hover:bg-[var(--chatbox-background-tertiary)]'
+                    )}
+                  >
+                    <IconMicrophone
+                      size={toolbarIconSize}
+                      strokeWidth={1.8}
+                      className={cn(
+                        isVoiceInputListening ? 'text-red-500 animate-pulse' : 'text-[var(--chatbox-tint-secondary)]'
+                      )}
+                    />
+                  </UnstyledButton>
+                </Tooltip>
+
                 {/* Mobile: Settings menu */}
-                {isSmallScreen && (
+                {isCompactComposer && (
                   <Menu
                     trigger="click"
                     openDelay={100}
@@ -1163,14 +1328,11 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       </UnstyledButton>
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Item leftSection={<ScalableIcon icon={IconPlus} size={16} />} onClick={startNewThread}>
-                        {t('New Thread')}
-                      </Menu.Item>
                       <Menu.Item
                         leftSection={<ScalableIcon icon={IconAdjustmentsHorizontal} size={16} />}
-                        onClick={onClickSessionSettings}
+                        onClick={handleConversationModeClick}
                       >
-                        {t('Conversation Settings')}
+                        {t('Conversation Mode and Settings')}
                       </Menu.Item>
                     </Menu.Dropdown>
                   </Menu>
@@ -1178,7 +1340,11 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               </Flex>
 
               {/* Right Group: Token Count + Model Selector */}
-              <Flex align="center" gap={0}>
+              <Flex
+                align="center"
+                gap={0}
+                className={cn(isCompactComposer && 'w-full justify-between pt-1')}
+              >
                 <TokenCountMenu
                   currentInputTokens={currentInputTokens}
                   contextTokens={contextTokens}
@@ -1207,7 +1373,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     <Text span size="xs" className="whitespace-nowrap" c="inherit">
                       {isCalculating ? '~' : ''}
                       {formatNumber(totalTokens)}
-                      {tokenPercentage !== null && tokenPercentage > 10 && ` (${tokenPercentage}%)`}
+                      {!isCompactComposer && tokenPercentage !== null && tokenPercentage > 10 && ` (${tokenPercentage}%)`}
                     </Text>
                   </Flex>
                 </TokenCountMenu>
@@ -1242,7 +1408,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                         size="sm"
                         className={cn(
                           'text-[var(--chatbox-tint-secondary)] truncate',
-                          isSmallScreen ? 'max-w-[100px]' : 'max-w-[160px]'
+                          isCompactComposer ? 'max-w-[88px]' : 'max-w-[160px]'
                         )}
                       >
                         {modelSelectorDisplayText}
@@ -1272,17 +1438,17 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
 
 // Reusable attachment menu component with lightweight style
 const AttachmentMenu: React.FC<{
+  compact: boolean
   onImageUploadClick: () => void
   onFileUploadClick: () => void
   handleAttachLink: () => void
   t: (key: string) => string
-}> = ({ onImageUploadClick, onFileUploadClick, handleAttachLink, t }) => {
-  const isSmallScreen = useIsSmallScreen()
-  const toolbarIconSize = isSmallScreen ? 22 : 18
+}> = ({ compact, onImageUploadClick, onFileUploadClick, handleAttachLink, t }) => {
+  const toolbarIconSize = compact ? 22 : 18
   return (
     <Menu
       shadow="md"
-      trigger={isSmallScreen ? 'click' : 'hover'}
+      trigger={compact ? 'click' : 'hover'}
       position="top-start"
       openDelay={100}
       closeDelay={100}

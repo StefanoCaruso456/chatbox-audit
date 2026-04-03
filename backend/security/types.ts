@@ -10,6 +10,23 @@ import type {
 } from '@shared/contracts/v1'
 import type { BackendFailureResult, BackendResult } from '../errors'
 import type { AppRegistryRecord } from '../registry/types'
+import type { AppReviewState } from './submission-package'
+
+export type AppReviewDecisionAction =
+  | 'start-review'
+  | 'approve-staging'
+  | 'approve-production'
+  | 'request-remediation'
+  | 'reject'
+  | 'suspend'
+
+export interface AppRemediationItem {
+  code: string
+  summary: string
+  recommendation?: string
+  field?: string
+  blocking: boolean
+}
 
 export interface AppSecurityReviewRecord {
   appReviewRecordId: string
@@ -17,6 +34,10 @@ export interface AppSecurityReviewRecord {
   appVersionId?: string
   reviewedByUserId?: string
   reviewStatus: AppReviewStatus
+  reviewState?: AppReviewState
+  decisionAction?: AppReviewDecisionAction
+  decisionSummary?: string
+  remediationItems?: AppRemediationItem[]
   ageRating: AppAgeRating
   dataAccessLevel: AppDataAccessLevel
   permissionsSnapshot: string[]
@@ -32,6 +53,10 @@ export interface RecordAppSecurityReviewRequest {
   appVersionId?: string
   reviewedByUserId?: string
   reviewStatus: AppReviewStatus
+  reviewState?: AppReviewState
+  decisionAction?: AppReviewDecisionAction
+  decisionSummary?: string
+  remediationItems?: AppRemediationItem[]
   ageRating: AppAgeRating
   dataAccessLevel: AppDataAccessLevel
   permissionsSnapshot: string[]
@@ -53,11 +78,65 @@ export interface AppSecurityReviewTransition {
   reason: string
 }
 
+export interface AppReviewQueueItem {
+  appId: string
+  appVersionId: string
+  name: string
+  slug: string
+  category: string
+  distribution: AppDistribution
+  authType: AppAuthType
+  reviewState: AppReviewState
+  runtimeReviewStatus: AppReviewStatus
+  submittedAt?: string
+  reviewedByUserId?: string
+  reviewerNotes?: string
+}
+
+export interface GetAppReviewContextRequest {
+  appId: string
+  appVersionId?: string
+}
+
+export interface AppReviewContext {
+  app: AppRegistryRecord
+  reviews: AppSecurityReviewRecord[]
+}
+
+export interface StartAppReviewRequest {
+  appId: string
+  appVersionId?: string
+  reviewedByUserId?: string
+  notes?: string
+}
+
+export interface RecordReviewerDecisionRequest {
+  appId: string
+  appVersionId?: string
+  reviewedByUserId: string
+  action: Exclude<AppReviewDecisionAction, 'start-review'>
+  decisionSummary: string
+  notes?: string
+  ageRating: AppAgeRating
+  dataAccessLevel: AppDataAccessLevel
+  permissionsSnapshot: string[]
+  remediationItems?: AppRemediationItem[]
+  metadata?: JsonObject
+}
+
+export interface RecordReviewerDecisionResult {
+  app: AppRegistryRecord
+  review: AppSecurityReviewRecord
+}
+
 export type AppSecurityErrorCode =
   | 'invalid-request'
   | 'review-not-found'
   | 'invalid-review-transition'
+  | 'invalid-review-state-transition'
   | 'review-already-final'
+  | 'app-not-found'
+  | 'app-version-not-found'
   | 'empty-origin-set'
   | 'unsafe-wildcard-usage'
   | 'origin-not-allowed'
