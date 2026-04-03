@@ -60,6 +60,7 @@ import { ReasoningContentUI, ToolCallPartUI } from '../message-parts/ToolCallPar
 import { MessageAttachmentGrid } from './MessageAttachmentGrid'
 import MessageErrTips from './MessageErrTips'
 import MessageStatuses from './MessageLoading'
+import { getMessageLayoutMeta } from './message-layout'
 
 function getEmbeddedAppLifecycleMeta(part: MessageEmbeddedAppPart) {
   if (part.bridge?.completion) {
@@ -378,6 +379,7 @@ const _Message: FC<Props> = (props) => {
     ]
   )
   const [actionMenuOpened, setActionMenuOpened] = useState(false)
+  const layout = getMessageLayoutMeta(msg)
 
   return (
     <Box
@@ -401,7 +403,7 @@ const _Message: FC<Props> = (props) => {
         },
       }}
     >
-      <Grid container wrap="nowrap" spacing={1.5}>
+      <Grid container wrap="nowrap" spacing={1.5} direction={layout.rowDirection} justifyContent={layout.rowJustify}>
         <Grid item>
           <Box className={cn('relative', msg.role !== 'assistant' ? 'mt-1' : 'mt-2')}>
             {
@@ -426,14 +428,22 @@ const _Message: FC<Props> = (props) => {
             )}
           </Box>
         </Grid>
-        <Grid item xs sm container sx={{ width: '0px', paddingRight: '15px' }}>
-          <Grid item xs>
+        <Grid
+          item
+          xs={layout.isUserMessage ? undefined : true}
+          sm={layout.isUserMessage ? undefined : true}
+          sx={{
+            width: layout.isUserMessage ? 'auto' : '0px',
+            maxWidth: layout.contentMaxWidth,
+            paddingRight: layout.isUserMessage ? 0 : '15px',
+            paddingLeft: layout.isUserMessage ? '15px' : 0,
+            minWidth: 0,
+          }}
+        >
+          <Flex direction="column" align={layout.contentAlign}>
             <MessageStatuses statuses={msg.status} />
             <div
-              className={cn(
-                'max-w-full inline-block',
-                msg.role !== 'assistant' ? 'bg-chatbox-background-secondary px-4 rounded-lg' : 'w-full'
-              )}
+              className={cn(layout.bubbleClassName)}
             >
               <Box
                 className={cn('msg-content', { 'msg-content-small': small })}
@@ -590,13 +600,18 @@ const _Message: FC<Props> = (props) => {
                 <Text c="chatbox-tertiary">{tips.join(', ')}</Text>
               )}
             </div>
-            {(msg.files || msg.links) && <MessageAttachmentGrid files={msg.files} links={msg.links} />}
+            {(msg.files || msg.links) && (
+              <div className={cn(layout.attachmentWrapperClassName)}>
+                <MessageAttachmentGrid files={msg.files} links={msg.links} />
+              </div>
+            )}
 
             {/* actions */}
             {buttonGroup !== 'none' && !msg.generating && (
               <Flex
                 gap={0}
                 m="4px -4px -4px -4px"
+                justify={layout.actionsJustify}
                 className={clsx(
                   'group-hover/message:opacity-100 opacity-0 transition-opacity',
                   actionMenuOpened || buttonGroup === 'always' ? 'opacity-100' : '',
@@ -651,7 +666,7 @@ const _Message: FC<Props> = (props) => {
                 </Flex>
               </Flex>
             )}
-          </Grid>
+          </Flex>
         </Grid>
       </Grid>
     </Box>
