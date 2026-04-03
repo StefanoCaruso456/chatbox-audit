@@ -497,14 +497,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     }
 
     postRuntimeHandshake(false)
-  }, [
-    hasLoaded,
-    normalizedSrc,
-    originValidation?.valid,
-    postRuntimeHandshake,
-    props.runtime,
-    runtimeGuardError,
-  ])
+  }, [hasLoaded, normalizedSrc, originValidation?.valid, postRuntimeHandshake, props.runtime, runtimeGuardError])
 
   useEffect(() => {
     if (!hasLoaded || !props.runtime || runtimeGuardError || hasRuntimeResponse) {
@@ -524,7 +517,14 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     return () => {
       clearHandshakeReplayTimers()
     }
-  }, [clearHandshakeReplayTimers, hasLoaded, hasRuntimeResponse, postRuntimeHandshake, props.runtime, runtimeGuardError])
+  }, [
+    clearHandshakeReplayTimers,
+    hasLoaded,
+    hasRuntimeResponse,
+    postRuntimeHandshake,
+    props.runtime,
+    runtimeGuardError,
+  ])
 
   const effectiveState: EmbeddedAppHostState = runtimeGuardError ? 'error' : !normalizedSrc ? 'error' : displayState
   const statusCopy = getEmbeddedAppStatusCopy(effectiveState)
@@ -540,7 +540,9 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     runtimeErrorMessage ||
     props.errorMessage ||
     'The embedded app could not be loaded. Retry the launch or continue the conversation in chat.'
-  const shouldHideOverlay = hasLoaded && (effectiveState === 'ready' || effectiveState === 'complete') && !hasError
+  const shouldRevealIframe = hasLoaded && !hasError
+  const shouldShowLoadingOverlay = !shouldRevealIframe && !hasError
+  const shouldShowErrorOverlay = hasError && !showRecoveryPanel
 
   return (
     <Paper
@@ -624,8 +626,8 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
               sandbox={buildEmbeddedAppSandbox(props.sandbox)}
               allow={props.allow}
               className={cn('absolute inset-0 h-full w-full border-0 transition-opacity duration-300', {
-                'opacity-100': shouldHideOverlay,
-                'opacity-0': !shouldHideOverlay,
+                'opacity-100': shouldRevealIframe,
+                'opacity-0': !shouldRevealIframe,
               })}
               onLoad={() => {
                 setHasLoaded(true)
@@ -683,7 +685,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
                 </Group>
               </Stack>
             </Box>
-          ) : !shouldHideOverlay ? (
+          ) : shouldShowErrorOverlay || shouldShowLoadingOverlay ? (
             <Box
               data-testid="embedded-app-host-overlay"
               className="absolute inset-0 flex items-center justify-center p-5"
