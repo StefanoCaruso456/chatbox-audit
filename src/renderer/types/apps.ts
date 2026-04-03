@@ -15,6 +15,13 @@ export type AppCategory =
 export type LaunchMode = 'iframe' | 'external'
 export type AppEmbedStatus = 'verified' | 'needs-district-url'
 export type AppExperience = 'approved-library' | 'tutormeai-runtime'
+export type AppIntegrationMode =
+  | 'runtime'
+  | 'partner-embed'
+  | 'api-adapter'
+  | 'district-adapter'
+  | 'browser-session'
+  | 'native-replacement'
 
 export interface ApprovedAppRuntimeBridge {
   appId: string
@@ -39,6 +46,7 @@ export interface ApprovedApp {
   gradeRanges: GradeRange[]
   launchUrl: string
   launchMode: LaunchMode
+  integrationMode: AppIntegrationMode
   embedStatus?: AppEmbedStatus
   isApproved: boolean
   tags: string[]
@@ -61,6 +69,33 @@ export const APP_CATEGORY_OPTIONS: AppCategory[] = [
   'Study, Assessment & Engagement',
   'Creativity, Coding & Projects',
 ]
+
+export const appIntegrationModeMeta: Record<AppIntegrationMode, { label: string; description: string }> = {
+  runtime: {
+    label: 'Runtime',
+    description: 'ChatBridge-hosted app runtime with a structured postMessage bridge.',
+  },
+  'partner-embed': {
+    label: 'Partner Embed',
+    description: 'Vendor-approved widget, embed, or SDK rendered inside the ChatBridge surface.',
+  },
+  'api-adapter': {
+    label: 'API Adapter',
+    description: 'ChatBridge-owned UI backed by vendor APIs and OAuth where needed.',
+  },
+  'district-adapter': {
+    label: 'District Adapter',
+    description: 'School-managed integration that depends on district URLs, LMS launch, or LTI-like setup.',
+  },
+  'browser-session': {
+    label: 'Browser Session',
+    description: 'Controlled in-product browser surface for vendors that block standard iframe embedding.',
+  },
+  'native-replacement': {
+    label: 'Native Replacement',
+    description: 'Focused ChatBridge-native experience that recreates the needed workflow instead of embedding it.',
+  },
+}
 
 export const gradeRangeMeta: Record<GradeRange, { label: string; shortLabel: string; description: string }> = {
   'Pre-K-2': {
