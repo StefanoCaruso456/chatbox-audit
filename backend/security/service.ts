@@ -5,6 +5,7 @@ import { buildAppLaunchOriginPolicy, buildAppManifestLaunchPolicy, buildAppSecur
 import type {
   AppLaunchabilityDecision,
   AppLaunchabilityRequest,
+  AppReviewerAccessContext,
   AppSecurityFailure,
   AppSecurityRepository,
   AppSecurityResult,
@@ -17,22 +18,30 @@ import type {
 
 export interface AppSecurityServiceOptions {
   now?: () => string
+  getReviewerAccess?: (userId: string) => Promise<AppReviewerAccessContext | undefined>
 }
 
 export class AppSecurityService {
   private readonly now: () => string
+  private readonly getReviewerAccess?: (userId: string) => Promise<AppReviewerAccessContext | undefined>
 
   constructor(
     private readonly repository: AppSecurityRepository,
     options: AppSecurityServiceOptions = {}
   ) {
     this.now = options.now ?? (() => new Date().toISOString())
+    this.getReviewerAccess = options.getReviewerAccess
   }
 
   async recordReview(request: RecordAppSecurityReviewRequest): Promise<AppSecurityResult<AppSecurityReviewRecord>> {
     const normalized = this.normalizeReviewRequest(request)
     if (!normalized.ok) {
       return normalized
+    }
+
+    const reviewerAccess = await this.resolveReviewerAccess(normalized.value.reviewedByUserId, normalized.value.reviewStatus)
+    if (!reviewerAccess.ok) {
+      return reviewerAccess
     }
 
     const latest = await this.repository.getLatestReview({
@@ -61,6 +70,7 @@ export class AppSecurityService {
       appId: normalized.value.appId,
       appVersionId: normalized.value.appVersionId,
       reviewedByUserId: normalized.value.reviewedByUserId,
+      reviewedByRole: reviewerAccess.value?.role,
       reviewStatus: normalized.value.reviewStatus,
       ageRating: normalized.value.ageRating,
       dataAccessLevel: normalized.value.dataAccessLevel,
@@ -105,6 +115,44 @@ export class AppSecurityService {
     return {
       ok: true,
       value: this.syncRegistryRecordWithReview(request.app, review),
+    }
+  }
+
+  private async resolveReviewerAccess(
+    reviewedByUserId: string | undefined,
+    reviewStatus: AppSecurityReviewRecord['reviewStatus']
+  ): Promise<AppSecurityResult<AppReviewerAccessContext | undefined>> {
+    if (!this.getReviewerAccess) {
+      return { ok: true, value: undefined }
+    }
+
+    if (!reviewedByUserId) {
+      return this.failure('reviewer-not-authorized', 'A stored reviewer role is required to record app reviews.')
+    }
+
+    const reviewerAccess = await this.getReviewerAccess(reviewedByUserId)
+    if (!reviewerAccess) {
+      return this.failure(
+        'reviewer-not-authorized',
+        `User "${reviewedByUserId}" does not have a reviewer profile with role-based safety permissions.`
+      )
+    }
+
+    const hasPermission =
+      (reviewStatus === 'pending' && reviewerAccess.permissions.canStartAppReview) ||
+      (reviewStatus === 'approved' && reviewerAccess.permissions.canApproveApp) ||
+      (reviewStatus === 'blocked' && reviewerAccess.permissions.canBlockApp)
+
+    if (!hasPermission) {
+      return this.failure(
+        'reviewer-not-authorized',
+        `Role "${reviewerAccess.role}" cannot record a "${reviewStatus}" app review decision.`
+      )
+    }
+
+    return {
+      ok: true,
+      value: reviewerAccess,
     }
   }
 

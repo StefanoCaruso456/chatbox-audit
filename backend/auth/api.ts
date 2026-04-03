@@ -1,8 +1,16 @@
-import { IdentifierSchema, JsonObjectSchema } from '@shared/contracts/v1'
+import { IdentifierSchema, JsonObjectSchema, TutorMeAIUserRoleSchema } from '@shared/contracts/v1'
 import { z } from 'zod'
 import { failureResult, toApiErrorBody } from '../errors'
-import type { OAuthAuthService, PlatformAuthService } from './service'
-import type { OAuthAuthFailure, OAuthAuthResult, OAuthProviderAdapter, PlatformAuthFailure, PlatformAuthResult } from './types'
+import type { OAuthAuthService, PlatformAuthService, PlatformUserProfileService } from './service'
+import type {
+  OAuthAuthFailure,
+  OAuthAuthResult,
+  OAuthProviderAdapter,
+  PlatformAuthFailure,
+  PlatformAuthResult,
+  UserProfileFailure,
+  UserProfileResult,
+} from './types'
 
 const BooleanQuerySchema = z.enum(['true', 'false']).transform((value) => value === 'true')
 
@@ -54,6 +62,17 @@ const RevokePlatformSessionBodySchema = z
       })
     }
   })
+
+const PlatformUserProfileParamsSchema = z.object({
+  userId: IdentifierSchema,
+})
+
+const UpsertPlatformUserProfileBodySchema = z.object({
+  displayName: z.string().trim().min(1),
+  email: z.union([z.string().trim().email(), z.literal(''), z.null()]).optional(),
+  role: TutorMeAIUserRoleSchema,
+  metadata: JsonObjectSchema.optional(),
+})
 
 const StartOAuthConnectionBodySchema = z.object({
   userId: IdentifierSchema,
@@ -127,6 +146,8 @@ export const AuthApiRoutes = {
   platformSessionsValidate: '/api/auth/platform/sessions/validate',
   platformSessionsRefresh: '/api/auth/platform/sessions/refresh',
   platformSessionsRevoke: '/api/auth/platform/sessions/revoke',
+  platformUserProfile: '/api/auth/platform/users/:userId/profile',
+  platformUserPermissions: '/api/auth/platform/users/:userId/permissions',
   oauthStart: '/api/auth/oauth/start',
   oauthCallback: '/api/auth/oauth/callback',
   oauthRefresh: '/api/auth/oauth/refresh',
@@ -138,6 +159,7 @@ export const AuthApiRoutes = {
 export type AuthApiErrorCode =
   | PlatformAuthFailure['code']
   | OAuthAuthFailure['code']
+  | UserProfileFailure['code']
   | 'invalid-json'
   | 'invalid-query'
   | 'invalid-route-params'
@@ -169,6 +191,7 @@ export interface GetOAuthConnectionRouteParams {
 export function createAuthApi(
   platformAuthService: PlatformAuthService,
   oauthAuthService: OAuthAuthService,
+  platformUserProfileService: PlatformUserProfileService,
   options: AuthApiOptions = {}
 ) {
   const oauthAdapters = options.oauthAdapters ?? {}
@@ -211,6 +234,78 @@ export function createAuthApi(
       }
 
       const result = await platformAuthService.revokePlatformSession(parsedBody.data)
+      return toAuthResponse(result, 200)
+    },
+
+    getPlatformUserProfile: async (
+      _request: Request,
+      params: { userId?: string } = {}
+    ): Promise<Response> => {
+      const parsedParams = PlatformUserProfileParamsSchema.safeParse(params)
+      if (!parsedParams.success) {
+        return jsonResponse<AuthApiErrorBody>(
+          400,
+          toApiErrorBody(
+            failureResult('api', 'invalid-route-params', 'Platform user profile route params are invalid.', {
+              details: parsedParams.error.issues.map((issue) => issue.message),
+            })
+          )
+        )
+      }
+
+      const result = await platformUserProfileService.getUserProfile(parsedParams.data.userId)
+      return toAuthResponse(result, 200)
+    },
+
+    upsertPlatformUserProfile: async (
+      request: Request,
+      params: { userId?: string } = {}
+    ): Promise<Response> => {
+      const parsedParams = PlatformUserProfileParamsSchema.safeParse(params)
+      if (!parsedParams.success) {
+        return jsonResponse<AuthApiErrorBody>(
+          400,
+          toApiErrorBody(
+            failureResult('api', 'invalid-route-params', 'Platform user profile route params are invalid.', {
+              details: parsedParams.error.issues.map((issue) => issue.message),
+            })
+          )
+        )
+      }
+
+      const parsedBody = await parseJsonBody(request, UpsertPlatformUserProfileBodySchema)
+      if (!parsedBody.ok) {
+        return parsedBody.response
+      }
+
+      const result = await platformUserProfileService.upsertUserProfile({
+        userId: parsedParams.data.userId,
+        displayName: parsedBody.data.displayName,
+        email: parsedBody.data.email,
+        role: parsedBody.data.role,
+        metadata: parsedBody.data.metadata,
+      })
+
+      return toAuthResponse(result, 200)
+    },
+
+    getPlatformUserPermissions: async (
+      _request: Request,
+      params: { userId?: string } = {}
+    ): Promise<Response> => {
+      const parsedParams = PlatformUserProfileParamsSchema.safeParse(params)
+      if (!parsedParams.success) {
+        return jsonResponse<AuthApiErrorBody>(
+          400,
+          toApiErrorBody(
+            failureResult('api', 'invalid-route-params', 'Platform user permissions route params are invalid.', {
+              details: parsedParams.error.issues.map((issue) => issue.message),
+            })
+          )
+        )
+      }
+
+      const result = await platformUserProfileService.getUserPermissions(parsedParams.data.userId)
       return toAuthResponse(result, 200)
     },
 
@@ -430,7 +525,7 @@ function searchParamsToObject(searchParams: URLSearchParams): Record<string, str
 }
 
 function toAuthResponse<T>(
-  result: PlatformAuthResult<T> | OAuthAuthResult<T>,
+  result: PlatformAuthResult<T> | OAuthAuthResult<T> | UserProfileResult<T>,
   successStatus: number
 ): Response {
   if (result.ok) {
@@ -452,6 +547,7 @@ function statusForFailure(code: AuthApiErrorCode): number {
       return 400
     case 'platform-session-not-found':
     case 'oauth-connection-not-found':
+    case 'profile-not-found':
       return 404
     case 'platform-session-revoked':
     case 'platform-session-expired':
@@ -463,6 +559,7 @@ function statusForFailure(code: AuthApiErrorCode): number {
       return 501
     case 'platform-session-refresh-invalid':
     case 'platform-session-invalid-token':
+    case 'profile-email-conflict':
     case 'oauth-connection-not-pending':
     case 'oauth-connection-missing-refresh-token':
     case 'oauth-connection-missing-code-verifier':

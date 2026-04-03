@@ -10,7 +10,9 @@ import {
   IconFileText,
   IconKeyboard,
   IconMessages,
+  IconSchool,
   IconSparkles,
+  IconShieldCheck,
   IconWorldWww,
 } from '@tabler/icons-react'
 import { createFileRoute, Link, Outlet, useCanGoBack, useRouter, useRouterState } from '@tanstack/react-router'
@@ -26,6 +28,16 @@ import platform from '@/platform'
 import { featureFlags } from '@/utils/feature-flags'
 
 const ITEMS = [
+  {
+    key: 'tutormeai-profile',
+    label: 'TutorMeAI Profile',
+    icon: <IconSchool className="w-full h-full" />,
+  },
+  {
+    key: 'tutormeai-reviews',
+    label: 'TutorMeAI Reviews',
+    icon: <IconShieldCheck className="w-full h-full" />,
+  },
   {
     key: 'chatbox-ai',
     label: 'Chatbox AI',

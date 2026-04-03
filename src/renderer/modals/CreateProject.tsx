@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AdaptiveModal } from '@/components/common/AdaptiveModal'
 import { useProjects } from '@/hooks/useProjects'
+import { useUIStore } from '@/stores/uiStore'
 
 function getProjectErrorMessage(error: unknown, t: (key: string) => string) {
   if (error instanceof Error) {
@@ -21,6 +22,7 @@ const CreateProject = NiceModal.create(() => {
   const modal = useModal()
   const { t } = useTranslation()
   const { createProject } = useProjects()
+  const triggerConversationModeHint = useUIStore((s) => s.triggerConversationModeHint)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
 
@@ -39,6 +41,7 @@ const CreateProject = NiceModal.create(() => {
   const onSubmit = () => {
     try {
       const project = createProject(name)
+      triggerConversationModeHint()
       modal.resolve(project)
       modal.hide()
     } catch (err) {

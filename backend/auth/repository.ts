@@ -1,10 +1,15 @@
 import type {
   GetOAuthConnectionRequest,
   OAuthConnectionRecord,
+  PlatformUserProfileRecord,
   PlatformSessionRecord,
 } from './types'
 
 export interface AuthRepository {
+  savePlatformUserProfile(profile: PlatformUserProfileRecord): Promise<void>
+  getPlatformUserProfileById(userId: string): Promise<PlatformUserProfileRecord | undefined>
+  getPlatformUserProfileByEmail(email: string): Promise<PlatformUserProfileRecord | undefined>
+
   savePlatformSession(session: PlatformSessionRecord): Promise<void>
   getPlatformSessionById(platformSessionId: string): Promise<PlatformSessionRecord | undefined>
   getPlatformSessionBySessionTokenHash(sessionTokenHash: string): Promise<PlatformSessionRecord | undefined>
@@ -19,11 +24,15 @@ export interface AuthRepository {
 }
 
 export interface InMemoryAuthRepositoryOptions {
+  initialPlatformUserProfiles?: PlatformUserProfileRecord[]
   initialPlatformSessions?: PlatformSessionRecord[]
   initialOAuthConnections?: OAuthConnectionRecord[]
 }
 
 export class InMemoryAuthRepository implements AuthRepository {
+  private readonly platformUserProfilesById = new Map<string, PlatformUserProfileRecord>()
+  private readonly platformUserIdsByEmail = new Map<string, string>()
+
   private readonly platformSessionsById = new Map<string, PlatformSessionRecord>()
   private readonly platformSessionIdsByTokenHash = new Map<string, string>()
   private readonly platformSessionIdsByRefreshTokenHash = new Map<string, string>()
@@ -35,6 +44,10 @@ export class InMemoryAuthRepository implements AuthRepository {
   private readonly oauthConnectionIdsByUser = new Map<string, Set<string>>()
 
   constructor(options: InMemoryAuthRepositoryOptions = {}) {
+    options.initialPlatformUserProfiles?.forEach((profile) => {
+      void this.savePlatformUserProfile(profile)
+    })
+
     options.initialPlatformSessions?.forEach((session) => {
       void this.savePlatformSession(session)
     })
@@ -42,6 +55,29 @@ export class InMemoryAuthRepository implements AuthRepository {
     options.initialOAuthConnections?.forEach((connection) => {
       void this.saveOAuthConnection(connection)
     })
+  }
+
+  async savePlatformUserProfile(profile: PlatformUserProfileRecord): Promise<void> {
+    const previous = this.platformUserProfilesById.get(profile.userId)
+    if (previous) {
+      this.unindexPlatformUserProfile(previous)
+    }
+
+    const snapshot = clone(profile)
+    this.platformUserProfilesById.set(snapshot.userId, snapshot)
+    if (snapshot.email) {
+      this.platformUserIdsByEmail.set(this.normalizeEmailKey(snapshot.email), snapshot.userId)
+    }
+  }
+
+  async getPlatformUserProfileById(userId: string): Promise<PlatformUserProfileRecord | undefined> {
+    const profile = this.platformUserProfilesById.get(userId)
+    return profile ? clone(profile) : undefined
+  }
+
+  async getPlatformUserProfileByEmail(email: string): Promise<PlatformUserProfileRecord | undefined> {
+    const userId = this.platformUserIdsByEmail.get(this.normalizeEmailKey(email))
+    return userId ? this.getPlatformUserProfileById(userId) : undefined
   }
 
   async savePlatformSession(session: PlatformSessionRecord): Promise<void> {
@@ -129,6 +165,12 @@ export class InMemoryAuthRepository implements AuthRepository {
     return this.getIndexedList(this.oauthConnectionIdsByUser, this.oauthConnectionsById, userId)
   }
 
+  private unindexPlatformUserProfile(profile: PlatformUserProfileRecord) {
+    if (profile.email) {
+      this.platformUserIdsByEmail.delete(this.normalizeEmailKey(profile.email))
+    }
+  }
+
   private unindexPlatformSession(session: PlatformSessionRecord) {
     this.platformSessionIdsByTokenHash.delete(session.sessionTokenHash)
     this.platformSessionIdsByRefreshTokenHash.delete(session.refreshTokenHash)
@@ -145,6 +187,10 @@ export class InMemoryAuthRepository implements AuthRepository {
 
   private userAppProviderKey(userId: string, appId: string, provider: string): string {
     return [userId, appId, provider].join('|')
+  }
+
+  private normalizeEmailKey(email: string): string {
+    return email.trim().toLowerCase()
   }
 
   private addToUserIndex(

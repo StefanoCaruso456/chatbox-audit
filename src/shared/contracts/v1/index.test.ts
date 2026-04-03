@@ -18,13 +18,16 @@ import {
   exampleInternalChessManifest,
   examplePublicFlashcardsManifest,
   exampleToolSchemas,
+  deriveTutorMeAIUserPermissions,
   ToolSchemaSchema,
+  TutorMeAIReviewerAccessContextSchema,
   validateAppManifest,
   validateAppSessionState,
   validateCompletionSignal,
   validateConversationAppContext,
   validateEmbeddedAppMessage,
   validateToolSchema,
+  TutorMeAIUserProfileRecordSchema,
 } from '.'
 
 describe('AppManifestSchema', () => {
@@ -218,6 +221,38 @@ describe('CompletionSignalSchema', () => {
     if (!result.success) {
       expect(result.errors.some((error) => error.includes('completedAt'))).toBe(true)
     }
+  })
+})
+
+describe('TutorMeAI user profile contracts', () => {
+  it('derives reviewer permissions from role without duplicating policy logic in the UI', () => {
+    expect(deriveTutorMeAIUserPermissions('student').canApproveApp).toBe(false)
+    expect(deriveTutorMeAIUserPermissions('teacher').canRequestAppReview).toBe(true)
+    expect(deriveTutorMeAIUserPermissions('school_admin').canApproveApp).toBe(true)
+    expect(deriveTutorMeAIUserPermissions('district_admin').canManageSafetySettings).toBe(true)
+  })
+
+  it('validates stored profile records and reviewer access snapshots', () => {
+    expect(() =>
+      TutorMeAIUserProfileRecordSchema.parse({
+        userId: 'school.admin',
+        displayName: 'School Admin',
+        email: 'admin@school.edu',
+        role: 'school_admin',
+        metadata: {},
+        createdAt: '2026-04-01T12:00:00.000Z',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        deletedAt: null,
+      })
+    ).not.toThrow()
+
+    expect(() =>
+      TutorMeAIReviewerAccessContextSchema.parse({
+        userId: 'district.admin',
+        role: 'district_admin',
+        permissions: deriveTutorMeAIUserPermissions('district_admin'),
+      })
+    ).not.toThrow()
   })
 })
 

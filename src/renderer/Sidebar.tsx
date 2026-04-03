@@ -47,6 +47,7 @@ export default function Sidebar() {
   const setShowSidebar = useUIStore((s) => s.setShowSidebar)
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
   const setOpenSearchDialog = useUIStore((s) => s.setOpenSearchDialog)
+  const triggerConversationModeHint = useUIStore((s) => s.triggerConversationModeHint)
   const { sessionMetaList: sortedSessions } = useSessionList()
   const { projects } = useProjects()
 
@@ -88,13 +89,14 @@ export default function Sidebar() {
   }, [projects, sortedSessions])
 
   const handleCreateNewSession = useCallback(() => {
+    triggerConversationModeHint()
     navigate({ to: `/` })
 
     if (isSmallScreen) {
       setShowSidebar(false)
     }
     trackingEvent('create_new_conversation', { event_category: 'user' })
-  }, [isSmallScreen, navigate, setShowSidebar])
+  }, [isSmallScreen, navigate, setShowSidebar, triggerConversationModeHint])
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {

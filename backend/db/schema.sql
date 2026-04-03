@@ -12,11 +12,13 @@ CREATE TABLE users (
   user_id text PRIMARY KEY,
   email text,
   display_name text NOT NULL,
+  role text NOT NULL DEFAULT 'student',
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   updated_at timestamptz NOT NULL DEFAULT NOW(),
   deleted_at timestamptz,
-  CONSTRAINT users_email_present CHECK (email IS NULL OR LENGTH(TRIM(email)) > 0)
+  CONSTRAINT users_email_present CHECK (email IS NULL OR LENGTH(TRIM(email)) > 0),
+  CONSTRAINT users_role_valid CHECK (role IN ('student', 'teacher', 'school_admin', 'district_admin'))
 );
 
 CREATE UNIQUE INDEX idx_users_email_unique
@@ -175,6 +177,7 @@ CREATE TABLE app_review_records (
   app_id text NOT NULL REFERENCES apps (app_id),
   app_version_id text,
   reviewed_by_user_id text REFERENCES users (user_id),
+  reviewed_by_role text,
   review_status text NOT NULL,
   age_rating text NOT NULL,
   data_access_level text NOT NULL,
@@ -184,6 +187,9 @@ CREATE TABLE app_review_records (
   decided_at timestamptz,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT app_review_records_status_valid CHECK (review_status IN ('pending', 'approved', 'blocked')),
+  CONSTRAINT app_review_records_reviewer_role_valid CHECK (
+    reviewed_by_role IS NULL OR reviewed_by_role IN ('student', 'teacher', 'school_admin', 'district_admin')
+  ),
   CONSTRAINT app_review_records_age_rating_valid CHECK (age_rating IN ('all-ages', '13+', '16+', '18+')),
   CONSTRAINT app_review_records_data_access_valid CHECK (data_access_level IN ('minimal', 'moderate', 'sensitive')),
   CONSTRAINT app_review_records_permissions_is_array CHECK (jsonb_typeof(permissions_snapshot_json) = 'array'),

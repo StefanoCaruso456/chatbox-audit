@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createAuthApi } from './api'
 import { InMemoryAuthRepository } from './repository'
-import { identityTokenCipher, OAuthAuthService, PlatformAuthService } from './service'
+import { identityTokenCipher, OAuthAuthService, PlatformAuthService, PlatformUserProfileService } from './service'
 import type { OAuthProviderAdapter, OAuthProviderConfig } from './types'
 
 const plannerProvider: OAuthProviderConfig = {
@@ -44,17 +44,44 @@ function createFixture() {
   const platformAuth = new PlatformAuthService(repository, {
     now: () => '2026-04-01T12:00:00.000Z',
   })
+  const platformProfiles = new PlatformUserProfileService(repository, {
+    now: () => '2026-04-01T12:00:00.000Z',
+  })
   const oauthAuth = new OAuthAuthService(repository, {
     now: () => '2026-04-01T12:00:00.000Z',
     tokenCipher: identityTokenCipher(),
   })
 
   return {
-    api: createAuthApi(platformAuth, oauthAuth, {
+    api: createAuthApi(platformAuth, oauthAuth, platformProfiles, {
       oauthAdapters: {
         [plannerProvider.provider]: adapter,
       },
     }),
+    profileService: platformProfiles,
+  }
+}
+
+function createProfileFixture() {
+  const repository = new InMemoryAuthRepository()
+  const platformAuth = new PlatformAuthService(repository, {
+    now: () => '2026-04-01T12:00:00.000Z',
+  })
+  const platformProfiles = new PlatformUserProfileService(repository, {
+    now: () => '2026-04-01T12:00:00.000Z',
+  })
+  const oauthAuth = new OAuthAuthService(repository, {
+    now: () => '2026-04-01T12:00:00.000Z',
+    tokenCipher: identityTokenCipher(),
+  })
+
+  return {
+    api: createAuthApi(platformAuth, oauthAuth, platformProfiles, {
+      oauthAdapters: {
+        [plannerProvider.provider]: adapter,
+      },
+    }),
+    profileService: platformProfiles,
   }
 }
 
@@ -146,6 +173,7 @@ describe('AuthApi', () => {
     const api = createAuthApi(
       new PlatformAuthService(repository),
       new OAuthAuthService(repository),
+      new PlatformUserProfileService(repository),
       {
         oauthAdapters: {},
       }
@@ -176,5 +204,40 @@ describe('AuthApi', () => {
         retryable: false,
       },
     })
+  })
+
+  it('stores a platform profile and exposes the derived role permissions through the API surface', async () => {
+    const { api } = createProfileFixture()
+
+    const upsertResponse = await api.upsertPlatformUserProfile(
+      new Request('https://railway.local/api/auth/platform/users/school.admin/profile', {
+        method: 'PUT',
+        headers: {
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          displayName: 'School Admin',
+          email: 'admin@school.edu',
+          role: 'school_admin',
+        }),
+      }),
+      { userId: 'school.admin' }
+    )
+
+    const upsertBody = await readJson(upsertResponse)
+    expect(upsertResponse.status).toBe(200)
+    expect(upsertBody.ok).toBe(true)
+    expect(upsertBody.data.role).toBe('school_admin')
+
+    const permissionsResponse = await api.getPlatformUserPermissions(
+      new Request('https://railway.local/api/auth/platform/users/school.admin/permissions'),
+      { userId: 'school.admin' }
+    )
+
+    const permissionsBody = await readJson(permissionsResponse)
+    expect(permissionsResponse.status).toBe(200)
+    expect(permissionsBody.ok).toBe(true)
+    expect(permissionsBody.data.permissions.canApproveApp).toBe(true)
+    expect(permissionsBody.data.permissions.canBlockApp).toBe(true)
   })
 })

@@ -6,6 +6,8 @@ import type {
   AppManifest,
   AppReviewStatus,
   JsonObject,
+  TutorMeAIReviewerAccessContext,
+  TutorMeAIUserRole,
   UIEmbedConfig,
 } from '@shared/contracts/v1'
 import type { BackendFailureResult, BackendResult } from '../errors'
@@ -16,6 +18,7 @@ export interface AppSecurityReviewRecord {
   appId: string
   appVersionId?: string
   reviewedByUserId?: string
+  reviewedByRole?: TutorMeAIUserRole
   reviewStatus: AppReviewStatus
   ageRating: AppAgeRating
   dataAccessLevel: AppDataAccessLevel
@@ -53,11 +56,14 @@ export interface AppSecurityReviewTransition {
   reason: string
 }
 
+export type AppReviewerAccessContext = TutorMeAIReviewerAccessContext
+
 export type AppSecurityErrorCode =
   | 'invalid-request'
   | 'review-not-found'
   | 'invalid-review-transition'
   | 'review-already-final'
+  | 'reviewer-not-authorized'
   | 'empty-origin-set'
   | 'unsafe-wildcard-usage'
   | 'origin-not-allowed'

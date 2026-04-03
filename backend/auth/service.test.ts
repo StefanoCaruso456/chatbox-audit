@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { InMemoryAuthRepository } from './repository'
-import { identityTokenCipher, OAuthAuthService, PlatformAuthService } from './service'
+import { identityTokenCipher, OAuthAuthService, PlatformAuthService, PlatformUserProfileService } from './service'
 import type { OAuthProviderAdapter, OAuthProviderConfig } from './types'
 
 const plannerProvider: OAuthProviderConfig = {
@@ -205,5 +205,67 @@ describe('OAuthAuthService', () => {
     }
 
     expect(completed.code).toBe('oauth-connection-expired')
+  })
+})
+
+describe('PlatformUserProfileService', () => {
+  it('stores a platform profile and derives reviewer permissions from the saved role', async () => {
+    const repository = new InMemoryAuthRepository()
+    const service = new PlatformUserProfileService(repository, {
+      now: () => '2026-04-01T12:00:00.000Z',
+    })
+
+    const upserted = await service.upsertUserProfile({
+      userId: 'admin.user',
+      displayName: 'Admin User',
+      email: 'Admin@TutorMe.ai',
+      role: 'school_admin',
+    })
+
+    expect(upserted.ok).toBe(true)
+    if (!upserted.ok) {
+      return
+    }
+
+    expect(upserted.value.email).toBe('admin@tutorme.ai')
+
+    const permissions = await service.getUserPermissions('admin.user')
+    expect(permissions.ok).toBe(true)
+    if (!permissions.ok) {
+      return
+    }
+
+    expect(permissions.value.role).toBe('school_admin')
+    expect(permissions.value.permissions.canViewReviewQueue).toBe(true)
+    expect(permissions.value.permissions.canApproveApp).toBe(true)
+    expect(permissions.value.permissions.canManageSafetySettings).toBe(false)
+  })
+
+  it('rejects profile updates that would collide on email with another stored user', async () => {
+    const repository = new InMemoryAuthRepository()
+    const service = new PlatformUserProfileService(repository, {
+      now: () => '2026-04-01T12:00:00.000Z',
+    })
+
+    await service.upsertUserProfile({
+      userId: 'teacher.user',
+      displayName: 'Teacher User',
+      email: 'teacher@school.edu',
+      role: 'teacher',
+    })
+
+    const conflicting = await service.upsertUserProfile({
+      userId: 'district.user',
+      displayName: 'District User',
+      email: 'teacher@school.edu',
+      role: 'district_admin',
+    })
+
+    expect(conflicting.ok).toBe(false)
+    if (conflicting.ok) {
+      return
+    }
+
+    expect(conflicting.code).toBe('profile-email-conflict')
   })
 })

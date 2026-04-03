@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DEFAULT_TUTOR_ME_AI_USER_ROLE, TutorMeAIUserRoleSchema } from '../contracts/v1'
 import { ModelProviderEnum, ModelProviderType } from './provider'
 
 // Re-export for backward compatibility
@@ -110,6 +111,12 @@ export const ProviderOptionsSchema = z.object({
   claude: ClaudeParamsSchema.optional(),
   openai: OpenAIParamsSchema.optional(),
   google: GoogleParamsSchema.optional(),
+})
+
+export const TutorMeAIProfileSchema = z.object({
+  name: z.string().default(''),
+  email: z.string().default(''),
+  role: TutorMeAIUserRoleSchema.default(DEFAULT_TUTOR_ME_AI_USER_ROLE),
 })
 
 // NOTICE: Global settings is for new session default settings, set to session when session created, changes will not affect existing sessions
@@ -377,6 +384,11 @@ export const SettingsSchema = GlobalSessionSettingsSchema.extend({
 
   extension: ExtensionSettingsSchema,
   mcp: MCPSettingsSchema,
+  tutorMeAIProfile: TutorMeAIProfileSchema.default({
+    name: '',
+    email: '',
+    role: DEFAULT_TUTOR_ME_AI_USER_ROLE,
+  }),
 })
 
 // TODO: provider的 base info 和 settings混在一起了，可以考虑像 session settings 和 global settings一样拆开
@@ -393,6 +405,7 @@ export type ClaudeParams = z.infer<typeof ClaudeParamsSchema>
 export type OpenAIParams = z.infer<typeof OpenAIParamsSchema>
 export type GoogleParams = z.infer<typeof GoogleParamsSchema>
 export type ProviderOptions = z.infer<typeof ProviderOptionsSchema>
+export type TutorMeAIProfile = z.infer<typeof TutorMeAIProfileSchema>
 export type GlobalSessionSettings = z.infer<typeof GlobalSessionSettingsSchema>
 export type ChatboxAILicenseDetail = z.infer<typeof ChatboxAILicenseDetailSchema>
 export type UnifiedTokenUsageDetail = z.infer<typeof UnifiedTokenUsageDetailSchema>

@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { DEFAULT_TUTOR_ME_AI_USER_ROLE } from './contracts/v1'
 import { type Config, ModelProviderEnum, type SessionSettings, type Settings, Theme } from './types'
 
 export function settings(): Settings {
@@ -137,6 +138,11 @@ export function settings(): Settings {
     mcp: {
       servers: [],
       enabledBuiltinServers: [],
+    },
+    tutorMeAIProfile: {
+      name: '',
+      email: '',
+      role: DEFAULT_TUTOR_ME_AI_USER_ROLE,
     },
   }
 }

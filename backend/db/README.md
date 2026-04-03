@@ -7,6 +7,7 @@ Ticket 09 deliverables live here:
 - `schema.sql`: canonical PostgreSQL schema snapshot
 - `migrations/0001_tutormeai_platform.sql`: executable initial migration
 - `migrations/0002_tutormeai_auth_security.sql`: executable Phase 3 auth/security migration
+- `migrations/0003_tutormeai_role_safety.sql`: role-backed user profile and reviewer-audit migration
 - `index-plan.md`: rationale for the primary indexes needed by persistence, registry, and audit flows
 
 ## Design Notes
@@ -18,12 +19,14 @@ Ticket 09 deliverables live here:
 - OAuth token columns are designed for encrypted ciphertext values owned by the Railway backend. Embedded apps and the client must never receive raw long-lived secrets.
 - Platform auth sessions store session-token and refresh-token hashes, not raw bearer tokens, so the Railway backend can rotate and revoke sessions without persisting plaintext credentials.
 - OAuth connections also persist authorization-state hashes, PKCE verifier ciphertext, and requested scopes so the Railway backend can complete callbacks and refresh flows without pushing secrets into the iframe runtime.
+- TutorMeAI reviewer authorization is backed by a first-class `users.role` column, and review records capture the reviewer role snapshot used when an approval or block decision was made.
 
 ## Applying The Initial Migration
 
 ```bash
 psql "$DATABASE_URL" -f backend/db/migrations/0001_tutormeai_platform.sql
 psql "$DATABASE_URL" -f backend/db/migrations/0002_tutormeai_auth_security.sql
+psql "$DATABASE_URL" -f backend/db/migrations/0003_tutormeai_role_safety.sql
 ```
 
 ## Scope Of This Ticket

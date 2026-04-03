@@ -1,6 +1,8 @@
 import type { AppManifest } from '@shared/contracts/v1'
 import { exampleInternalChessManifest, examplePublicFlashcardsManifest } from '@shared/contracts/v1'
 import { describe, expect, it } from 'vitest'
+import { InMemoryAuthRepository } from '../auth/repository'
+import { PlatformUserProfileService } from '../auth/service'
 import type { AppRegistryRecord, AppRegistryVersionRecord } from '../registry/types'
 import { InMemoryAppSecurityRepository } from './repository'
 import { AppSecurityService } from './service'
@@ -182,5 +184,63 @@ describe('AppSecurityService', () => {
     expect(launch.value.iframePolicy.targetOrigin).toBe('https://flashcards.chatbridge.dev')
     expect(launch.value.platformSecurity.csp.headerValue).toContain("frame-src")
     expect(launch.value.platformSecurity.headers['content-security-policy']).toBeDefined()
+  })
+
+  it('enforces stored reviewer roles before an app approval decision can be recorded', async () => {
+    const securityRepository = new InMemoryAppSecurityRepository()
+    const authRepository = new InMemoryAuthRepository()
+    const profileService = new PlatformUserProfileService(authRepository, {
+      now: () => '2026-04-01T12:00:00.000Z',
+    })
+
+    await profileService.upsertUserProfile({
+      userId: 'teacher.user',
+      displayName: 'Teacher User',
+      role: 'teacher',
+    })
+    await profileService.upsertUserProfile({
+      userId: 'school.admin',
+      displayName: 'School Admin',
+      role: 'school_admin',
+    })
+
+    const service = new AppSecurityService(securityRepository, {
+      now: () => '2026-04-01T12:00:00.000Z',
+      getReviewerAccess: (userId) => profileService.getReviewerAccessContext(userId),
+    })
+
+    const teacherDecision = await service.recordReview({
+      appId: 'flashcards.public',
+      appVersionId: '1.0.0',
+      reviewedByUserId: 'teacher.user',
+      reviewStatus: 'approved',
+      ageRating: 'all-ages',
+      dataAccessLevel: 'minimal',
+      permissionsSnapshot: ['tool:invoke'],
+    })
+
+    expect(teacherDecision.ok).toBe(false)
+    if (teacherDecision.ok) {
+      return
+    }
+
+    expect(teacherDecision.code).toBe('reviewer-not-authorized')
+
+    const adminDecision = await service.recordReview({
+      appId: 'flashcards.public',
+      appVersionId: '1.0.0',
+      reviewedByUserId: 'school.admin',
+      reviewStatus: 'approved',
+      ageRating: 'all-ages',
+      dataAccessLevel: 'minimal',
+      permissionsSnapshot: ['tool:invoke'],
+    })
+
+    expect(adminDecision.ok).toBe(true)
+    if (!adminDecision.ok) {
+      return
+    }
+
+    expect(adminDecision.value.reviewedByRole).toBe('school_admin')
   })
 })

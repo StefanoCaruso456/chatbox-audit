@@ -1,4 +1,5 @@
-import type { JsonObject } from '@shared/contracts/v1'
+import type { JsonObject, TutorMeAIReviewerAccessContext } from '@shared/contracts/v1'
+import { deriveTutorMeAIUserPermissions } from '@shared/contracts/v1'
 import { createHash, randomBytes, randomUUID } from 'crypto'
 import { failureResult } from '../errors'
 import type { AuthRepository } from './repository'
@@ -15,6 +16,8 @@ import type {
   OAuthProviderConfig,
   PlatformAuthFailure,
   PlatformAuthResult,
+  PlatformUserPermissionsResult,
+  PlatformUserProfileRecord,
   PlatformSessionIssueResult,
   PlatformSessionRecord,
   PlatformSessionRefreshResult,
@@ -25,6 +28,9 @@ import type {
   RevokePlatformSessionRequest,
   StartOAuthConnectionRequest,
   StartOAuthConnectionResult,
+  UpsertPlatformUserProfileRequest,
+  UserProfileFailure,
+  UserProfileResult,
   ValidatePlatformSessionRequest,
 } from './types'
 
@@ -44,6 +50,10 @@ export interface OAuthAuthServiceOptions {
   now?: () => string
   tokenCipher?: AuthTokenCipher
   stateTtlMs?: number
+}
+
+export interface PlatformUserProfileServiceOptions {
+  now?: () => string
 }
 
 export class PlatformAuthService {
@@ -342,6 +352,104 @@ export class PlatformAuthService {
   }
 
   private failure(code: PlatformAuthFailure['code'], message: string): PlatformAuthFailure {
+    return failureResult('auth', code, message)
+  }
+}
+
+export class PlatformUserProfileService {
+  private readonly now: () => string
+
+  constructor(
+    private readonly repository: AuthRepository,
+    options: PlatformUserProfileServiceOptions = {}
+  ) {
+    this.now = options.now ?? (() => new Date().toISOString())
+  }
+
+  async upsertUserProfile(
+    request: UpsertPlatformUserProfileRequest
+  ): Promise<UserProfileResult<PlatformUserProfileRecord>> {
+    const userId = this.normalizeNonEmptyString(request.userId)
+    const displayName = this.normalizeNonEmptyString(request.displayName)
+    if (!userId || !displayName) {
+      return this.failure('invalid-request', 'userId and displayName are required.')
+    }
+
+    const existing = await this.repository.getPlatformUserProfileById(userId)
+    const email = this.normalizeNullableEmail(request.email)
+    if (email) {
+      const conflicting = await this.repository.getPlatformUserProfileByEmail(email)
+      if (conflicting && conflicting.userId !== userId && !conflicting.deletedAt) {
+        return this.failure('profile-email-conflict', `Email "${email}" is already assigned to another user.`)
+      }
+    }
+
+    const now = this.now()
+    const profile: PlatformUserProfileRecord = {
+      userId,
+      displayName,
+      email,
+      role: request.role,
+      metadata: structuredClone(request.metadata ?? existing?.metadata ?? {}),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      deletedAt: existing?.deletedAt ?? null,
+    }
+
+    await this.repository.savePlatformUserProfile(profile)
+    return { ok: true, value: profile }
+  }
+
+  async getUserProfile(userId: string): Promise<UserProfileResult<PlatformUserProfileRecord>> {
+    const normalizedUserId = this.normalizeNonEmptyString(userId)
+    if (!normalizedUserId) {
+      return this.failure('invalid-request', 'userId is required.')
+    }
+
+    const profile = await this.repository.getPlatformUserProfileById(normalizedUserId)
+    if (!profile || profile.deletedAt) {
+      return this.failure('profile-not-found', `No platform user profile matched "${normalizedUserId}".`)
+    }
+
+    return { ok: true, value: profile }
+  }
+
+  async getUserPermissions(userId: string): Promise<UserProfileResult<PlatformUserPermissionsResult>> {
+    const profile = await this.getUserProfile(userId)
+    if (!profile.ok) {
+      return profile
+    }
+
+    return {
+      ok: true,
+      value: {
+        userId: profile.value.userId,
+        role: profile.value.role,
+        permissions: deriveTutorMeAIUserPermissions(profile.value.role),
+      },
+    }
+  }
+
+  async getReviewerAccessContext(userId: string): Promise<TutorMeAIReviewerAccessContext | undefined> {
+    const permissions = await this.getUserPermissions(userId)
+    return permissions.ok ? permissions.value : undefined
+  }
+
+  private normalizeNonEmptyString(value: string | null | undefined): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : undefined
+  }
+
+  private normalizeNullableEmail(value: string | null | undefined): string | null {
+    const normalized = this.normalizeNonEmptyString(value)
+    return normalized ? normalized.toLowerCase() : null
+  }
+
+  private failure(code: UserProfileFailure['code'], message: string): UserProfileFailure {
     return failureResult('auth', code, message)
   }
 }

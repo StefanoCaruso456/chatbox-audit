@@ -1,7 +1,35 @@
-import type { JsonObject } from '@shared/contracts/v1'
+import type { JsonObject, TutorMeAIReviewerAccessContext, TutorMeAIUserPermissions, TutorMeAIUserRole } from '@shared/contracts/v1'
 import type { BackendFailureResult, BackendResult } from '../errors'
 
 export type PlatformSessionStatus = 'active' | 'expired' | 'revoked'
+
+export interface PlatformUserProfileRecord {
+  userId: string
+  displayName: string
+  email: string | null
+  role: TutorMeAIUserRole
+  metadata: JsonObject
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export interface UpsertPlatformUserProfileRequest {
+  userId: string
+  displayName: string
+  email?: string | null
+  role: TutorMeAIUserRole
+  metadata?: JsonObject
+}
+
+export type UserProfileErrorCode = 'invalid-request' | 'profile-not-found' | 'profile-email-conflict'
+
+export type UserProfileFailure = BackendFailureResult<UserProfileErrorCode, 'auth'>
+export type UserProfileResult<T> = BackendResult<T, UserProfileErrorCode, 'auth'>
+
+export interface PlatformUserPermissionsResult extends TutorMeAIReviewerAccessContext {
+  permissions: TutorMeAIUserPermissions
+}
 
 export interface PlatformSessionRecord {
   platformSessionId: string
