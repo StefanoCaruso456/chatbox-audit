@@ -260,12 +260,13 @@ describe('ChessAppPage', () => {
     const whitePieceSquareStyle = whitePieceSquare.getAttribute('style') ?? ''
     const blackPieceSquareStyle = blackPieceSquare.getAttribute('style') ?? ''
 
-    expect(lightCoordinateStyle).toContain('background: rgba(15, 23, 42, 0.92)')
+    expect(lightCoordinateStyle).toContain('background: rgba(15, 23, 42, 0.96)')
     expect(lightCoordinateStyle).toContain('color: rgb(248, 250, 252)')
-    expect(darkCoordinateStyle).toContain('background: rgba(248, 250, 252, 0.92)')
-    expect(darkCoordinateStyle).toContain('color: rgb(15, 23, 42)')
+    expect(darkCoordinateStyle).toContain('background: rgba(15, 23, 42, 0.96)')
+    expect(darkCoordinateStyle).toContain('color: rgb(248, 250, 252)')
+    expect(darkCoordinateStyle).toContain('box-shadow: 0 2px 6px rgba(2,6,23,0.32)')
     expect(whitePieceStyle).toContain('1.35px rgba(15, 23, 42, 0.92)')
     expect(whitePieceSquareStyle).toContain('color: rgb(255, 253, 248)')
-    expect(blackPieceSquareStyle).toContain('color: rgb(23, 32, 51)')
+    expect(blackPieceSquareStyle).toContain('color: rgb(17, 24, 39)')
   })
 })

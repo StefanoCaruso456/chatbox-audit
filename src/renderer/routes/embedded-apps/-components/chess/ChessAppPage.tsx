@@ -203,18 +203,13 @@ function getSquareColor(square: Square) {
   return isLightSquare(square) ? '#dfe7f5' : '#7a8db4'
 }
 
-function getCoordinatePalette(isLightSquare: boolean) {
-  return isLightSquare
-    ? {
-        text: '#f8fafc',
-        background: 'rgba(15,23,42,0.92)',
-        border: 'rgba(15,23,42,0.96)',
-      }
-    : {
-        text: '#0f172a',
-        background: 'rgba(248,250,252,0.92)',
-        border: 'rgba(15,23,42,0.24)',
-      }
+function getCoordinatePalette() {
+  return {
+    text: '#f8fafc',
+    background: 'rgba(15,23,42,0.96)',
+    border: 'rgba(226,232,240,0.24)',
+    shadow: '0 2px 6px rgba(2,6,23,0.32)',
+  }
 }
 
 function getPiecePalette(color: 'w' | 'b') {
@@ -225,9 +220,9 @@ function getPiecePalette(color: 'w' | 'b') {
         stroke: '1.35px rgba(15, 23, 42, 0.92)',
       }
     : {
-        fill: '#172033',
-        shadow: '0 1px 0 rgba(248,250,252,0.28), 0 0 2px rgba(15,23,42,0.3)',
-        stroke: '0.45px rgba(248, 250, 252, 0.18)',
+        fill: '#111827',
+        shadow: '0 1px 0 rgba(248,250,252,0.32), 0 0 3px rgba(15,23,42,0.42)',
+        stroke: '0.55px rgba(248, 250, 252, 0.22)',
       }
 }
 
@@ -609,8 +604,7 @@ export function ChessAppPage() {
             {boardSquares.map((square) => {
               const isSelected = selection.from === square
               const piece = pieces.get(square)
-              const lightSquare = isLightSquare(square)
-              const coordinatePalette = getCoordinatePalette(lightSquare)
+              const coordinatePalette = getCoordinatePalette()
               const piecePalette = piece ? getPiecePalette(piece.color) : null
 
               return (
@@ -663,6 +657,7 @@ export function ChessAppPage() {
                       color: coordinatePalette.text,
                       background: coordinatePalette.background,
                       border: `1px solid ${coordinatePalette.border}`,
+                      boxShadow: coordinatePalette.shadow,
                       borderRadius: 999,
                       padding: '2px 6px',
                       lineHeight: 1.1,
