@@ -6,6 +6,7 @@ import {
   exampleChessGetBoardStateToolSchema,
   exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
+  exampleChessMakeMoveToolSchema,
   examplePublicFlashcardsManifest,
   parseConversationAppContext,
   type ToolSchema,
@@ -14,7 +15,9 @@ import type { JsonObject } from '@shared/contracts/v1/shared'
 import { createMessage, type Message, type MessageEmbeddedAppPart } from '@shared/types'
 import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
+import { enqueueSidebarAppRuntimeCommand } from '@/stores/sidebarAppRuntimeCommandStore'
 import { getSidebarAppRuntimeSnapshot, type SidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
+import { applyRequestedChessMove, extractRequestedChessMove } from '@/routes/embedded-apps/-components/chess/chessMove'
 import {
   AvailableToolDiscoveryService,
   type ToolRouteDecision,
@@ -338,6 +341,10 @@ function isChessBoardReadIntent(userRequest: string) {
 function isChessMoveIntent(userRequest: string) {
   const normalized = normalizeComparable(userRequest)
 
+  if (extractRequestedChessMove(userRequest)) {
+    return true
+  }
+
   if (/[a-h][1-8]\s*(?:to|-)\s*[a-h][1-8]/iu.test(userRequest) || /\b[a-h][1-8][a-h][1-8]\b/iu.test(userRequest)) {
     return true
   }
@@ -371,10 +378,26 @@ type ChessBoardStateToolResult = {
   mode?: string
 }
 
+type ChessMoveToolResult = {
+  appSessionId: string
+  requestedMove: string
+  appliedMove: string
+  fen: string
+  turn: 'white' | 'black'
+  moveCount: number
+  lastMove: string
+  legalMoveCount: number
+  candidateMoves: string[]
+  summary: string
+  explanation: string
+  moveExecutionAvailable: boolean
+}
+
 type ChessBoardStateSource = {
   appSessionId: string
   summary?: string
   latestStateDigest?: JsonObject
+  availableToolNames?: string[]
 }
 
 function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardStateToolResult | null {
@@ -423,7 +446,7 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
       typeof source.summary === 'string' && source.summary.trim().length > 0
         ? source.summary
         : `Current board FEN: ${chess.fen()}. ${formatChessTurn(chess.turn())} to move.`,
-    moveExecutionAvailable: false,
+    moveExecutionAvailable: source.availableToolNames?.includes(exampleChessMakeMoveToolSchema.name) ?? false,
     ...(typeof stateDigest.mode === 'string' ? { mode: stateDigest.mode } : {}),
   }
 }
@@ -437,11 +460,54 @@ function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest
       ? ` Recommended next move: ${result.candidateMoves[0]} because it ${buildChessMoveExplanation(result.candidateMoves[0])}.`
       : ''
 
-  if (isChessMoveIntent(userRequest)) {
+  if (isChessMoveIntent(userRequest) && !result.moveExecutionAvailable) {
     return `I can read the live Chess board now, but direct move execution from chat is not wired yet. ${sharedSummary}${recommendation}`
   }
 
   return `${sharedSummary}${recommendation}`
+}
+
+function buildChessMoveToolResult(completionResult: JsonObject): ChessMoveToolResult | null {
+  const requiredStringFields = ['appSessionId', 'requestedMove', 'appliedMove', 'fen', 'turn', 'lastMove', 'summary', 'explanation']
+  for (const field of requiredStringFields) {
+    if (typeof completionResult[field] !== 'string' || completionResult[field].trim().length === 0) {
+      return null
+    }
+  }
+
+  if (
+    typeof completionResult.moveCount !== 'number' ||
+    typeof completionResult.legalMoveCount !== 'number' ||
+    typeof completionResult.moveExecutionAvailable !== 'boolean' ||
+    !Array.isArray(completionResult.candidateMoves)
+  ) {
+    return null
+  }
+
+  if (completionResult.turn !== 'white' && completionResult.turn !== 'black') {
+    return null
+  }
+
+  return {
+    appSessionId: completionResult.appSessionId,
+    requestedMove: completionResult.requestedMove,
+    appliedMove: completionResult.appliedMove,
+    fen: completionResult.fen,
+    turn: completionResult.turn,
+    moveCount: completionResult.moveCount,
+    lastMove: completionResult.lastMove,
+    legalMoveCount: completionResult.legalMoveCount,
+    candidateMoves: completionResult.candidateMoves.filter((move): move is string => typeof move === 'string'),
+    summary: completionResult.summary,
+    explanation: completionResult.explanation,
+    moveExecutionAvailable: completionResult.moveExecutionAvailable,
+  }
+}
+
+function buildChessMoveResultText(result: ChessMoveToolResult) {
+  const nextMoveHint =
+    result.candidateMoves.length > 0 ? ` Candidate replies: ${result.candidateMoves.join(', ')}.` : ''
+  return `${result.summary} ${result.explanation}${nextMoveHint}`
 }
 
 function buildChessMoveExplanation(moveSan: string) {
@@ -479,6 +545,7 @@ function buildChessBoardStateMessage(reference: EmbeddedAppReference, userReques
     summary: reference.part.summary,
     latestStateDigest:
       toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
+    availableToolNames: reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
   })
   if (!result) {
     return null
@@ -514,6 +581,7 @@ function buildChessBoardStateMessageFromSidebarSnapshot(
     appSessionId: snapshot.appSessionId,
     summary: snapshot.summary,
     latestStateDigest: snapshot.latestStateDigest,
+    availableToolNames: snapshot.availableToolNames,
   })
   if (!result) {
     return null
@@ -541,6 +609,90 @@ function buildChessBoardStateMessageFromSidebarSnapshot(
   return message
 }
 
+async function buildChessMoveMessageFromSidebarSnapshot(
+  snapshot: SidebarAppRuntimeSnapshot,
+  input: {
+    conversationId: string
+    userRequest: string
+  }
+): Promise<Message | null> {
+  const boardState = buildChessBoardStateResult({
+    appSessionId: snapshot.appSessionId,
+    summary: snapshot.summary,
+    latestStateDigest: snapshot.latestStateDigest,
+    availableToolNames: snapshot.availableToolNames,
+  })
+  if (!boardState || !boardState.moveExecutionAvailable) {
+    return null
+  }
+
+  const requestedMove = extractRequestedChessMove(input.userRequest) ?? boardState.candidateMoves[0] ?? null
+  if (!requestedMove) {
+    return null
+  }
+
+  const validationChess = new Chess(boardState.fen)
+  const previewMove = applyRequestedChessMove(validationChess, requestedMove)
+  if (!previewMove) {
+    return buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`)
+  }
+
+  const toolCallId = `tool-call.chess.make-move.${uuidv4()}`
+  const commandResult = await enqueueSidebarAppRuntimeCommand({
+    hostSessionId: input.conversationId,
+    runtimeAppId: exampleInternalChessManifest.appId,
+    appSessionId: snapshot.appSessionId,
+    toolCallId,
+    toolName: exampleChessMakeMoveToolSchema.name,
+    arguments: {
+      move: requestedMove,
+      expectedFen: boardState.fen,
+    },
+    timeoutMs: exampleChessMakeMoveToolSchema.timeoutMs,
+    createdAt: new Date().toISOString(),
+  })
+
+  if (!commandResult.ok) {
+    return buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`)
+  }
+
+  if (commandResult.completion.status !== 'succeeded') {
+    return buildClarificationMessage(commandResult.completion.resultSummary)
+  }
+
+  const completionResult = toJsonObject(commandResult.completion.result)
+  if (!completionResult) {
+    return buildClarificationMessage('Chess Tutor responded, but the move result was not machine-readable.')
+  }
+
+  const moveResult = buildChessMoveToolResult(completionResult)
+  if (!moveResult) {
+    return buildClarificationMessage('Chess Tutor responded, but the move result was missing required board details.')
+  }
+
+  const message = createMessage('assistant')
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId,
+      toolName: exampleChessMakeMoveToolSchema.name,
+      args: {
+        move: requestedMove,
+        expectedFen: boardState.fen,
+      },
+      result: moveResult,
+    },
+    {
+      type: 'text',
+      text: buildChessMoveResultText(moveResult),
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
 function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
   if (tool.name === 'chess.launch-game') {
     return {
@@ -551,6 +703,12 @@ function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
   if (tool.name === exampleChessGetBoardStateToolSchema.name) {
     return {
       scope: 'current-position',
+    }
+  }
+
+  if (tool.name === exampleChessMakeMoveToolSchema.name) {
+    return {
+      move: extractRequestedChessMove(userRequest) ?? '',
     }
   }
 
@@ -972,6 +1130,30 @@ export async function routeTutorMeAiAppRequest(
   )
 
   if (shouldUseChessBoardStateTool(input.userRequest)) {
+    if (isChessMoveIntent(input.userRequest)) {
+      if (activeSidebarChessSnapshot) {
+        const moveMessage = await buildChessMoveMessageFromSidebarSnapshot(activeSidebarChessSnapshot, {
+          conversationId: input.conversationId,
+          userRequest: input.userRequest,
+        })
+        if (moveMessage) {
+          return {
+            kind: 'invoke-tool',
+            message: moveMessage,
+          }
+        }
+      }
+
+      if (selectedReference?.appId === exampleInternalChessManifest.appId) {
+        return {
+          kind: 'clarify',
+          message: buildClarificationMessage(
+            'Chess Tutor is open, but move execution needs the live right-sidebar board. Keep the sidebar open and try the move again.'
+          ),
+        }
+      }
+    }
+
     const boardStateMessage = activeSidebarChessSnapshot
       ? buildChessBoardStateMessageFromSidebarSnapshot(activeSidebarChessSnapshot, input.userRequest)
       : selectedReference?.appId === exampleInternalChessManifest.appId

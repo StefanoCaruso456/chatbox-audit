@@ -13,6 +13,7 @@ import {
 import {
   exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
+  exampleChessMakeMoveToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
   ToolSchemaSchema,
@@ -232,7 +233,7 @@ export const exampleInternalChessManifest: AppManifest = AppManifestSchema.parse
       minHeight: 480,
     },
   },
-  toolDefinitions: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
+  toolDefinitions: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
   safetyMetadata: {
     reviewStatus: 'approved',
     ageRating: 'all-ages',

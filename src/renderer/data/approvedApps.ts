@@ -1,6 +1,7 @@
 import {
   exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
+  exampleChessMakeMoveToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
 } from '@shared/contracts/v1'
@@ -677,7 +678,7 @@ const tutorMeAiApps: ApprovedApp[] = [
         moveCount: 0,
         mode: 'practice',
       },
-      availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
+      availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
       pendingInvocation: {
         toolName: exampleChessLaunchToolSchema.name,
         arguments: { mode: 'practice' },

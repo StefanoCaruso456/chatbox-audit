@@ -2,7 +2,12 @@ import { z } from 'zod'
 import { CompletionSignalSchema, exampleChessCompletionSignal } from '../completion-signal'
 import { AppPermissionsSchema } from '../permissions'
 import { IdentifierSchema, IsoDatetimeSchema, JsonObjectSchema, NonEmptyStringSchema, OriginSchema } from '../shared'
-import { exampleChessGetBoardStateToolSchema, exampleChessLaunchToolSchema, ToolSchemaSchema } from '../tool-schema'
+import {
+  exampleChessGetBoardStateToolSchema,
+  exampleChessLaunchToolSchema,
+  exampleChessMakeMoveToolSchema,
+  ToolSchemaSchema,
+} from '../tool-schema'
 import { toValidationResult } from '../validation'
 
 const EmbeddedAppMessageBaseSchema = z.object({
@@ -165,7 +170,7 @@ export const exampleHostBootstrapMessage: EmbeddedAppMessage = HostBootstrapMess
     initialState: {
       boardState: 'startpos',
     },
-    availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
+    availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
   },
 })
 
