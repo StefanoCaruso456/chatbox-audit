@@ -92,6 +92,28 @@ function getRuntimeGuardError(reason: string | null | undefined): string | null 
   return null
 }
 
+function hasIframeRenderableContent(iframe: HTMLIFrameElement | null) {
+  try {
+    const doc = iframe?.contentDocument
+    if (!doc) {
+      return false
+    }
+
+    if (doc.readyState !== 'interactive' && doc.readyState !== 'complete') {
+      return false
+    }
+
+    const body = doc.body
+    if (!body) {
+      return false
+    }
+
+    return body.childElementCount > 0 || (body.textContent ?? '').trim().length > 0
+  } catch {
+    return false
+  }
+}
+
 function createTimeoutError(timeoutMs: number): EmbeddedAppHostTimeoutError {
   const timeoutSeconds = Math.max(1, Math.round(timeoutMs / 1000))
   return {
@@ -314,6 +336,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
       if (!hasRuntimeResponseRef.current) {
         hasRuntimeResponseRef.current = true
         setHasRuntimeResponse(true)
+        setHasLoaded(true)
         clearHandshakeReplayTimers()
       }
 
@@ -492,6 +515,37 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
   )
 
   useEffect(() => {
+    if (hasLoaded || !normalizedSrc || typeof window === 'undefined' || actualOrigin !== window.location.origin) {
+      return
+    }
+
+    let timer: number | null = null
+    let cancelled = false
+
+    const syncReadyState = () => {
+      if (cancelled) {
+        return
+      }
+
+      if (hasIframeRenderableContent(iframeRef.current)) {
+        setHasLoaded(true)
+        return
+      }
+
+      timer = window.setTimeout(syncReadyState, 100)
+    }
+
+    timer = window.setTimeout(syncReadyState, 100)
+
+    return () => {
+      cancelled = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [actualOrigin, hasLoaded, normalizedSrc, runtimeResetKey])
+
+  useEffect(() => {
     if (!hasLoaded || !normalizedSrc || !props.runtime || runtimeGuardError || !originValidation?.valid) {
       return
     }
@@ -540,8 +594,9 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     runtimeErrorMessage ||
     props.errorMessage ||
     'The embedded app could not be loaded. Retry the launch or continue the conversation in chat.'
-  const shouldRevealIframe = hasLoaded && !hasError
-  const shouldShowLoadingOverlay = !shouldRevealIframe && !hasError
+  const hasReadyRuntimeState = effectiveState === 'ready' || effectiveState === 'complete'
+  const shouldRevealIframe = (hasLoaded || hasRuntimeResponse || hasReadyRuntimeState) && !hasError
+  const shouldShowLoadingOverlay = !shouldRevealIframe && effectiveState === 'loading' && !hasError
   const shouldShowErrorOverlay = hasError && !showRecoveryPanel
 
   return (

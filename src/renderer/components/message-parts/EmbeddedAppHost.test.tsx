@@ -221,6 +221,103 @@ describe('EmbeddedAppHost', () => {
     expect(onStateUpdate).toHaveBeenCalledTimes(1)
   })
 
+  it('reveals the iframe once a runtime message arrives even if the load event was missed', async () => {
+    renderHost(
+      <EmbeddedAppHost
+        appId="chess.internal"
+        appName="Chess Tutor"
+        src="https://example.com/chess"
+        runtime={{
+          expectedOrigin: 'https://example.com',
+          conversationId: 'conversation.reveal.runtime',
+          appSessionId: 'app-session.chess.reveal.runtime',
+          handshakeToken: 'nonce-chess-reveal-runtime',
+        }}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+    attachIframeWindow(iframe)
+
+    dispatchRuntimeMessage(iframe, {
+      version: 'v1',
+      messageId: 'msg.runtime.chess.reveal.runtime',
+      conversationId: 'conversation.reveal.runtime',
+      appSessionId: 'app-session.chess.reveal.runtime',
+      appId: 'chess.internal',
+      sequence: 1,
+      sentAt: new Date().toISOString(),
+      security: {
+        handshakeToken: 'nonce-chess-reveal-runtime',
+        expectedOrigin: 'https://example.com',
+      },
+      source: 'app',
+      type: 'app.state',
+      payload: {
+        status: 'active',
+        summary: 'Chess board is ready.',
+        state: {
+          moveCount: 0,
+        },
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('embedded-app-host-overlay')).toBeNull()
+    })
+  })
+
+  it('reveals same-origin iframe content when the document is ready even if load does not fire', async () => {
+    vi.useFakeTimers()
+
+    renderHost(
+      <EmbeddedAppHost
+        appId="chess.internal"
+        appName="Chess Tutor"
+        src={`${window.location.origin}/embedded-apps/chess`}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+
+    Object.defineProperty(iframe, 'contentDocument', {
+      configurable: true,
+      value: {
+        readyState: 'complete',
+        body: {
+          childElementCount: 1,
+          textContent: 'Chess Tutor',
+        },
+      },
+    })
+
+    act(() => {
+      vi.advanceTimersByTime(150)
+    })
+    expect(screen.queryByTestId('embedded-app-host-overlay')).toBeNull()
+  })
+
+  it('reveals the iframe when the sidebar runtime is already marked ready', () => {
+    renderHost(
+      <EmbeddedAppHost
+        appId="chess.internal"
+        appName="Chess Tutor"
+        src="https://example.com/chess"
+        state="ready"
+        runtime={{
+          expectedOrigin: 'https://example.com',
+          conversationId: 'conversation.ready.1',
+          appSessionId: 'app-session.chess.ready.1',
+          handshakeToken: 'nonce-chess-ready-1',
+        }}
+      />
+    )
+
+    const iframe = screen.getByTestId('embedded-app-host-iframe')
+    expect(screen.queryByTestId('embedded-app-host-overlay')).toBeNull()
+    expect(iframe.className).toContain('opacity-100')
+  })
+
   it('marks the app as completed when it receives a completion signal', async () => {
     const onCompletion = vi.fn()
 
