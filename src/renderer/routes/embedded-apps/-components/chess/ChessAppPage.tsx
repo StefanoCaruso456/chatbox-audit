@@ -193,23 +193,41 @@ function useSharedChessSessionSnapshot(conversationId: string | null, appSession
   )
 }
 
-function getSquareColor(square: Square) {
+function isLightSquare(square: Square) {
   const file = square.charCodeAt(0) - 97
   const rank = Number(square[1]) - 1
-  return (file + rank) % 2 === 0 ? '#d9e2f1' : '#8091b3'
+  return (file + rank) % 2 === 0
+}
+
+function getSquareColor(square: Square) {
+  return isLightSquare(square) ? '#dfe7f5' : '#7a8db4'
 }
 
 function getCoordinatePalette(isLightSquare: boolean) {
   return isLightSquare
     ? {
-        text: '#0f172a',
-        background: 'rgba(255,255,255,0.88)',
-        border: 'rgba(15,23,42,0.14)',
+        text: '#f8fafc',
+        background: 'rgba(15,23,42,0.92)',
+        border: 'rgba(15,23,42,0.96)',
       }
     : {
-        text: '#f8fafc',
-        background: 'rgba(15,23,42,0.44)',
-        border: 'rgba(248,250,252,0.16)',
+        text: '#0f172a',
+        background: 'rgba(248,250,252,0.92)',
+        border: 'rgba(15,23,42,0.24)',
+      }
+}
+
+function getPiecePalette(color: 'w' | 'b') {
+  return color === 'w'
+    ? {
+        fill: '#fffdf8',
+        shadow: '0 1px 1px rgba(15,23,42,0.92), 0 0 6px rgba(15,23,42,0.6)',
+        stroke: '1.35px rgba(15, 23, 42, 0.92)',
+      }
+    : {
+        fill: '#172033',
+        shadow: '0 1px 0 rgba(248,250,252,0.28), 0 0 2px rgba(15,23,42,0.3)',
+        stroke: '0.45px rgba(248, 250, 252, 0.18)',
       }
 }
 
@@ -591,8 +609,9 @@ export function ChessAppPage() {
             {boardSquares.map((square) => {
               const isSelected = selection.from === square
               const piece = pieces.get(square)
-              const isLightSquare = getSquareColor(square) === '#d9e2f1'
-              const coordinatePalette = getCoordinatePalette(isLightSquare)
+              const lightSquare = isLightSquare(square)
+              const coordinatePalette = getCoordinatePalette(lightSquare)
+              const piecePalette = piece ? getPiecePalette(piece.color) : null
 
               return (
                 <UnstyledButton
@@ -611,45 +630,43 @@ export function ChessAppPage() {
                     width: '100%',
                     aspectRatio: '1 / 1',
                     borderRadius: '12px',
-                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.1)',
+                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.18)',
                     background: isSelected ? '#bfdbfe' : getSquareColor(square),
                     boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
-                    color: piece?.color === 'w' ? '#ffffff' : '#0f172a',
+                    color: piecePalette?.fill ?? '#0f172a',
                     overflow: 'hidden',
                   }}
                 >
                   <Text
+                    data-testid={`chess-piece-${square}`}
                     component="span"
                     style={{
                       fontFamily: CHESS_SYMBOL_FONT_STACK,
-                      fontSize: 'clamp(1.3rem, 3vw, 2rem)',
+                      fontSize: 'clamp(1.42rem, 3.15vw, 2.08rem)',
                       fontWeight: 700,
                       lineHeight: 1,
-                      textShadow:
-                        piece?.color === 'w'
-                          ? '0 1px 1px rgba(15,23,42,0.65), 0 0 3px rgba(15,23,42,0.45)'
-                          : '0 1px 0 rgba(248,250,252,0.2)',
-                      WebkitTextStroke:
-                        piece?.color === 'w' ? '1px rgba(15, 23, 42, 0.55)' : '0.4px rgba(248, 250, 252, 0.12)',
+                      textShadow: piecePalette?.shadow,
+                      WebkitTextStroke: piecePalette?.stroke,
                     }}
                   >
                     {piece?.glyph ?? ''}
                   </Text>
                   <Text
+                    data-testid={`chess-coordinate-${square}`}
                     component="span"
-                    size="10px"
+                    size="11px"
                     fw={700}
                     style={{
                       position: 'absolute',
                       right: 6,
-                      bottom: 4,
+                      bottom: 5,
                       color: coordinatePalette.text,
                       background: coordinatePalette.background,
                       border: `1px solid ${coordinatePalette.border}`,
                       borderRadius: 999,
-                      padding: '1px 5px',
+                      padding: '2px 6px',
                       lineHeight: 1.1,
-                      letterSpacing: '0.02em',
+                      letterSpacing: '0.03em',
                     }}
                   >
                     {square.toUpperCase()}
