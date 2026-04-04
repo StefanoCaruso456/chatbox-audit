@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
 import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
+import { probeForNewerBuild } from '@/lib/build-freshness'
 import { cn } from '@/lib/utils'
 import { currentSessionIdAtom } from '@/stores/atoms'
 import { useSession } from '@/stores/chatStore'
@@ -210,6 +211,16 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     [app, conversationPart, currentSessionId, reloadNonce, resolvedLaunchUrl]
   )
   const usesEmbeddedRuntime = app.experience === 'tutormeai-runtime' && Boolean(embeddedRuntime)
+
+  useEffect(() => {
+    if (app.experience !== 'tutormeai-runtime' || typeof window === 'undefined' || window.top !== window) {
+      return
+    }
+
+    void probeForNewerBuild().catch(() => {
+      // If the probe fails, keep the current shell and let the sidebar continue.
+    })
+  }, [app.experience, app.id])
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current !== null) {

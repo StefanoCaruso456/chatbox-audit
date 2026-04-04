@@ -15,6 +15,10 @@ const { mockUseSession } = vi.hoisted(() => ({
   mockUseSession: vi.fn(),
 }))
 
+const { mockProbeForNewerBuild } = vi.hoisted(() => ({
+  mockProbeForNewerBuild: vi.fn(),
+}))
+
 vi.mock('@/components/message-parts/EmbeddedAppHost', () => ({
   default: ({
     title,
@@ -43,6 +47,10 @@ vi.mock('@/components/message-parts/EmbeddedAppHost', () => ({
 
 vi.mock('@/hooks/useScreenChange', () => ({
   useScreenDownToMD: () => false,
+}))
+
+vi.mock('@/lib/build-freshness', () => ({
+  probeForNewerBuild: () => mockProbeForNewerBuild(),
 }))
 
 vi.mock('@/stores/chatStore', async () => {
@@ -107,6 +115,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockUseSession.mockReturnValue({ session: undefined })
+  mockProbeForNewerBuild.mockResolvedValue(false)
   getDefaultStore().set(currentSessionIdAtom, 'session.test')
   uiStore.setState({
     approvedAppsModalOpen: false,
@@ -134,6 +143,14 @@ describe('AppIframePanel', () => {
     expect(screen.getByTestId('app-iframe-panel-fallback')).toBeTruthy()
     expect(screen.getByText('Canvas needs a school-specific embedded launch link')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open Canvas login' })).toBeNull()
+  })
+
+  it('probes for a newer build when a runtime app opens in the sidebar', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    expect(mockProbeForNewerBuild).toHaveBeenCalledTimes(1)
   })
 
   it('clears the load timeout after a successful iframe load', () => {
