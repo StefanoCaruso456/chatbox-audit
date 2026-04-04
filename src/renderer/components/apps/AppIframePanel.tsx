@@ -174,12 +174,17 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
+  const directIframeLaunchArguments =
+    app.experience === 'tutormeai-runtime' && app.runtimeBridge?.sidebarMode === 'direct-iframe'
+      ? app.runtimeBridge.pendingInvocation?.arguments
+      : undefined
   const resolvedLaunchUrl = useMemo(
     () =>
       resolveAppPanelLaunchUrl(app.launchUrl, {
         cacheBustKey: `${launchSessionKey}-${reloadNonce}`,
+        launchArguments: directIframeLaunchArguments,
       }),
-    [app.launchUrl, launchSessionKey, reloadNonce]
+    [app.launchUrl, directIframeLaunchArguments, launchSessionKey, reloadNonce]
   )
   const embeddedRuntime = useMemo(
     () => buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),

@@ -679,6 +679,7 @@ const tutorMeAiApps: ApprovedApp[] = [
     experience: 'tutormeai-runtime',
     runtimeBridge: {
       appId: 'flashcards.public',
+      sidebarMode: 'direct-iframe',
       authState: 'not-required',
       grantedPermissions: ['tool:invoke'],
       availableTools: [exampleFlashcardsStartToolSchema],

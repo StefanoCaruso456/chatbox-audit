@@ -181,18 +181,15 @@ describe('AppIframePanel', () => {
     expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })
 
-  it('keeps Flashcards Coach on the embedded host runtime path', () => {
+  it('opens Flashcards Coach as a governed direct iframe in the sidebar', () => {
     uiStore.setState({ activeApprovedAppId: 'flashcards-coach' })
 
     renderPanel(<AppIframePanel />)
 
-    const host = screen.getByTestId('embedded-app-host')
-    expect(host.getAttribute('data-subtitle')).toBe('TutorMeAI sidebar runtime')
-    expect(host.getAttribute('data-description')).toContain('governed TutorMeAI sidebar runtime')
-    expect(host.getAttribute('data-src')).toMatch(
-      /^http:\/\/localhost:3000\/embedded-apps\/flashcards\?chatbridge_panel=1&chatbridge_launch=.+$/
+    const iframe = screen.getByTitle('Flashcards Coach app panel') as HTMLIFrameElement
+    expect(iframe.getAttribute('src')).toMatch(
+      /^http:\/\/localhost:3000\/embedded-apps\/flashcards\?chatbridge_panel=1&chatbridge_launch=.+&topic=fractions$/
     )
-    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.flashcards-coach"')
-    expect(host.getAttribute('data-runtime')).toContain('"expectedOrigin":"http://localhost:3000"')
+    expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })
 })
