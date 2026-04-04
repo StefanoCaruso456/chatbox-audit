@@ -1,4 +1,4 @@
-import { Alert, Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core'
+import { Alert, Badge, Box, Group, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import type { CompletionSignal, RuntimeAppStatus } from '@shared/contracts/v1'
 import { Chess, type Square } from 'chess.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -7,12 +7,6 @@ import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
 
 type SelectionState = {
   from: Square | null
-}
-
-type CandidateMove = {
-  san: string
-  label: string
-  reason: string
 }
 
 function formatTurn(turn: 'w' | 'b') {
@@ -49,141 +43,6 @@ function buildSidebarRuntimeSnapshot(chess: Chess, mode?: 'practice' | 'analysis
       ...(mode ? { mode } : {}),
     },
   }
-}
-
-function formatMaterialAdvantage(balance: number) {
-  if (balance === 0) {
-    return 'Material is even.'
-  }
-
-  const side = balance > 0 ? 'White' : 'Black'
-  const swing = Math.abs(balance)
-  return `${side} is ahead by ${swing} point${swing === 1 ? '' : 's'}.`
-}
-
-function inferGamePhase(chess: Chess) {
-  const historyLength = chess.history().length
-  const pieces = chess.board().flat().filter(Boolean).length
-
-  if (pieces <= 12) {
-    return 'Endgame'
-  }
-
-  if (historyLength < 12) {
-    return 'Opening'
-  }
-
-  return 'Middlegame'
-}
-
-function buildCandidateMoves(chess: Chess): CandidateMove[] {
-  const legalMoves = chess.moves({ verbose: true })
-
-  return legalMoves
-    .map((move) => {
-      let score = 0
-      let reason = 'Solid developing move.'
-
-      if (move.san.includes('#')) {
-        score += 100
-        reason = 'Checkmate threat or finish.'
-      } else if (move.san.includes('+')) {
-        score += 24
-        reason = 'Checks the king immediately.'
-      } else if (move.flags.includes('k') || move.flags.includes('q')) {
-        score += 16
-        reason = 'Improves king safety by castling.'
-      } else if (move.flags.includes('c')) {
-        score += 14
-        reason = 'Wins material or changes the balance.'
-      } else if (move.piece === 'p' && ['d4', 'e4', 'd5', 'e5'].includes(move.to)) {
-        score += 10
-        reason = 'Claims central space.'
-      } else if ((move.piece === 'n' || move.piece === 'b') && ['c3', 'f3', 'c6', 'f6'].includes(move.to)) {
-        score += 8
-        reason = 'Develops a minor piece to an active square.'
-      }
-
-      return {
-        san: move.san,
-        label: move.san,
-        reason,
-        score,
-      }
-    })
-    .sort((left, right) => right.score - left.score || left.san.localeCompare(right.san))
-    .slice(0, 6)
-    .map(({ label, reason, san }) => ({ san, label, reason }))
-}
-
-function getBoardAnalysis(chess: Chess) {
-  const history = chess.history()
-  const legalMoves = chess.moves({ verbose: true })
-  const pieceValues: Record<string, number> = {
-    p: 1,
-    n: 3,
-    b: 3,
-    r: 5,
-    q: 9,
-    k: 0,
-  }
-
-  const materialBalance = chess
-    .board()
-    .flat()
-    .filter(Boolean)
-    .reduce((total, piece) => total + (piece!.color === 'w' ? 1 : -1) * pieceValues[piece!.type], 0)
-
-  return {
-    phase: inferGamePhase(chess),
-    status: chess.isCheckmate()
-      ? 'Checkmate'
-      : chess.isStalemate()
-        ? 'Stalemate'
-        : chess.isDraw()
-          ? 'Draw'
-          : chess.inCheck()
-            ? `${formatTurn(chess.turn())} is in check`
-            : 'Position is stable',
-    recentMoves: history.slice(-6).join(', ') || 'No moves yet',
-    legalMoveCount: legalMoves.length,
-    lastMove: history.at(-1) ?? 'No moves yet',
-    material: formatMaterialAdvantage(materialBalance),
-    candidateMoves: buildCandidateMoves(chess),
-  }
-}
-
-function parseTypedMove(input: string, chess: Chess) {
-  const trimmed = input.trim()
-  if (!trimmed) {
-    return null
-  }
-
-  try {
-    const compact = trimmed.replace(/\s+/g, '').toLowerCase()
-    const uciMatch = compact.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/)
-    if (uciMatch) {
-      return chess.move({
-        from: uciMatch[1] as Square,
-        to: uciMatch[2] as Square,
-        promotion: (uciMatch[3] ?? 'q') as 'q' | 'r' | 'b' | 'n',
-      })
-    }
-
-    return chess.move(trimmed)
-  } catch {
-    return null
-  }
-}
-
-function recreateChessFromHistory(history: string[]) {
-  const nextChess = new Chess()
-
-  for (const move of history) {
-    nextChess.move(move)
-  }
-
-  return nextChess
 }
 
 function buildCompletionSignal(input: {
@@ -262,12 +121,10 @@ const pieceGlyphs: Record<string, string> = {
 }
 
 export function ChessAppPage() {
-  const { runtimeContext, invocationMessage, sendCompletion, sendError, sendState } =
-    useEmbeddedAppBridge('chess.internal')
+  const { runtimeContext, invocationMessage, sendCompletion, sendState } = useEmbeddedAppBridge('chess.internal')
   const [chess, setChess] = useState(() => new Chess())
   const [selection, setSelection] = useState<SelectionState>({ from: null })
   const [feedback, setFeedback] = useState<string | null>(null)
-  const [moveInput, setMoveInput] = useState('')
 
   useEffect(() => {
     if (!runtimeContext) {
@@ -352,7 +209,6 @@ export function ChessAppPage() {
     return map
   }, [chess])
 
-  const analysis = useMemo(() => getBoardAnalysis(chess), [chess])
   const selectableMoves = useMemo(() => {
     if (!selection.from) {
       return []
@@ -371,7 +227,6 @@ export function ChessAppPage() {
     (nextChess: Chess, message: string, lastMove?: string) => {
       setChess(nextChess)
       setSelection({ from: null })
-      setMoveInput('')
       setFeedback(message)
 
       sendState({
@@ -434,49 +289,6 @@ export function ChessAppPage() {
     },
     [chess, commitMoveState, selection.from]
   )
-
-  const handleNotationMove = useCallback(() => {
-    const nextChess = new Chess(chess.fen())
-    const move = parseTypedMove(moveInput, nextChess)
-
-    if (!move) {
-      setFeedback('That move notation is not legal for the current position. Try e2e4 or Nf3.')
-      return
-    }
-
-    commitMoveState(nextChess, `Played ${move.san}. ${formatTurn(nextChess.turn())} to move.`, move.san)
-  }, [chess, commitMoveState, moveInput])
-
-  const handleUndoMove = useCallback(() => {
-    const history = chess.history()
-    if (history.length === 0) {
-      setFeedback('There are no moves to undo yet.')
-      return
-    }
-
-    const nextChess = recreateChessFromHistory(history.slice(0, -1))
-    commitMoveState(nextChess, 'Undid the last move. Review the new position.', nextChess.history().at(-1))
-  }, [chess, commitMoveState])
-
-  const handleShareBoard = useCallback(() => {
-    if (!runtimeContext) {
-      sendError({
-        code: 'app.runtime-missing',
-        message: 'The chess runtime context is not available yet.',
-        recoverable: true,
-      })
-      return
-    }
-
-    sendCompletion(
-      buildCompletionSignal({
-        conversationId: runtimeContext.conversationId,
-        appSessionId: runtimeContext.appSessionId,
-        toolCallId: invocationMessage?.payload.toolCallId,
-        chess,
-      })
-    )
-  }, [chess, invocationMessage?.payload.toolCallId, runtimeContext, sendCompletion, sendError])
 
   return (
     <Box
@@ -584,160 +396,6 @@ export function ChessAppPage() {
             })}
           </Box>
         </Paper>
-
-        <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="sm">
-          <Paper
-            withBorder
-            radius="xl"
-            p="sm"
-            style={{
-              background: 'rgba(15, 23, 42, 0.68)',
-              borderColor: 'rgba(148, 163, 184, 0.18)',
-            }}
-          >
-            <Stack gap="sm">
-              <Group justify="space-between" align="center">
-                <Text fw={700} c="white">
-                  Board analysis
-                </Text>
-                <Badge variant="light" color="blue">
-                  {analysis.phase}
-                </Badge>
-              </Group>
-              <Text size="sm" c="rgba(226,232,240,0.82)">
-                {analysis.status}
-              </Text>
-              <Text size="sm" c="rgba(226,232,240,0.72)">
-                {analysis.material}
-              </Text>
-              <Text size="sm" c="rgba(226,232,240,0.72)">
-                Last move: {analysis.lastMove}
-              </Text>
-              <Text size="sm" c="rgba(226,232,240,0.72)">
-                Legal moves: {analysis.legalMoveCount}
-              </Text>
-              <Text size="sm" c="rgba(226,232,240,0.72)">
-                Recent moves: {analysis.recentMoves}
-              </Text>
-              <Stack gap={6}>
-                <Text size="xs" tt="uppercase" fw={700} c="rgba(148,163,184,0.9)">
-                  Candidate moves
-                </Text>
-                <Group gap="xs">
-                  {analysis.candidateMoves.map((move) => (
-                    <Button
-                      key={move.san}
-                      size="xs"
-                      variant="light"
-                      onClick={() => {
-                        setMoveInput(move.san)
-                        const nextChess = new Chess(chess.fen())
-                        const appliedMove = parseTypedMove(move.san, nextChess)
-                        if (!appliedMove) {
-                          setFeedback(`Could not apply ${move.san} from the current position.`)
-                          return
-                        }
-                        commitMoveState(
-                          nextChess,
-                          `Applied ${appliedMove.san}. ${move.reason}`,
-                          appliedMove.san
-                        )
-                      }}
-                    >
-                      {move.label}
-                    </Button>
-                  ))}
-                </Group>
-              </Stack>
-            </Stack>
-          </Paper>
-
-          <Paper
-            withBorder
-            radius="xl"
-            p="sm"
-            style={{
-              background: 'rgba(15, 23, 42, 0.68)',
-              borderColor: 'rgba(148, 163, 184, 0.18)',
-            }}
-          >
-            <Stack gap="sm">
-              <Text fw={700} c="white">
-                Move tools
-              </Text>
-              <Text size="sm" c="rgba(226,232,240,0.76)">
-                Use algebraic notation like <strong>e4</strong> or coordinate notation like <strong>e2e4</strong>.
-              </Text>
-              <TextInput
-                label="Move notation"
-                placeholder="e2e4 or Nf3"
-                value={moveInput}
-                onChange={(event) => setMoveInput(event.currentTarget.value)}
-                styles={{
-                  input: {
-                    background: 'rgba(15,23,42,0.85)',
-                    color: 'white',
-                    borderColor: 'rgba(148, 163, 184, 0.22)',
-                  },
-                  label: {
-                    color: 'rgba(226,232,240,0.88)',
-                  },
-                }}
-              />
-              <Group>
-                <Button onClick={handleNotationMove}>Apply move</Button>
-                <Button variant="default" onClick={handleUndoMove}>
-                  Undo move
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    const nextChess = new Chess()
-                    commitMoveState(nextChess, 'Board reset to the starting position.')
-                  }}
-                >
-                  Reset board
-                </Button>
-              </Group>
-              {selection.from ? (
-                <Stack gap={6}>
-                  <Text size="xs" tt="uppercase" fw={700} c="rgba(148,163,184,0.9)">
-                    Selected piece moves from {selection.from.toUpperCase()}
-                  </Text>
-                  <Group gap="xs">
-                    {selectableMoves.map((move) => (
-                      <Button
-                        key={`${selection.from}-${move.san}`}
-                        size="xs"
-                        variant="light"
-                        onClick={() => {
-                          const nextChess = new Chess(chess.fen())
-                          const appliedMove = nextChess.move({
-                            from: selection.from!,
-                            to: move.square.toLowerCase() as Square,
-                            promotion: 'q',
-                          })
-                          if (!appliedMove) {
-                            setFeedback(`Could not apply ${move.san} from ${selection.from.toUpperCase()}.`)
-                            return
-                          }
-                          commitMoveState(
-                            nextChess,
-                            `Played ${appliedMove.san}. ${formatTurn(nextChess.turn())} to move.`,
-                            appliedMove.san
-                          )
-                        }}
-                      >
-                        {move.square}
-                      </Button>
-                    ))}
-                  </Group>
-                </Stack>
-              ) : null}
-            </Stack>
-          </Paper>
-        </SimpleGrid>
-
         <Paper
           withBorder
           radius="xl"
@@ -747,17 +405,24 @@ export function ChessAppPage() {
             borderColor: 'rgba(148, 163, 184, 0.18)',
           }}
         >
-          <Group justify="space-between" align="center" wrap="wrap">
-            <Text size="xs" tt="uppercase" fw={700} c="rgba(148,163,184,0.9)">
-              Quick actions
+          <Stack gap={6}>
+            <Text size="sm" fw={600} c="white">
+              Live board only
             </Text>
-            <Group gap="xs">
-              <Button onClick={handleShareBoard}>Send board summary to chat</Button>
-              <Button variant="default" color="gray" onClick={() => navigator.clipboard?.writeText(chess.fen())}>
-                Copy FEN
-              </Button>
-            </Group>
-          </Group>
+            <Text size="sm" c="rgba(226,232,240,0.72)">
+              Ask the chat to analyze this position, recommend the next move, or explain what changed on the board.
+            </Text>
+            {selection.from ? (
+              <Text size="xs" c="rgba(148,163,184,0.9)">
+                Selected {selection.from.toUpperCase()}. Click a destination square to make a manual board move.
+              </Text>
+            ) : null}
+            {selectableMoves.length > 0 ? (
+              <Text size="xs" c="rgba(148,163,184,0.9)">
+                Legal destinations: {selectableMoves.map((move) => move.square).join(', ')}
+              </Text>
+            ) : null}
+          </Stack>
         </Paper>
       </Stack>
     </Box>
