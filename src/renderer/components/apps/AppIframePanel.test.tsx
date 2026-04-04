@@ -115,7 +115,9 @@ describe('AppIframePanel', () => {
 
     const iframe = screen.getByTitle('Duolingo app panel') as HTMLIFrameElement
 
-    expect(iframe.getAttribute('src')).toBe('http://localhost:3000/embedded-apps/catalog/duolingo')
+    expect(iframe.getAttribute('src')).toMatch(
+      /^http:\/\/localhost:3000\/embedded-apps\/catalog\/duolingo\?chatbridge_panel=1&chatbridge_launch=.+$/
+    )
     expect(screen.queryByText('Governed browser-session workspace')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open in new tab' })).toBeNull()
   })

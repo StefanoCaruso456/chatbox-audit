@@ -1,6 +1,10 @@
 import type { EmbeddedAppHostRuntimeConfig } from '@/components/message-parts/embedded-app-host'
 import type { ApprovedApp } from '@/types/apps'
 
+type ResolveAppPanelLaunchUrlOptions = {
+  cacheBustKey?: string
+}
+
 function getLaunchOrigin(launchUrl: string): string | null {
   try {
     const parsed = new URL(launchUrl)
@@ -14,9 +18,28 @@ function getLaunchOrigin(launchUrl: string): string | null {
   }
 }
 
-export function resolveAppPanelLaunchUrl(launchUrl: string) {
+function appendCacheBustKey(url: URL, cacheBustKey?: string) {
+  if (!cacheBustKey) {
+    return
+  }
+
+  url.searchParams.set('chatbridge_panel', '1')
+  url.searchParams.set('chatbridge_launch', cacheBustKey)
+}
+
+export function resolveAppPanelLaunchUrl(launchUrl: string, options?: ResolveAppPanelLaunchUrlOptions) {
   const trimmed = launchUrl.trim()
   if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed)
+      if (typeof window !== 'undefined' && parsed.origin === window.location.origin) {
+        appendCacheBustKey(parsed, options?.cacheBustKey)
+        return parsed.toString()
+      }
+    } catch {
+      return trimmed
+    }
+
     return trimmed
   }
 
@@ -32,7 +55,9 @@ export function resolveAppPanelLaunchUrl(launchUrl: string) {
     return `${window.location.href.split('#')[0]}#${trimmed}`
   }
 
-  return new URL(trimmed, window.location.origin).toString()
+  const resolved = new URL(trimmed, window.location.origin)
+  appendCacheBustKey(resolved, options?.cacheBustKey)
+  return resolved.toString()
 }
 
 export function buildSidebarEmbeddedAppRuntime(
