@@ -88,11 +88,13 @@ describe('ChessAppPage', () => {
 
     expect(screen.getByText('Board analysis')).toBeTruthy()
     expect(screen.getByText('Move tools')).toBeTruthy()
+    expect(screen.getByText('Quick actions')).toBeTruthy()
     expect(screen.getByText('Opening')).toBeTruthy()
     expect(screen.getByText('Material is even.')).toBeTruthy()
     expect(screen.getByText('Legal moves: 20')).toBeTruthy()
     expect(screen.getByLabelText('Move notation')).toBeTruthy()
     expect(screen.getByText('Candidate moves')).toBeTruthy()
+    expect(screen.queryByText('Practice or analyze a live chess board without leaving the chat.')).toBeNull()
   })
 
   it('lets the user make a simple opening move on the board', () => {

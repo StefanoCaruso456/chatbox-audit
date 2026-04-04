@@ -272,11 +272,7 @@ export function ChessAppPage() {
     const nextChess = new Chess()
     setChess(nextChess)
     setSelection({ from: null })
-    setFeedback(
-      invocationMessage.payload.arguments.mode === 'analysis'
-        ? 'Analysis board ready. Click a piece and then a destination square.'
-        : 'Practice board ready. Click a piece and then a destination square.'
-    )
+    setFeedback(null)
 
     sendState({
       status: 'active',
@@ -444,23 +440,21 @@ export function ChessAppPage() {
 
   return (
     <Box
-      p="md"
-      mih="100vh"
+      p="sm"
+      mih="100%"
       c="#e5eefb"
       style={{
         background: 'linear-gradient(180deg, #020617 0%, #0f172a 46%, #111827 100%)',
         overflowX: 'hidden',
+        overflowY: 'auto',
       }}
     >
-      <Stack gap="md">
+      <Stack gap="sm">
         <Group justify="space-between">
           <div>
             <Title order={3} c="white">
               Chess Tutor
             </Title>
-            <Text c="rgba(226,232,240,0.78)" size="sm">
-              Practice or analyze a live chess board without leaving the chat.
-            </Text>
           </div>
           <Badge color={chess.isGameOver() ? 'teal' : 'blue'} variant="light">
             {chess.isGameOver() ? 'Game Over' : `${formatTurn(chess.turn())} to move`}
@@ -473,11 +467,89 @@ export function ChessAppPage() {
           </Alert>
         )}
 
-        <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="md">
+        <Paper
+          withBorder
+          radius="xl"
+          p="sm"
+          shadow="sm"
+          style={{
+            background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%)',
+            borderColor: 'rgba(148, 163, 184, 0.22)',
+          }}
+        >
+          <Box
+            data-testid="chess-board-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(8, minmax(0, 1fr))',
+              gap: '4px',
+              aspectRatio: '1 / 1',
+              width: '100%',
+            }}
+          >
+            {boardSquares.map((square) => {
+              const isSelected = selection.from === square
+              const piece = pieces.get(square)
+              const isLightSquare = getSquareColor(square) === '#f1f5f9'
+
+              return (
+                <UnstyledButton
+                  key={square}
+                  type="button"
+                  onClick={() => handleSquareClick(square)}
+                  aria-label={
+                    piece ? `${piece.label} on ${square.toUpperCase()}` : `Empty square ${square.toUpperCase()}`
+                  }
+                  data-testid={`chess-square-${square}`}
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '100%',
+                    aspectRatio: '1 / 1',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.08)',
+                    background: isSelected ? '#bfdbfe' : isLightSquare ? '#f8fafc' : '#94a3b8',
+                    boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
+                    color: piece?.color === 'w' ? '#f8fafc' : '#0f172a',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Text
+                    component="span"
+                    style={{
+                      fontSize: 'clamp(1.15rem, 3vw, 1.9rem)',
+                      lineHeight: 1,
+                      textShadow: piece?.color === 'w' ? '0 1px 1px rgba(15,23,42,0.55)' : 'none',
+                    }}
+                  >
+                    {piece?.glyph ?? ''}
+                  </Text>
+                  <Text
+                    component="span"
+                    size="10px"
+                    fw={700}
+                    style={{
+                      position: 'absolute',
+                      right: 6,
+                      bottom: 4,
+                      color: isLightSquare ? 'rgba(15,23,42,0.52)' : 'rgba(248,250,252,0.8)',
+                    }}
+                  >
+                    {square.toUpperCase()}
+                  </Text>
+                </UnstyledButton>
+              )
+            })}
+          </Box>
+        </Paper>
+
+        <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="sm">
           <Paper
             withBorder
             radius="xl"
-            p="md"
+            p="sm"
             style={{
               background: 'rgba(15, 23, 42, 0.68)',
               borderColor: 'rgba(148, 163, 184, 0.18)',
@@ -543,7 +615,7 @@ export function ChessAppPage() {
           <Paper
             withBorder
             radius="xl"
-            p="md"
+            p="sm"
             style={{
               background: 'rgba(15, 23, 42, 0.68)',
               borderColor: 'rgba(148, 163, 184, 0.18)',
@@ -630,103 +702,22 @@ export function ChessAppPage() {
           withBorder
           radius="xl"
           p="sm"
-          shadow="sm"
-          style={{
-            background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%)',
-            borderColor: 'rgba(148, 163, 184, 0.22)',
-          }}
-        >
-          <Box
-            data-testid="chess-board-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(8, minmax(0, 1fr))',
-              gap: '4px',
-              aspectRatio: '1 / 1',
-              width: '100%',
-            }}
-          >
-            {boardSquares.map((square) => {
-              const isSelected = selection.from === square
-              const piece = pieces.get(square)
-              const isLightSquare = getSquareColor(square) === '#f1f5f9'
-
-              return (
-                <UnstyledButton
-                  key={square}
-                  type="button"
-                  onClick={() => handleSquareClick(square)}
-                  aria-label={
-                    piece ? `${piece.label} on ${square.toUpperCase()}` : `Empty square ${square.toUpperCase()}`
-                  }
-                  data-testid={`chess-square-${square}`}
-                  style={{
-                    position: 'relative',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '100%',
-                    aspectRatio: '1 / 1',
-                    borderRadius: '12px',
-                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.08)',
-                    background: isSelected ? '#bfdbfe' : isLightSquare ? '#f8fafc' : '#94a3b8',
-                    boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
-                    color: piece?.color === 'w' ? '#f8fafc' : '#0f172a',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <Text
-                    component="span"
-                    style={{
-                      fontSize: 'clamp(1.15rem, 3vw, 1.9rem)',
-                      lineHeight: 1,
-                      textShadow: piece?.color === 'w' ? '0 1px 1px rgba(15,23,42,0.55)' : 'none',
-                    }}
-                  >
-                    {piece?.glyph ?? ''}
-                  </Text>
-                  <Text
-                    component="span"
-                    size="10px"
-                    fw={700}
-                    style={{
-                      position: 'absolute',
-                      right: 6,
-                      bottom: 4,
-                      color: isLightSquare ? 'rgba(15,23,42,0.52)' : 'rgba(248,250,252,0.8)',
-                    }}
-                  >
-                    {square.toUpperCase()}
-                  </Text>
-                </UnstyledButton>
-              )
-            })}
-          </Box>
-        </Paper>
-
-        <Paper
-          withBorder
-          radius="xl"
-          p="md"
           style={{
             background: 'rgba(15, 23, 42, 0.64)',
             borderColor: 'rgba(148, 163, 184, 0.18)',
           }}
         >
-          <Stack gap="xs">
-            <Text fw={600} c="white">
-              Board state for the chat
+          <Group justify="space-between" align="center" wrap="wrap">
+            <Text size="xs" tt="uppercase" fw={700} c="rgba(148,163,184,0.9)">
+              Quick actions
             </Text>
-            <Text size="sm" c="rgba(226,232,240,0.82)">
-              {formatSummary(chess)}
-            </Text>
-            <Group>
+            <Group gap="xs">
               <Button onClick={handleShareBoard}>Send board summary to chat</Button>
               <Button variant="default" color="gray" onClick={() => navigator.clipboard?.writeText(chess.fen())}>
                 Copy FEN
               </Button>
             </Group>
-          </Stack>
+          </Group>
         </Paper>
       </Stack>
     </Box>
