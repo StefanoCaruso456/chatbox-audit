@@ -27,6 +27,7 @@ export type AppIntegrationAuthModel = 'none' | 'oauth' | 'district-sso' | 'vendo
 
 export interface ApprovedAppRuntimeBridge {
   appId: string
+  sidebarMode?: 'embedded-host' | 'direct-iframe'
   authState?: AppSessionAuthState
   grantedPermissions?: AppPermissions
   availableTools?: ToolSchema[]

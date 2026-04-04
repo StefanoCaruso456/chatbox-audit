@@ -185,7 +185,10 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     () => buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
     [app, reloadNonce, resolvedLaunchUrl]
   )
-  const usesEmbeddedRuntime = app.experience === 'tutormeai-runtime' && Boolean(embeddedRuntime)
+  const usesEmbeddedRuntime =
+    app.experience === 'tutormeai-runtime' &&
+    app.runtimeBridge?.sidebarMode !== 'direct-iframe' &&
+    Boolean(embeddedRuntime)
 
   useEffect(() => {
     if (app.experience !== 'tutormeai-runtime' || typeof window === 'undefined' || window.top !== window) {

@@ -652,6 +652,7 @@ const tutorMeAiApps: ApprovedApp[] = [
     experience: 'tutormeai-runtime',
     runtimeBridge: {
       appId: 'chess.internal',
+      sidebarMode: 'direct-iframe',
       authState: 'not-required',
       grantedPermissions: ['session:write', 'tool:invoke'],
       availableTools: [exampleChessLaunchToolSchema],
