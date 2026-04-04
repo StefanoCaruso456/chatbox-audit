@@ -8,6 +8,7 @@ import {
 
 type ResolveAppPanelLaunchUrlOptions = {
   cacheBustKey?: string
+  launchArguments?: Record<string, unknown>
 }
 
 function getLaunchOrigin(launchUrl: string): string | null {
@@ -32,6 +33,18 @@ function appendCacheBustKey(url: URL, cacheBustKey?: string) {
   url.searchParams.set('chatbridge_launch', cacheBustKey)
 }
 
+function appendLaunchArguments(url: URL, launchArguments?: Record<string, unknown>) {
+  if (!launchArguments) {
+    return
+  }
+
+  Object.entries(launchArguments).forEach(([key, value]) => {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      url.searchParams.set(key, String(value))
+    }
+  })
+}
+
 export function resolveAppPanelLaunchUrl(launchUrl: string, options?: ResolveAppPanelLaunchUrlOptions) {
   const trimmed = launchUrl.trim()
   if (/^https?:\/\//i.test(trimmed)) {
@@ -39,6 +52,7 @@ export function resolveAppPanelLaunchUrl(launchUrl: string, options?: ResolveApp
       const parsed = new URL(trimmed)
       if (typeof window !== 'undefined' && parsed.origin === window.location.origin) {
         appendCacheBustKey(parsed, options?.cacheBustKey)
+        appendLaunchArguments(parsed, options?.launchArguments)
         return parsed.toString()
       }
     } catch {
@@ -62,6 +76,7 @@ export function resolveAppPanelLaunchUrl(launchUrl: string, options?: ResolveApp
 
   const resolved = new URL(trimmed, window.location.origin)
   appendCacheBustKey(resolved, options?.cacheBustKey)
+  appendLaunchArguments(resolved, options?.launchArguments)
   return resolved.toString()
 }
 
@@ -98,6 +113,11 @@ export function buildSidebarEmbeddedAppRuntime(
         source: 'approved-app-sidebar',
         approvedAppId: app.id,
         approvedAppName: app.name,
+        ...(runtimeBridge.pendingInvocation?.arguments
+          ? {
+              toolArguments: runtimeBridge.pendingInvocation.arguments,
+            }
+          : {}),
         ...(runtimeBridge.initialState ?? {}),
       },
       availableTools: runtimeBridge.availableTools ?? [],

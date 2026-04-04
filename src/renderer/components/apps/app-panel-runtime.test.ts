@@ -17,6 +17,20 @@ describe('app panel runtime helpers', () => {
     )
   })
 
+  it('passes direct iframe launch arguments through the sidebar url for same-origin apps', () => {
+    expect(
+      resolveAppPanelLaunchUrl('/embedded-apps/flashcards', {
+        cacheBustKey: 'runtime-123',
+        launchArguments: {
+          topic: 'fractions',
+          review: true,
+        },
+      })
+    ).toBe(
+      `${window.location.origin}/embedded-apps/flashcards?chatbridge_panel=1&chatbridge_launch=runtime-123&topic=fractions&review=true`
+    )
+  })
+
   it('keeps third-party vendor urls stable when resolving panel launches', () => {
     expect(resolveAppPanelLaunchUrl('https://www.duolingo.com/', { cacheBustKey: 'runtime-123' })).toBe(
       'https://www.duolingo.com/'
@@ -37,6 +51,11 @@ describe('app panel runtime helpers', () => {
       appSessionId: 'app-session.sidebar.flashcards-coach',
       bootstrap: {
         authState: 'not-required',
+        initialState: {
+          toolArguments: {
+            topic: 'fractions',
+          },
+        },
       },
       pendingInvocation: {
         toolName: 'flashcards.start-session',
