@@ -1,16 +1,25 @@
 import { ActionIcon, Box, Button, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
 import { IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
+import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
+import {
+  createHostBootstrapMessage,
+  createHostInvokeMessage,
+  validateEmbeddedAppRuntimeMessage,
+  validateRuntimeMessageOrigin,
+} from '@/components/message-parts/embedded-app-runtime'
 import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { probeForNewerBuild } from '@/lib/build-freshness'
 import { cn } from '@/lib/utils'
+import { currentSessionIdAtom } from '@/stores/atoms'
+import { useSession } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { appIntegrationModeMeta, type ApprovedApp } from '@/types/apps'
 import AppIcon from './AppIcon'
-import { buildSidebarEmbeddedAppRuntime, resolveAppPanelLaunchUrl } from './app-panel-runtime'
+import { resolveAppPanelLaunchUrl, resolveApprovedAppPanelRuntime } from './app-panel-runtime'
 
 const iframeSandbox = [
   'allow-downloads',
@@ -23,6 +32,10 @@ const iframeSandbox = [
 ].join(' ')
 
 const APP_LOAD_TIMEOUT_MS = 7000
+
+function buildRuntimeMessageId(kind: string, appId: string, appSessionId: string, sequence: number): string {
+  return `runtime.${kind}.${appId}.${appSessionId}.${sequence}`
+}
 
 type AppLoadState = 'loading' | 'ready' | 'blocked'
 
@@ -166,9 +179,16 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const { t } = useTranslation()
   const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
   const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
+  const currentSessionId = useAtomValue(currentSessionIdAtom)
+  const { session } = useSession(currentSessionId)
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const loadTimeoutRef = useRef<number | null>(null)
+  const runtimeSequenceRef = useRef(0)
+  const runtimeBootstrapKeyRef = useRef<string | null>(null)
+  const runtimeInvocationKeyRef = useRef<string | null>(null)
+  const runtimeReplayTimersRef = useRef<number[]>([])
+  const hasRuntimeResponseRef = useRef(false)
   const [launchSessionKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
@@ -187,12 +207,20 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     [app.launchUrl, directIframeLaunchArguments, launchSessionKey, reloadNonce]
   )
   const embeddedRuntime = useMemo(
-    () => buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
-    [app, reloadNonce, resolvedLaunchUrl]
+    () =>
+      resolveApprovedAppPanelRuntime(app, resolvedLaunchUrl, reloadNonce, {
+        sessionId: currentSessionId,
+        session,
+      }),
+    [app, currentSessionId, reloadNonce, resolvedLaunchUrl, session]
   )
   const usesEmbeddedRuntime =
     app.experience === 'tutormeai-runtime' &&
     app.runtimeBridge?.sidebarMode !== 'direct-iframe' &&
+    Boolean(embeddedRuntime)
+  const usesDirectRuntimeBridge =
+    app.experience === 'tutormeai-runtime' &&
+    app.runtimeBridge?.sidebarMode === 'direct-iframe' &&
     Boolean(embeddedRuntime)
 
   useEffect(() => {
@@ -210,6 +238,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       window.clearTimeout(loadTimeoutRef.current)
       loadTimeoutRef.current = null
     }
+  }, [])
+
+  const clearRuntimeReplayTimers = useCallback(() => {
+    runtimeReplayTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    runtimeReplayTimersRef.current = []
   }, [])
 
   const startLoadingAttempt = useCallback(() => {
@@ -232,8 +265,215 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
     return () => {
       clearLoadTimeout()
+      clearRuntimeReplayTimers()
     }
-  }, [startLoadingAttempt, clearLoadTimeout])
+  }, [clearLoadTimeout, clearRuntimeReplayTimers, startLoadingAttempt])
+
+  useEffect(() => {
+    runtimeSequenceRef.current = 0
+    runtimeBootstrapKeyRef.current = null
+    runtimeInvocationKeyRef.current = null
+    hasRuntimeResponseRef.current = false
+    clearRuntimeReplayTimers()
+  }, [
+    app.id,
+    clearRuntimeReplayTimers,
+    embeddedRuntime?.appSessionId,
+    embeddedRuntime?.conversationId,
+    embeddedRuntime?.restartNonce,
+    reloadNonce,
+  ])
+
+  const postDirectRuntimeHandshake = useCallback(
+    (forceReplay = false) => {
+      if (!usesDirectRuntimeBridge || !embeddedRuntime) {
+        return
+      }
+
+      const iframeWindow = iframeRef.current?.contentWindow
+      if (!iframeWindow) {
+        return
+      }
+
+      const originCheck = validateRuntimeMessageOrigin(embeddedRuntime.expectedOrigin, embeddedRuntime.expectedOrigin)
+      if (!originCheck.valid || !originCheck.normalizedExpectedOrigin) {
+        return
+      }
+
+      const runtimeAppId = app.runtimeBridge?.appId ?? app.id
+      const nextSequence = () => {
+        runtimeSequenceRef.current += 1
+        return runtimeSequenceRef.current
+      }
+      const sentAt = new Date().toISOString()
+
+      const bootstrapKey = JSON.stringify([
+        embeddedRuntime.conversationId,
+        embeddedRuntime.appSessionId,
+        embeddedRuntime.bootstrap?.launchReason ?? 'manual-open',
+        embeddedRuntime.bootstrap?.messageId ?? '',
+        embeddedRuntime.bootstrap?.correlationId ?? '',
+        embeddedRuntime.bootstrap?.authState ?? 'not-required',
+        embeddedRuntime.bootstrap?.grantedPermissions ?? [],
+        embeddedRuntime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
+      ])
+
+      if (forceReplay || runtimeBootstrapKeyRef.current !== bootstrapKey) {
+        const bootstrapSequence = nextSequence()
+        iframeWindow.postMessage(
+          createHostBootstrapMessage({
+            messageId:
+              embeddedRuntime.bootstrap?.messageId ??
+              buildRuntimeMessageId('bootstrap', runtimeAppId, embeddedRuntime.appSessionId, bootstrapSequence),
+            correlationId: embeddedRuntime.bootstrap?.correlationId,
+            conversationId: embeddedRuntime.conversationId,
+            appSessionId: embeddedRuntime.appSessionId,
+            appId: runtimeAppId,
+            sequence: bootstrapSequence,
+            sentAt,
+            expectedOrigin: originCheck.normalizedExpectedOrigin,
+            handshakeToken: embeddedRuntime.handshakeToken,
+            launchReason: embeddedRuntime.bootstrap?.launchReason ?? 'manual-open',
+            authState: embeddedRuntime.bootstrap?.authState ?? 'not-required',
+            grantedPermissions: embeddedRuntime.bootstrap?.grantedPermissions ?? [],
+            embedUrl: resolvedLaunchUrl,
+            initialState: embeddedRuntime.bootstrap?.initialState,
+            availableTools: embeddedRuntime.bootstrap?.availableTools ?? [],
+          }),
+          originCheck.normalizedExpectedOrigin
+        )
+        runtimeBootstrapKeyRef.current = bootstrapKey
+      }
+
+      if (!embeddedRuntime.pendingInvocation) {
+        return
+      }
+
+      const invocationKey = JSON.stringify([
+        embeddedRuntime.pendingInvocation.toolCallId,
+        embeddedRuntime.pendingInvocation.toolName,
+        embeddedRuntime.pendingInvocation.messageId ?? '',
+        embeddedRuntime.pendingInvocation.correlationId ?? '',
+        embeddedRuntime.pendingInvocation.timeoutMs ?? '',
+        embeddedRuntime.pendingInvocation.arguments ?? {},
+      ])
+
+      if (!forceReplay && runtimeInvocationKeyRef.current === invocationKey) {
+        return
+      }
+
+      const invokeSequence = nextSequence()
+      iframeWindow.postMessage(
+        createHostInvokeMessage({
+          messageId:
+            embeddedRuntime.pendingInvocation.messageId ??
+            buildRuntimeMessageId('invoke', runtimeAppId, embeddedRuntime.appSessionId, invokeSequence),
+          correlationId: embeddedRuntime.pendingInvocation.correlationId,
+          conversationId: embeddedRuntime.conversationId,
+          appSessionId: embeddedRuntime.appSessionId,
+          appId: runtimeAppId,
+          sequence: invokeSequence,
+          sentAt,
+          expectedOrigin: originCheck.normalizedExpectedOrigin,
+          handshakeToken: embeddedRuntime.handshakeToken,
+          toolCallId: embeddedRuntime.pendingInvocation.toolCallId,
+          toolName: embeddedRuntime.pendingInvocation.toolName,
+          arguments: embeddedRuntime.pendingInvocation.arguments ?? {},
+          timeoutMs: embeddedRuntime.pendingInvocation.timeoutMs,
+        }),
+        originCheck.normalizedExpectedOrigin
+      )
+      runtimeInvocationKeyRef.current = invocationKey
+    },
+    [app.id, app.runtimeBridge?.appId, embeddedRuntime, resolvedLaunchUrl, usesDirectRuntimeBridge]
+  )
+
+  const scheduleRuntimeHandshakeReplay = useCallback(() => {
+    clearRuntimeReplayTimers()
+    if (!usesDirectRuntimeBridge || !embeddedRuntime) {
+      return
+    }
+
+    const replayDelays = [180, 720, 1_600]
+    runtimeReplayTimersRef.current = replayDelays.map((delayMs) =>
+      window.setTimeout(() => {
+        if (!hasRuntimeResponseRef.current) {
+          postDirectRuntimeHandshake(true)
+        }
+      }, delayMs)
+    )
+  }, [clearRuntimeReplayTimers, embeddedRuntime, postDirectRuntimeHandshake, usesDirectRuntimeBridge])
+
+  useEffect(() => {
+    if (!usesDirectRuntimeBridge || !embeddedRuntime) {
+      return
+    }
+
+    const runtimeAppId = app.runtimeBridge?.appId ?? app.id
+
+    const handleMessage = (event: MessageEvent) => {
+      const iframeWindow = iframeRef.current?.contentWindow
+      if (event.source !== iframeWindow) {
+        return
+      }
+
+      const originCheck = validateRuntimeMessageOrigin(embeddedRuntime.expectedOrigin, event.origin)
+      if (!originCheck.valid) {
+        return
+      }
+
+      const validation = validateEmbeddedAppRuntimeMessage(event.data)
+      if (!validation.success) {
+        return
+      }
+
+      const message = validation.data
+      if (
+        message.source !== 'app' ||
+        message.appId !== runtimeAppId ||
+        message.conversationId !== embeddedRuntime.conversationId ||
+        message.appSessionId !== embeddedRuntime.appSessionId ||
+        message.security.handshakeToken !== embeddedRuntime.handshakeToken ||
+        message.security.expectedOrigin !== originCheck.normalizedExpectedOrigin
+      ) {
+        return
+      }
+
+      if (!hasRuntimeResponseRef.current) {
+        hasRuntimeResponseRef.current = true
+        clearRuntimeReplayTimers()
+      }
+
+      clearLoadTimeout()
+
+      if (message.type === 'app.state') {
+        setLoadState(message.payload.status === 'failed' ? 'blocked' : 'ready')
+        embeddedRuntime.onStateUpdate?.(message)
+        return
+      }
+
+      if (message.type === 'app.heartbeat') {
+        setLoadState('ready')
+        return
+      }
+
+      if (message.type === 'app.complete') {
+        setLoadState('ready')
+        embeddedRuntime.onCompletion?.(message.payload)
+        return
+      }
+
+      if (message.type === 'app.error') {
+        setLoadState('blocked')
+        embeddedRuntime.onRuntimeError?.(message)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [app.id, app.runtimeBridge?.appId, clearLoadTimeout, clearRuntimeReplayTimers, embeddedRuntime, usesDirectRuntimeBridge])
 
   const handleReload = () => {
     setReloadNonce((value) => value + 1)
@@ -245,6 +485,13 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }
 
   const handleIframeLoad = () => {
+    if (usesDirectRuntimeBridge && embeddedRuntime) {
+      setLoadState('loading')
+      postDirectRuntimeHandshake(false)
+      scheduleRuntimeHandshakeReplay()
+      return
+    }
+
     clearLoadTimeout()
 
     try {
