@@ -1,4 +1,5 @@
 import {
+  exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
@@ -10,8 +11,16 @@ const DEFAULT_MODE_CAPABILITIES = {
   'partner-embed': ['Approved in-app embed', 'Manual launch URL support', 'Teacher-friendly panel preview'],
   'api-adapter': ['ChatBridge-owned UI shell', 'Structured tool calls', 'API-backed state and context retention'],
   'district-adapter': ['District launch support', 'School-managed auth path', 'K-12 workflow shell inside ChatBridge'],
-  'browser-session': ['Governed browser-session shell', 'In-product vendor launch target', 'Policy-aware fallback surface'],
-  'native-replacement': ['ChatBridge-native workflow shell', 'Focused learning flow', 'Conversation-aware replacement UX'],
+  'browser-session': [
+    'Governed browser-session shell',
+    'In-product vendor launch target',
+    'Policy-aware fallback surface',
+  ],
+  'native-replacement': [
+    'ChatBridge-native workflow shell',
+    'Focused learning flow',
+    'Conversation-aware replacement UX',
+  ],
 } as const
 
 const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['integrationConfig']>>> = {
@@ -30,7 +39,8 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
     helpUrl: 'https://www.classdojo.com/',
     helpLabel: 'ClassDojo product site',
     authModel: 'vendor-session',
-    statusNote: 'ClassDojo does not expose a friendly third-party API path, so this stays on the governed browser-session track.',
+    statusNote:
+      'ClassDojo does not expose a friendly third-party API path, so this stays on the governed browser-session track.',
   },
   'canvas-student': {
     authModel: 'district-sso',
@@ -70,7 +80,8 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
     authModel: 'district-sso',
   },
   splashlearn: {
-    helpUrl: 'https://support.splashlearn.com/hc/en-us/articles/12274707283346-Enhancing-platform-compatibility-SplashLearn-integration',
+    helpUrl:
+      'https://support.splashlearn.com/hc/en-us/articles/12274707283346-Enhancing-platform-compatibility-SplashLearn-integration',
     helpLabel: 'SplashLearn integration guide',
     authModel: 'district-sso',
   },
@@ -122,7 +133,8 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
     authModel: 'district-sso',
   },
   quizizz: {
-    helpUrl: 'https://support.quizizz.com/hc/en-us/articles/37222826330265-All-LMS-Platforms-You-Can-Integrate-With-Quizizz',
+    helpUrl:
+      'https://support.quizizz.com/hc/en-us/articles/37222826330265-All-LMS-Platforms-You-Can-Integrate-With-Quizizz',
     helpLabel: 'Quizizz LMS integrations',
     authModel: 'district-sso',
   },
@@ -211,7 +223,11 @@ function buildDefaultSetupChecklist(app: ApprovedApp) {
         'Wire the replacement UI back into chat context and completion summaries.',
       ]
     case 'runtime':
-      return ['Open the runtime beside chat.', 'Invoke the app tool flow.', 'Return completion context to the conversation.']
+      return [
+        'Open the runtime beside chat.',
+        'Invoke the app tool flow.',
+        'Return completion context to the conversation.',
+      ]
   }
 }
 
@@ -249,7 +265,7 @@ function buildIntegrationConfig(app: ApprovedApp): NonNullable<ApprovedApp['inte
     (app.integrationMode === 'partner-embed' ||
     app.integrationMode === 'district-adapter' ||
     app.integrationMode === 'browser-session'
-      ? app.vendorUrl ?? app.launchUrl
+      ? (app.vendorUrl ?? app.launchUrl)
       : undefined)
 
   return {
@@ -655,7 +671,7 @@ const tutorMeAiApps: ApprovedApp[] = [
       sidebarMode: 'direct-iframe',
       authState: 'not-required',
       grantedPermissions: ['session:write', 'tool:invoke'],
-      availableTools: [exampleChessLaunchToolSchema],
+      availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
       pendingInvocation: {
         toolName: exampleChessLaunchToolSchema.name,
         arguments: { mode: 'practice' },

@@ -1,3 +1,4 @@
+import { exampleChessGetBoardStateToolSchema, exampleChessLaunchToolSchema } from '@shared/contracts/v1'
 import { createMessage } from '@shared/types'
 import { describe, expect, it } from 'vitest'
 import { deriveConversationAppContext, routeTutorMeAiAppRequest } from './orchestrator'
@@ -43,7 +44,9 @@ describe('routeTutorMeAiAppRequest', () => {
     )
 
     expect(flashcardsPart).toBeTruthy()
-    expect(flashcardsPart && flashcardsPart.type === 'embedded-app' ? flashcardsPart.bridge?.bootstrap?.initialState : null).toMatchObject({
+    expect(
+      flashcardsPart && flashcardsPart.type === 'embedded-app' ? flashcardsPart.bridge?.bootstrap?.initialState : null
+    ).toMatchObject({
       toolArguments: {
         topic: 'fractions',
       },
@@ -87,7 +90,7 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(result.kind).toBe('clarify')
   })
 
-  it('passes through normal chat follow-ups without relaunching an app', async () => {
+  it('uses the live chess board state for strategy follow-ups without relaunching the app', async () => {
     const priorAssistant = createMessage('assistant', 'Launching Chess Tutor in the right sidebar.')
     priorAssistant.contentParts = [
       {
@@ -107,8 +110,14 @@ describe('routeTutorMeAiAppRequest', () => {
           bootstrap: {
             launchReason: 'chat-tool',
             authState: 'connected',
-            grantedPermissions: ['session:write', 'tool:invoke'],
-            availableTools: [],
+            grantedPermissions: ['session:read', 'session:write', 'tool:invoke'],
+            initialState: {
+              fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+              turn: 'w',
+              moveCount: 2,
+              lastMove: 'e5',
+            },
+            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
           },
         },
       },
@@ -123,7 +132,136 @@ describe('routeTutorMeAiAppRequest', () => {
       previousMessages: [createMessage('user', "let's play chess"), priorAssistant],
     })
 
-    expect(result.kind).toBe('pass-through')
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(result.message.contentParts.some((part) => part.type === 'embedded-app')).toBe(false)
+    expect(
+      result.message.contentParts.find((part) => part.type === 'tool-call' && part.toolName === 'chess.get-board-state')
+    ).toBeTruthy()
+  })
+
+  it('returns the live chess board state for board-analysis follow-ups instead of relaunching the app', async () => {
+    const priorAssistant = createMessage('assistant', 'Launching Chess Tutor in the right sidebar.')
+    priorAssistant.contentParts = [
+      {
+        type: 'embedded-app',
+        appId: 'chess.internal',
+        appName: 'Chess Tutor',
+        appSessionId: 'app-session.chess.7',
+        sourceUrl: 'http://localhost:1212/embedded-apps/chess',
+        title: 'Chess Tutor',
+        summary: 'Current board FEN: rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2. White to move.',
+        status: 'ready',
+        allowedOrigin: 'http://localhost:1212',
+        bridge: {
+          expectedOrigin: 'http://localhost:1212',
+          conversationId: 'conversation.7',
+          appSessionId: 'app-session.chess.7',
+          bootstrap: {
+            launchReason: 'chat-tool',
+            authState: 'connected',
+            grantedPermissions: ['session:read', 'session:write', 'tool:invoke'],
+            initialState: {
+              fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+              turn: 'w',
+              moveCount: 2,
+              lastMove: 'e5',
+            },
+            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
+          },
+        },
+      },
+    ]
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.7',
+      userId: 'user.7',
+      userRequest: 'analyze the current chess board',
+      requestMessageId: 'message.7',
+      previousMessages: [createMessage('user', "let's play chess"), priorAssistant],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(result.message.contentParts.some((part) => part.type === 'embedded-app')).toBe(false)
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.state : null).toBe('result')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      appSessionId: 'app-session.chess.7',
+      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      turn: 'white',
+      moveCount: 2,
+      lastMove: 'e5',
+      legalMoveCount: 29,
+      moveExecutionAvailable: false,
+    })
+
+    expect(
+      result.message.contentParts.find((part) => part.type === 'text' && part.text.includes('Current live Chess board'))
+    ).toBeTruthy()
+  })
+
+  it('stops move requests from pretending the live chess board changed when move execution is not wired yet', async () => {
+    const priorAssistant = createMessage('assistant', 'Launching Chess Tutor in the right sidebar.')
+    priorAssistant.contentParts = [
+      {
+        type: 'embedded-app',
+        appId: 'chess.internal',
+        appName: 'Chess Tutor',
+        appSessionId: 'app-session.chess.8',
+        sourceUrl: 'http://localhost:1212/embedded-apps/chess',
+        title: 'Chess Tutor',
+        summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w. White to move.',
+        status: 'ready',
+        allowedOrigin: 'http://localhost:1212',
+        bridge: {
+          expectedOrigin: 'http://localhost:1212',
+          conversationId: 'conversation.8',
+          appSessionId: 'app-session.chess.8',
+          bootstrap: {
+            launchReason: 'chat-tool',
+            authState: 'connected',
+            grantedPermissions: ['session:read', 'session:write', 'tool:invoke'],
+            initialState: {
+              fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+              turn: 'w',
+              moveCount: 0,
+            },
+            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
+          },
+        },
+      },
+    ]
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8',
+      userId: 'user.8',
+      userRequest: 'move any white piece now',
+      requestMessageId: 'message.8',
+      previousMessages: [createMessage('user', "let's play chess"), priorAssistant],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(result.message.contentParts.some((part) => part.type === 'embedded-app')).toBe(false)
+    expect(
+      result.message.contentParts.find(
+        (part) => part.type === 'text' && part.text.includes('direct move execution from chat is not wired yet')
+      )
+    ).toBeTruthy()
   })
 
   it('keeps the latest unfinished app active when a later completed app exists', () => {
