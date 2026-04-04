@@ -169,21 +169,20 @@ describe('AppIframePanel', () => {
     expect(screen.queryByRole('button', { name: 'Open in new tab' })).toBeNull()
   })
 
-  it('keeps TutorMeAI runtime apps on the embedded host path', () => {
+  it('opens Chess Tutor as a governed direct iframe in the sidebar', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 
     renderPanel(<AppIframePanel />)
 
-    const host = screen.getByTestId('embedded-app-host')
-    expect(host.textContent).toContain('Chess Tutor live session')
-    expect(host.getAttribute('data-subtitle')).toBe('TutorMeAI sidebar runtime')
-    expect(host.getAttribute('data-description')).toContain('governed TutorMeAI sidebar runtime')
-    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.chess-tutor"')
-    expect(screen.queryByTitle('Chess Tutor app panel')).toBeNull()
+    const iframe = screen.getByTitle('Chess Tutor app panel') as HTMLIFrameElement
+    expect(iframe.getAttribute('src')).toMatch(
+      /^http:\/\/localhost:3000\/embedded-apps\/chess\?chatbridge_panel=1&chatbridge_launch=.+$/
+    )
+    expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })
 
-  it('always launches runtime apps from a fresh sidebar runtime configuration', () => {
-    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+  it('keeps Flashcards Coach on the embedded host runtime path', () => {
+    uiStore.setState({ activeApprovedAppId: 'flashcards-coach' })
 
     renderPanel(<AppIframePanel />)
 
@@ -191,9 +190,9 @@ describe('AppIframePanel', () => {
     expect(host.getAttribute('data-subtitle')).toBe('TutorMeAI sidebar runtime')
     expect(host.getAttribute('data-description')).toContain('governed TutorMeAI sidebar runtime')
     expect(host.getAttribute('data-src')).toMatch(
-      /^http:\/\/localhost:3000\/embedded-apps\/chess\?chatbridge_panel=1&chatbridge_launch=.+$/
+      /^http:\/\/localhost:3000\/embedded-apps\/flashcards\?chatbridge_panel=1&chatbridge_launch=.+$/
     )
-    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.chess-tutor"')
+    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.flashcards-coach"')
     expect(host.getAttribute('data-runtime')).toContain('"expectedOrigin":"http://localhost:3000"')
   })
 })
