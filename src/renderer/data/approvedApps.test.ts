@@ -10,6 +10,11 @@ describe('approvedApps', () => {
       launchUrl: '/embedded-apps/chess',
       runtimeBridge: {
         appId: 'chess.internal',
+        initialState: {
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          turn: 'w',
+          moveCount: 0,
+        },
       },
     })
     expect(getApprovedAppById('flashcards-coach')).toMatchObject({

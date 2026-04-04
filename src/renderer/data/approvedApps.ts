@@ -671,6 +671,12 @@ const tutorMeAiApps: ApprovedApp[] = [
       sidebarMode: 'direct-iframe',
       authState: 'not-required',
       grantedPermissions: ['session:write', 'tool:invoke'],
+      initialState: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+        mode: 'practice',
+      },
       availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
       pendingInvocation: {
         toolName: exampleChessLaunchToolSchema.name,
