@@ -6,11 +6,31 @@ import {
 import { createMessage } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetSidebarAppRuntimeSnapshots, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
+import { uiStore } from '@/stores/uiStore'
 import { deriveConversationAppContext, routeTutorMeAiAppRequest } from './orchestrator'
 
 const { mockEnqueueSidebarAppRuntimeCommand } = vi.hoisted(() => ({
   mockEnqueueSidebarAppRuntimeCommand: vi.fn(),
 }))
+
+vi.hoisted(() => {
+  const storage = new Map<string, string>()
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        storage.set(key, value)
+      },
+      removeItem: (key: string) => {
+        storage.delete(key)
+      },
+      clear: () => {
+        storage.clear()
+      },
+    },
+    configurable: true,
+  })
+})
 
 vi.mock('@/stores/sidebarAppRuntimeCommandStore', () => ({
   enqueueSidebarAppRuntimeCommand: (...args: unknown[]) => mockEnqueueSidebarAppRuntimeCommand(...args),
@@ -20,6 +40,7 @@ describe('routeTutorMeAiAppRequest', () => {
   beforeEach(() => {
     resetSidebarAppRuntimeSnapshots()
     mockEnqueueSidebarAppRuntimeCommand.mockReset()
+    uiStore.setState({ activeApprovedAppId: null })
     mockEnqueueSidebarAppRuntimeCommand.mockResolvedValue({
       ok: true,
       command: {
@@ -372,6 +393,28 @@ describe('routeTutorMeAiAppRequest', () => {
 
     const textPart = moveResult.message.contentParts.find((part) => part.type === 'text')
     expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('needs the live right-sidebar board')
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+  })
+
+  it('does not fall back to generic tool execution when Chess is open but the live sidebar snapshot is reconnecting', async () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.reconnecting.1',
+      userId: 'user.reconnecting.1',
+      userRequest: 'play c5',
+      requestMessageId: 'message.reconnecting.1',
+      previousMessages: [createMessage('user', "let's play chess")],
+    })
+
+    expect(result.kind).toBe('clarify')
+    if (result.kind !== 'clarify') {
+      return
+    }
+
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('finish syncing')
     expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
   })
 

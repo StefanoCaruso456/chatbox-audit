@@ -17,6 +17,7 @@ import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
 import { enqueueSidebarAppRuntimeCommand } from '@/stores/sidebarAppRuntimeCommandStore'
 import { getSidebarAppRuntimeSnapshot, type SidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
+import { uiStore } from '@/stores/uiStore'
 import { applyRequestedChessMove, extractRequestedChessMove } from '@/routes/embedded-apps/-components/chess/chessMove'
 import {
   AvailableToolDiscoveryService,
@@ -1128,6 +1129,7 @@ export async function routeTutorMeAiAppRequest(
     input.conversationId,
     exampleInternalChessManifest.appId
   )
+  const chessSidebarIsOpen = uiStore.getState().activeApprovedAppId === 'chess-tutor'
 
   if (shouldUseChessBoardStateTool(input.userRequest)) {
     if (isChessMoveIntent(input.userRequest)) {
@@ -1144,11 +1146,11 @@ export async function routeTutorMeAiAppRequest(
         }
       }
 
-      if (selectedReference?.appId === exampleInternalChessManifest.appId) {
+      if (activeSidebarChessSnapshot || chessSidebarIsOpen || selectedReference?.appId === exampleInternalChessManifest.appId) {
         return {
           kind: 'clarify',
           message: buildClarificationMessage(
-            'Chess Tutor is open, but move execution needs the live right-sidebar board. Keep the sidebar open and try the move again.'
+            'Chess Tutor is open, but move execution needs the live right-sidebar board state. Keep the sidebar open, wait for the board to finish syncing, and then try the move again.'
           ),
         }
       }
@@ -1167,11 +1169,11 @@ export async function routeTutorMeAiAppRequest(
       }
     }
 
-    if (activeSidebarChessSnapshot || selectedReference?.appId === exampleInternalChessManifest.appId) {
+    if (activeSidebarChessSnapshot || chessSidebarIsOpen || selectedReference?.appId === exampleInternalChessManifest.appId) {
       return {
         kind: 'clarify',
         message: buildClarificationMessage(
-          "Chess Tutor is open, but I can't read the live board state yet. Reload the sidebar board and try again."
+          "Chess Tutor is open, but I can't read the live board state yet. Keep the sidebar open, let it finish reconnecting, and then try again."
         ),
       }
     }

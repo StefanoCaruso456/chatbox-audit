@@ -398,11 +398,17 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         toJsonObject(embeddedRuntime.completion?.resultPayload) ?? embeddedRuntime.bootstrap?.initialState,
       errorMessage: embeddedRuntime.completion?.errorMessage,
     })
+  }, [app.experience, app.name, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot])
+
+  useEffect(() => {
+    if (app.experience !== 'tutormeai-runtime' || !currentSessionId) {
+      return
+    }
 
     return () => {
       clearSidebarAppRuntimeSnapshot(currentSessionId, runtimeAppId)
     }
-  }, [app.experience, app.name, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot])
+  }, [app.experience, currentSessionId, runtimeAppId])
 
   const postDirectRuntimeHandshake = useCallback(
     (forceReplay = false) => {
