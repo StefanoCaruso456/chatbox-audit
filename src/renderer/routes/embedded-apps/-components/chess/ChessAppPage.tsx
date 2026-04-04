@@ -1,7 +1,8 @@
 import { Alert, Badge, Box, Button, Group, Paper, SimpleGrid, Stack, Text, TextInput, Title, UnstyledButton } from '@mantine/core'
-import type { CompletionSignal } from '@shared/contracts/v1'
+import type { CompletionSignal, RuntimeAppStatus } from '@shared/contracts/v1'
 import { Chess, type Square } from 'chess.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { postSidebarDirectIframeStateMessage } from '@/components/apps/sidebarDirectIframeState'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
 
 type SelectionState = {
@@ -22,6 +23,32 @@ function formatSummary(chess: Chess) {
   const history = chess.history()
   const recentMoves = history.slice(-6).join(', ') || 'No moves yet'
   return `Current board FEN: ${chess.fen()}. ${formatTurn(chess.turn())} to move. Recent moves: ${recentMoves}.`
+}
+
+function buildSidebarRuntimeSnapshot(chess: Chess, mode?: 'practice' | 'analysis'): {
+  status: RuntimeAppStatus
+  summary: string
+  state: {
+    fen: string
+    turn: 'w' | 'b'
+    moveCount: number
+    lastMove?: string
+    mode?: 'practice' | 'analysis'
+  }
+} {
+  const history = chess.history()
+
+  return {
+    status: chess.isGameOver() ? 'completed' : 'active',
+    summary: formatSummary(chess),
+    state: {
+      fen: chess.fen(),
+      turn: chess.turn(),
+      moveCount: history.length,
+      ...(history.at(-1) ? { lastMove: history.at(-1) } : {}),
+      ...(mode ? { mode } : {}),
+    },
+  }
 }
 
 function formatMaterialAdvantage(balance: number) {
@@ -264,6 +291,9 @@ export function ChessAppPage() {
     })
   }, [runtimeContext, sendState])
 
+  const currentMode =
+    invocationMessage?.payload.toolName === 'chess.launch-game' ? invocationMessage.payload.arguments.mode : undefined
+
   useEffect(() => {
     if (!invocationMessage || invocationMessage.payload.toolName !== 'chess.launch-game') {
       return
@@ -289,6 +319,16 @@ export function ChessAppPage() {
       },
     })
   }, [invocationMessage, sendState])
+
+  useEffect(() => {
+    const snapshot = buildSidebarRuntimeSnapshot(chess, currentMode)
+    postSidebarDirectIframeStateMessage({
+      appId: 'chess.internal',
+      status: snapshot.status,
+      summary: snapshot.summary,
+      state: snapshot.state,
+    })
+  }, [chess, currentMode])
 
   const pieces = useMemo(() => {
     const board = chess.board()

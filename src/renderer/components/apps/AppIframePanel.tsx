@@ -20,6 +20,7 @@ import { useSession } from '@/stores/chatStore'
 import { clearSidebarAppRuntimeSnapshot, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
+import { isSidebarDirectIframeStateMessage } from './sidebarDirectIframeState'
 import AppIcon from './AppIcon'
 import { resolveAppPanelLaunchUrl, resolveApprovedAppPanelRuntime } from './app-panel-runtime'
 
@@ -489,6 +490,22 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
       const originCheck = validateRuntimeMessageOrigin(embeddedRuntime.expectedOrigin, event.origin)
       if (!originCheck.valid) {
+        return
+      }
+
+      if (isSidebarDirectIframeStateMessage(event.data) && event.data.appId === runtimeAppId) {
+        if (!hasRuntimeResponseRef.current) {
+          hasRuntimeResponseRef.current = true
+          clearRuntimeReplayTimers()
+        }
+
+        clearLoadTimeout()
+        setLoadState(event.data.payload.status === 'failed' ? 'blocked' : 'ready')
+        syncSidebarRuntimeSnapshot({
+          status: event.data.payload.status,
+          summary: event.data.payload.summary,
+          latestStateDigest: event.data.payload.state,
+        })
         return
       }
 
