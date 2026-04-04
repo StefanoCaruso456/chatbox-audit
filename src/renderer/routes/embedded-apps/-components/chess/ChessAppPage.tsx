@@ -310,10 +310,11 @@ export function ChessAppPage() {
       return
     }
 
-    if (handledToolCallIdsRef.current.has(invocationMessage.payload.toolCallId)) {
+    const { toolCallId } = invocationMessage.payload
+
+    if (handledToolCallIdsRef.current.has(toolCallId)) {
       return
     }
-    handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
 
     const requestedMove =
       typeof invocationMessage.payload.arguments.move === 'string' ? invocationMessage.payload.arguments.move.trim() : ''
@@ -327,13 +328,15 @@ export function ChessAppPage() {
       return
     }
 
+    handledToolCallIdsRef.current.add(toolCallId)
+
     if (!requestedMove) {
       sendError({
         code: 'chess.invalid-move-request',
         message: 'A chess move request must include a move string.',
         recoverable: true,
         details: {
-          toolCallId: invocationMessage.payload.toolCallId,
+          toolCallId,
         },
       })
       return
@@ -345,7 +348,7 @@ export function ChessAppPage() {
         message: 'The chess board changed before the requested move could be applied.',
         recoverable: true,
         details: {
-          toolCallId: invocationMessage.payload.toolCallId,
+          toolCallId,
           expectedFen,
           currentFen: chess.fen(),
         },
@@ -361,7 +364,7 @@ export function ChessAppPage() {
         message: `"${requestedMove}" is not a legal move from the current position.`,
         recoverable: true,
         details: {
-          toolCallId: invocationMessage.payload.toolCallId,
+          toolCallId,
           requestedMove,
         },
       })
@@ -375,7 +378,7 @@ export function ChessAppPage() {
       buildMoveCompletionSignal({
         conversationId: runtimeContext.conversationId,
         appSessionId: runtimeContext.appSessionId,
-        toolCallId: invocationMessage.payload.toolCallId,
+        toolCallId,
         requestedMove,
         chess: nextChess,
         appliedMoveSan: move.san,

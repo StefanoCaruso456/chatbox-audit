@@ -20,6 +20,26 @@ const COMPACT_COORDINATE_MOVE_PATTERN = /\b([a-h][1-8])([a-h][1-8])([qrbnQRBN]?)
 const SAN_MOVE_PATTERN =
   /\b(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|[a-h]x[a-h][1-8](?:=[QRBN])?[+#]?|[KQRBN][a-h]?[1-8]?[+#]?|[a-h][1-8])\b/giu
 
+function normalizeComparableSanMove(move: string) {
+  return move.replace(/0/g, 'O').replace(/\s+/g, '').toLowerCase()
+}
+
+function normalizeRequestedSanMove(move: string) {
+  const trimmed = move.trim().replace(/0/g, 'O')
+  if (!trimmed) {
+    return trimmed
+  }
+
+  if (/^o-o(?:-o)?[+#]?$/iu.test(trimmed)) {
+    return trimmed.toUpperCase()
+  }
+
+  const normalized =
+    /^[kqrbn]/iu.test(trimmed) ? `${trimmed[0].toUpperCase()}${trimmed.slice(1).toLowerCase()}` : trimmed.toLowerCase()
+
+  return normalized.replace(/=([qrbn])/giu, (_match, piece: string) => `=${piece.toUpperCase()}`)
+}
+
 export function extractRequestedChessMove(userRequest: string): string | null {
   const coordinateMatch = userRequest.match(COORDINATE_MOVE_PATTERN)
   if (coordinateMatch) {
@@ -35,7 +55,7 @@ export function extractRequestedChessMove(userRequest: string): string | null {
 
   const sanMatches = [...userRequest.matchAll(SAN_MOVE_PATTERN)]
   const lastSanMatch = sanMatches.at(-1)?.[1]
-  return lastSanMatch ? lastSanMatch.trim() : null
+  return lastSanMatch ? normalizeRequestedSanMove(lastSanMatch) : null
 }
 
 export function parseRequestedChessMove(move: string): ParsedChessMove | null {
@@ -44,17 +64,17 @@ export function parseRequestedChessMove(move: string): ParsedChessMove | null {
     return null
   }
 
-  const coordinateMatch = trimmed.match(/^([a-h][1-8])([a-h][1-8])([qrbnQRBN]?)$/u)
+  const coordinateMatch = trimmed.toLowerCase().match(/^([a-h][1-8])([a-h][1-8])([qrbn]?)$/u)
   if (coordinateMatch) {
     const [, from, to, promotion = ''] = coordinateMatch
     return {
       kind: 'coordinate',
-      normalized: `${from}${to}${promotion}`.toLowerCase(),
-      from: from.toLowerCase() as Square,
-      to: to.toLowerCase() as Square,
+      normalized: `${from}${to}${promotion}`,
+      from: from as Square,
+      to: to as Square,
       ...(promotion
         ? {
-            promotion: promotion.toLowerCase() as 'q' | 'r' | 'b' | 'n',
+            promotion: promotion as 'q' | 'r' | 'b' | 'n',
           }
         : {}),
     }
@@ -62,7 +82,7 @@ export function parseRequestedChessMove(move: string): ParsedChessMove | null {
 
   return {
     kind: 'san',
-    normalized: trimmed,
+    normalized: normalizeRequestedSanMove(trimmed),
   }
 }
 
@@ -80,5 +100,12 @@ export function applyRequestedChessMove(chess: Chess, requestedMove: string) {
     })
   }
 
-  return chess.move(parsedMove.normalized)
+  const directMove = chess.move(parsedMove.normalized)
+  if (directMove) {
+    return directMove
+  }
+
+  const comparableRequestedMove = normalizeComparableSanMove(parsedMove.normalized)
+  const matchingSanMove = chess.moves().find((move) => normalizeComparableSanMove(move) === comparableRequestedMove)
+  return matchingSanMove ? chess.move(matchingSanMove) : null
 }

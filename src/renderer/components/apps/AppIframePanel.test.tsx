@@ -404,6 +404,158 @@ describe('AppIframePanel', () => {
     })
   })
 
+  it('delivers a queued chess.make-move command after the sidebar iframe finishes loading', async () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+
+    const commandPromise = enqueueSidebarAppRuntimeCommand({
+      hostSessionId: 'session.test',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess',
+      toolCallId: 'tool-call.chess.make-move.before-load',
+      toolName: 'chess.make-move',
+      arguments: {
+        move: 'd4',
+        expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      },
+      timeoutMs: 3_000,
+      createdAt: new Date().toISOString(),
+    })
+
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+    fireEvent.load(iframe)
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'host',
+          type: 'host.invoke',
+          payload: expect.objectContaining({
+            toolCallId: 'tool-call.chess.make-move.before-load',
+          }),
+        }),
+        'http://localhost:3000'
+      )
+    })
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            version: 'v1',
+            source: 'app',
+            type: 'app.complete',
+            messageId: 'app.complete.before-load',
+            conversationId: 'conversation.sidebar.chess-tutor',
+            appSessionId: 'app-session.sidebar.chess-tutor',
+            appId: 'chess.internal',
+            sequence: 4,
+            sentAt: new Date().toISOString(),
+            security: postMessage.mock.calls[0]?.[0]?.security,
+            payload: {
+              version: 'v1',
+              conversationId: 'conversation.sidebar.chess-tutor',
+              appSessionId: 'app-session.sidebar.chess-tutor',
+              appId: 'chess.internal',
+              toolCallId: 'tool-call.chess.make-move.before-load',
+              status: 'succeeded',
+              resultSummary: 'Move played: d4. Black to move.',
+              result: {
+                appSessionId: 'app-session.sidebar.chess-tutor',
+                requestedMove: 'd4',
+                appliedMove: 'd4',
+                fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+                turn: 'black',
+                moveCount: 1,
+                lastMove: 'd4',
+                legalMoveCount: 20,
+                candidateMoves: ['d5'],
+                summary: 'Move played: d4. Black to move.',
+                explanation: 'It claims central space and opens lines for your pieces.',
+                moveExecutionAvailable: true,
+              },
+              completedAt: new Date().toISOString(),
+              followUpContext: {
+                summary: 'Use the updated live chess board to recommend the best next move from this position.',
+              },
+            },
+          },
+        })
+      )
+
+      await expect(commandPromise).resolves.toMatchObject({
+        ok: true,
+      })
+    })
+  })
+
+  it('retries an unconfirmed chess.make-move command and clears the spinner when the queue times out', async () => {
+    vi.useFakeTimers()
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    const commandPromise = enqueueSidebarAppRuntimeCommand({
+      hostSessionId: 'session.test',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess',
+      toolCallId: 'tool-call.chess.make-move.timeout',
+      toolName: 'chess.make-move',
+      arguments: {
+        move: 'd4',
+        expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      },
+      timeoutMs: 3_000,
+      createdAt: new Date().toISOString(),
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const sentCommandCount = () =>
+      postMessage.mock.calls.filter(
+        ([message]) =>
+          message?.source === 'host' &&
+          message?.type === 'host.invoke' &&
+          message?.payload?.toolCallId === 'tool-call.chess.make-move.timeout'
+      ).length
+
+    const initialCommandCount = sentCommandCount()
+    expect(initialCommandCount).toBeGreaterThan(0)
+
+    act(() => {
+      vi.advanceTimersByTime(2_000)
+    })
+
+    expect(sentCommandCount()).toBeGreaterThanOrEqual(initialCommandCount)
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_100)
+      await expect(commandPromise).resolves.toMatchObject({
+        ok: false,
+        error: 'The sidebar app did not confirm the move before the timeout expired.',
+      })
+    })
+
+    expect(screen.queryByText('Loading Chess Tutor...')).toBeNull()
+    expect(screen.queryByTestId('app-iframe-panel-fallback')).toBeNull()
+    expect(getSidebarAppRuntimeSnapshot('session.test', 'chess.internal')).toMatchObject({
+      status: 'failed',
+      errorMessage: 'Chess Tutor did not confirm the latest move before the timeout expired.',
+    })
+  })
+
   it('seeds the Chess sidebar snapshot with the starting FEN before iframe messages arrive', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 
