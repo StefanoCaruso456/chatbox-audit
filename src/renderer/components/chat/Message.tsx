@@ -55,7 +55,7 @@ import ActionMenu, { type ActionMenuItemProps } from '../ActionMenu'
 import { AssistantAvatar, SystemAvatar, UserAvatar } from '../common/Avatar'
 import { ScalableIcon } from '../common/ScalableIcon'
 import Loading from '../icons/Loading'
-import { EmbeddedAppPartUI } from '../message-parts/EmbeddedAppPartUI'
+import { EmbeddedAppSidebarNotice } from '../message-parts/EmbeddedAppSidebarNotice'
 import { ReasoningContentUI, ToolCallPartUI } from '../message-parts/ToolCallPartUI'
 import { MessageAttachmentGrid } from './MessageAttachmentGrid'
 import MessageErrTips from './MessageErrTips'
@@ -67,7 +67,7 @@ function getEmbeddedAppLifecycleMeta(part: MessageEmbeddedAppPart) {
     return {
       label: 'Completed app',
       color: 'teal' as const,
-      description: 'This app session has finished and the chat can follow up on the result.',
+      description: 'This app session finished in the right sidebar and the chat can follow up on the result.',
     }
   }
 
@@ -75,7 +75,7 @@ function getEmbeddedAppLifecycleMeta(part: MessageEmbeddedAppPart) {
     return {
       label: 'Failed app',
       color: 'red' as const,
-      description: part.errorMessage || 'This app session needs a retry or a fresh launch.',
+      description: part.errorMessage || 'This app session needs a sidebar retry or a fresh launch.',
     }
   }
 
@@ -83,7 +83,7 @@ function getEmbeddedAppLifecycleMeta(part: MessageEmbeddedAppPart) {
     return {
       label: 'Awaiting auth',
       color: 'yellow' as const,
-      description: 'Connect the account to continue this app session.',
+      description: 'Connect the account in the right sidebar to continue this app session.',
     }
   }
 
@@ -91,14 +91,14 @@ function getEmbeddedAppLifecycleMeta(part: MessageEmbeddedAppPart) {
     return {
       label: 'Active app',
       color: 'blue' as const,
-      description: 'The app is currently active in this conversation.',
+      description: 'The app is currently active in the right sidebar.',
     }
   }
 
   return {
     label: 'Ready app',
     color: 'gray' as const,
-    description: 'The app is available and waiting for the next interaction.',
+    description: 'The app is available in the right sidebar and waiting for the next interaction.',
   }
 }
 
@@ -572,13 +572,7 @@ const _Message: FC<Props> = (props) => {
                               )
                             })()}
                           </div>
-                          <EmbeddedAppPartUI
-                            part={item as MessageEmbeddedAppPart}
-                            sessionId={sessionId}
-                            messageId={msg.id}
-                            partIndex={index}
-                            conversationIndicator={props.embeddedAppIndicators?.[`${msg.id}:${index}`]}
-                          />
+                          <EmbeddedAppSidebarNotice part={item as MessageEmbeddedAppPart} />
                         </div>
                       ) : null
                     )}

@@ -81,7 +81,7 @@ describe('routeTutorMeAiAppRequest', () => {
   })
 
   it('passes through normal chat follow-ups without relaunching an app', async () => {
-    const priorAssistant = createMessage('assistant', 'Launching Chess Tutor inside chat.')
+    const priorAssistant = createMessage('assistant', 'Launching Chess Tutor in the right sidebar.')
     priorAssistant.contentParts = [
       {
         type: 'embedded-app',

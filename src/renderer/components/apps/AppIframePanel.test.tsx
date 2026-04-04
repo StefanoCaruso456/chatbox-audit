@@ -4,25 +4,66 @@
 
 import { MantineProvider } from '@mantine/core'
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { getDefaultStore } from 'jotai'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { currentSessionIdAtom } from '@/stores/atoms'
 import { uiStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
 
+const { mockUseSession } = vi.hoisted(() => ({
+  mockUseSession: vi.fn(),
+}))
+
 vi.mock('@/components/message-parts/EmbeddedAppHost', () => ({
-  default: ({ title }: { title: string }) => <div data-testid="embedded-app-host">{title}</div>,
+  default: ({
+    title,
+    description,
+    subtitle,
+    runtime,
+  }: {
+    title: string
+    description?: string
+    subtitle?: string
+    runtime?: object
+  }) => (
+    <div
+      data-testid="embedded-app-host"
+      data-description={description}
+      data-subtitle={subtitle}
+      data-runtime={JSON.stringify(runtime)}
+    >
+      {title}
+    </div>
+  ),
 }))
 
 vi.mock('@/hooks/useScreenChange', () => ({
   useScreenDownToMD: () => false,
 }))
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, options?: Record<string, string>) =>
-      typeof options?.name === 'string' ? key.replace('{{name}}', options.name) : key,
-  }),
-}))
+vi.mock('@/stores/chatStore', async () => {
+  const actual = await vi.importActual<typeof import('@/stores/chatStore')>('@/stores/chatStore')
+  return {
+    ...actual,
+    useSession: (sessionId: string | null) => mockUseSession(sessionId),
+  }
+})
+
+vi.mock('react-i18next', async () => {
+  const actual = await vi.importActual<typeof import('react-i18next')>('react-i18next')
+  return {
+    ...actual,
+    initReactI18next: {
+      type: '3rdParty',
+      init: () => undefined,
+    },
+    useTranslation: () => ({
+      t: (key: string, options?: Record<string, string>) =>
+        typeof options?.name === 'string' ? key.replace('{{name}}', options.name) : key,
+    }),
+  }
+})
 
 const initialUiState = uiStore.getState()
 
@@ -62,6 +103,8 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  mockUseSession.mockReturnValue({ session: undefined })
+  getDefaultStore().set(currentSessionIdAtom, 'session.test')
   uiStore.setState({
     approvedAppsModalOpen: false,
     activeApprovedAppId: null,
@@ -70,6 +113,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  getDefaultStore().set(currentSessionIdAtom, null)
   uiStore.setState(initialUiState)
 })
 
@@ -129,5 +173,57 @@ describe('AppIframePanel', () => {
 
     expect(screen.getByTestId('embedded-app-host').textContent).toContain('Chess Tutor live session')
     expect(screen.queryByTitle('Chess Tutor app panel')).toBeNull()
+  })
+
+  it('binds the sidebar runtime to the active conversation app session when one exists', () => {
+    mockUseSession.mockReturnValue({
+      session: {
+        id: 'session.1',
+        messages: [
+          {
+            id: 'message.1',
+            timestamp: Date.parse('2026-04-03T20:43:21.000Z'),
+            role: 'assistant',
+            contentParts: [
+              {
+                type: 'embedded-app',
+                appId: 'chess.internal',
+                appName: 'Chess Tutor',
+                appSessionId: 'app-session.chess.real',
+                sourceUrl: 'http://localhost:3000/embedded-apps/chess',
+                title: 'Chess Tutor',
+                summary: 'Current board FEN: real-session-board',
+                status: 'ready',
+                allowedOrigin: 'http://localhost:3000',
+                bridge: {
+                  expectedOrigin: 'http://localhost:3000',
+                  conversationId: 'conversation.real',
+                  appSessionId: 'app-session.chess.real',
+                  handshakeToken: 'runtime.real',
+                  bootstrap: {
+                    launchReason: 'chat-tool',
+                    authState: 'connected',
+                    availableTools: [],
+                  },
+                  pendingInvocation: {
+                    toolCallId: 'tool-call.real',
+                    toolName: 'chess.launch-game',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const host = screen.getByTestId('embedded-app-host')
+    expect(host.getAttribute('data-description')).toContain('real-session-board')
+    expect(host.getAttribute('data-subtitle')).toBe('app-session.chess.real')
+    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.real"')
+    expect(host.getAttribute('data-runtime')).not.toContain('conversation.sidebar.chess-tutor')
   })
 })
