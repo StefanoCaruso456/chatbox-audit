@@ -156,4 +156,75 @@ describe('app panel runtime helpers', () => {
       },
     })
   })
+
+  it('reuses the latest recoverable conversation runtime instead of falling back to a fresh sidebar session', () => {
+    const app = getApprovedAppById('chess-tutor')
+    expect(app).toBeDefined()
+    if (!app) {
+      return
+    }
+
+    const runtime = resolveApprovedAppPanelRuntime(
+      app,
+      'http://localhost:3000/embedded-apps/chess?chatbridge_panel=1&chatbridge_launch=test',
+      5,
+      {
+        sessionId: 'session.chess.recoverable',
+        session: {
+          id: 'session.chess.recoverable',
+          name: 'Chess Session Recoverable',
+          messages: [
+            {
+              id: 'assistant.1',
+              role: 'assistant',
+              content: '',
+              contentParts: [
+                {
+                  type: 'embedded-app',
+                  appId: 'chess.internal',
+                  appName: 'Chess Tutor',
+                  appSessionId: 'app-session.chess.live',
+                  sourceUrl: 'http://localhost:3000/embedded-apps/chess',
+                  status: 'error',
+                  summary: 'Played d4. Black to move.',
+                  bridge: {
+                    expectedOrigin: 'http://localhost:3000',
+                    conversationId: 'conversation.live',
+                    appSessionId: 'app-session.chess.live',
+                    handshakeToken: 'runtime.live',
+                    heartbeatTimeoutMs: 30000,
+                    bootstrap: {
+                      launchReason: 'chat-tool',
+                      authState: 'connected',
+                      grantedPermissions: ['session:write', 'tool:invoke'],
+                      initialState: {
+                        fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+                        turn: 'b',
+                        moveCount: 1,
+                        lastMove: 'd4',
+                      },
+                      availableTools: [],
+                    },
+                  },
+                  errorMessage: 'The chess board changed before the requested move could be applied.',
+                },
+              ],
+            },
+          ],
+        },
+      }
+    )
+
+    expect(runtime).toMatchObject({
+      conversationId: 'conversation.live',
+      appSessionId: 'app-session.chess.live',
+      handshakeToken: 'runtime.live',
+      bootstrap: {
+        initialState: {
+          fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+          lastMove: 'd4',
+        },
+      },
+    })
+  })
 })

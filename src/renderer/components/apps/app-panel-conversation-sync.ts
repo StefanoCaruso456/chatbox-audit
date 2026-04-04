@@ -269,10 +269,18 @@ export function buildConversationEmbeddedAppRuntime(
     },
     onRuntimeError: (message: EmbeddedAppHostErrorMessage | EmbeddedAppHostTimeoutError) => {
       const runtimeErrorMessage = 'payload' in message ? message.payload.message : message.message
+      const recoverable = 'payload' in message ? message.payload.recoverable : message.recoverable
       void updateApprovedAppConversationPart(sessionId, ref, (currentPart) => ({
         ...currentPart,
-        status: 'error',
+        status: recoverable ? 'ready' : 'error',
+        summary: recoverable ? currentPart.summary : runtimeErrorMessage,
         errorMessage: runtimeErrorMessage,
+        bridge: currentPart.bridge
+          ? {
+              ...currentPart.bridge,
+              pendingInvocation: undefined,
+            }
+          : currentPart.bridge,
       }))
     },
     onHeartbeatTimeout: (error: EmbeddedAppHostTimeoutError) => {
@@ -280,6 +288,12 @@ export function buildConversationEmbeddedAppRuntime(
         ...currentPart,
         status: 'error',
         errorMessage: error.message,
+        bridge: currentPart.bridge
+          ? {
+              ...currentPart.bridge,
+              pendingInvocation: undefined,
+            }
+          : currentPart.bridge,
       }))
     },
   }

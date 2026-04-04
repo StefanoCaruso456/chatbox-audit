@@ -25,11 +25,6 @@ import {
 } from '../../../../backend/orchestration'
 import { type AppRegistryRecord, AppRegistryService, InMemoryAppRegistryRepository } from '../../../../backend/registry'
 import { type EmbeddedAppReference, selectConversationAppReference } from './conversation-state'
-import {
-  applyChessSessionMove,
-  getLatestChessSessionSnapshotForConversation,
-  type ChessSessionSnapshot,
-} from '@/stores/chessSessionStore'
 
 type LocalAppCategory = 'games' | 'study' | 'productivity'
 
@@ -456,21 +451,6 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
   }
 }
 
-function buildChessBoardStateResultFromSharedSession(snapshot: ChessSessionSnapshot) {
-  return buildChessBoardStateResult({
-    appSessionId: snapshot.appSessionId,
-    summary: snapshot.summary,
-    latestStateDigest: {
-      fen: snapshot.fen,
-      turn: snapshot.turn,
-      moveCount: snapshot.moveCount,
-      lastMove: snapshot.lastMove,
-      ...(snapshot.mode ? { mode: snapshot.mode } : {}),
-    },
-    availableToolNames: [exampleChessMakeMoveToolSchema.name],
-  })
-}
-
 function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest: string) {
   const candidateMoves =
     result.candidateMoves.length > 0 ? ` Candidate moves: ${result.candidateMoves.join(', ')}.` : ''
@@ -622,122 +602,6 @@ function buildChessBoardStateMessageFromSidebarSnapshot(
     {
       type: 'text',
       text: buildChessBoardStateText(result, userRequest),
-    },
-  ]
-  message.generating = false
-  message.status = []
-  return message
-}
-
-function buildChessBoardStateMessageFromSharedSession(snapshot: ChessSessionSnapshot, userRequest: string): Message | null {
-  const result = buildChessBoardStateResultFromSharedSession(snapshot)
-  if (!result) {
-    return null
-  }
-
-  const message = createMessage('assistant')
-  message.contentParts = [
-    {
-      type: 'tool-call',
-      state: 'result',
-      toolCallId: `tool-call.chess.get-board-state.${uuidv4()}`,
-      toolName: exampleChessGetBoardStateToolSchema.name,
-      args: {
-        scope: 'current-position',
-      },
-      result,
-    },
-    {
-      type: 'text',
-      text: buildChessBoardStateText(result, userRequest),
-    },
-  ]
-  message.generating = false
-  message.status = []
-  return message
-}
-
-function buildChessMoveToolResultFromSharedSession(input: {
-  snapshot: ChessSessionSnapshot
-  requestedMove: string
-  appliedMoveSan: string
-}): ChessMoveToolResult {
-  const chess = new Chess(input.snapshot.fen)
-  const turn = chess.turn() === 'w' ? 'white' : 'black'
-  const summary = `Move played: ${input.appliedMoveSan}. ${turn === 'white' ? 'White' : 'Black'} to move.`
-
-  return {
-    appSessionId: input.snapshot.appSessionId,
-    requestedMove: input.requestedMove,
-    appliedMove: input.appliedMoveSan,
-    fen: input.snapshot.fen,
-    turn,
-    moveCount: input.snapshot.moveCount,
-    lastMove: input.snapshot.lastMove,
-    legalMoveCount: chess.moves().length,
-    candidateMoves: buildChessCandidateMoves(chess),
-    summary,
-    explanation: `It ${buildChessMoveExplanation(input.appliedMoveSan)}.`,
-    moveExecutionAvailable: true,
-  }
-}
-
-function buildChessMoveMessageFromSharedSession(
-  snapshot: ChessSessionSnapshot,
-  input: {
-    conversationId: string
-    userRequest: string
-  }
-): Message | null {
-  const boardState = buildChessBoardStateResultFromSharedSession(snapshot)
-  if (!boardState || !boardState.moveExecutionAvailable) {
-    return null
-  }
-
-  const requestedMove = extractRequestedChessMove(input.userRequest) ?? boardState.candidateMoves[0] ?? null
-  if (!requestedMove) {
-    return null
-  }
-
-  const validationChess = new Chess(boardState.fen)
-  const previewMove = applyRequestedChessMove(validationChess, requestedMove)
-  if (!previewMove) {
-    return buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`)
-  }
-
-  const moveResult = applyChessSessionMove({
-    conversationId: input.conversationId,
-    appSessionId: snapshot.appSessionId,
-    requestedMove,
-    expectedFen: boardState.fen,
-  })
-  if (!moveResult.ok) {
-    return buildClarificationMessage(moveResult.message)
-  }
-
-  const toolCallId = `tool-call.chess.make-move.${uuidv4()}`
-  const toolResult = buildChessMoveToolResultFromSharedSession({
-    snapshot: moveResult.snapshot,
-    requestedMove,
-    appliedMoveSan: moveResult.appliedMoveSan,
-  })
-
-  const message = createMessage('assistant')
-  message.contentParts = [
-    {
-      type: 'tool-call',
-      state: 'result',
-      toolCallId,
-      toolName: exampleChessMakeMoveToolSchema.name,
-      args: {
-        move: requestedMove,
-        expectedFen: boardState.fen,
-      },
-      result: toolResult,
-    },
-    {
-      type: 'text',
-      text: buildChessMoveResultText(toolResult),
     },
   ]
   message.generating = false
@@ -1260,7 +1124,6 @@ export async function routeTutorMeAiAppRequest(
     input.userRequest
   )
   const selectedReference = selectConversationAppReference(input.previousMessages, input.userRequest)
-  const activeSharedChessSession = getLatestChessSessionSnapshotForConversation(input.conversationId)
   const activeSidebarChessSnapshot = getSidebarAppRuntimeSnapshot(
     input.conversationId,
     exampleInternalChessManifest.appId
@@ -1268,19 +1131,6 @@ export async function routeTutorMeAiAppRequest(
 
   if (shouldUseChessBoardStateTool(input.userRequest)) {
     if (isChessMoveIntent(input.userRequest)) {
-      if (activeSharedChessSession) {
-        const moveMessage = buildChessMoveMessageFromSharedSession(activeSharedChessSession, {
-          conversationId: input.conversationId,
-          userRequest: input.userRequest,
-        })
-        if (moveMessage) {
-          return {
-            kind: 'invoke-tool',
-            message: moveMessage,
-          }
-        }
-      }
-
       if (activeSidebarChessSnapshot) {
         const moveMessage = await buildChessMoveMessageFromSidebarSnapshot(activeSidebarChessSnapshot, {
           conversationId: input.conversationId,
@@ -1304,13 +1154,11 @@ export async function routeTutorMeAiAppRequest(
       }
     }
 
-    const boardStateMessage = activeSharedChessSession
-      ? buildChessBoardStateMessageFromSharedSession(activeSharedChessSession, input.userRequest)
-      : activeSidebarChessSnapshot
-        ? buildChessBoardStateMessageFromSidebarSnapshot(activeSidebarChessSnapshot, input.userRequest)
-        : selectedReference?.appId === exampleInternalChessManifest.appId
-          ? buildChessBoardStateMessage(selectedReference, input.userRequest)
-          : null
+    const boardStateMessage = activeSidebarChessSnapshot
+      ? buildChessBoardStateMessageFromSidebarSnapshot(activeSidebarChessSnapshot, input.userRequest)
+      : selectedReference?.appId === exampleInternalChessManifest.appId
+        ? buildChessBoardStateMessage(selectedReference, input.userRequest)
+        : null
 
     if (boardStateMessage) {
       return {
@@ -1319,7 +1167,7 @@ export async function routeTutorMeAiAppRequest(
       }
     }
 
-    if (activeSharedChessSession || activeSidebarChessSnapshot || selectedReference?.appId === exampleInternalChessManifest.appId) {
+    if (activeSidebarChessSnapshot || selectedReference?.appId === exampleInternalChessManifest.appId) {
       return {
         kind: 'clarify',
         message: buildClarificationMessage(

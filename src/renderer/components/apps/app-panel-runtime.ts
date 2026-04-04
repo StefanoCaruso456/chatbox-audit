@@ -152,7 +152,7 @@ export function resolveApprovedAppPanelRuntime(
 
   if (sessionId && session && app.experience === 'tutormeai-runtime') {
     const ref = selectLatestApprovedAppConversationPart(session, app)
-    if (ref && ref.part.status !== 'error') {
+    if (ref) {
       const runtime = buildConversationEmbeddedAppRuntime(sessionId, ref, resolvedLaunchUrl)
       if (runtime) {
         return runtime
