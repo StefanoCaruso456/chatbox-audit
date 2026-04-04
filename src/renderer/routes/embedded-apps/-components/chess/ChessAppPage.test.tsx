@@ -83,6 +83,18 @@ describe('ChessAppPage', () => {
     expect(screen.getAllByRole('button').length).toBeGreaterThanOrEqual(64)
   })
 
+  it('shows board analysis and move tools in the sidebar UI', () => {
+    renderChess(<ChessAppPage />)
+
+    expect(screen.getByText('Board analysis')).toBeTruthy()
+    expect(screen.getByText('Move tools')).toBeTruthy()
+    expect(screen.getByText('Opening')).toBeTruthy()
+    expect(screen.getByText('Material is even.')).toBeTruthy()
+    expect(screen.getByText('Legal moves: 20')).toBeTruthy()
+    expect(screen.getByLabelText('Move notation')).toBeTruthy()
+    expect(screen.getByText('Candidate moves')).toBeTruthy()
+  })
+
   it('lets the user make a simple opening move on the board', () => {
     renderChess(<ChessAppPage />)
 
@@ -91,5 +103,45 @@ describe('ChessAppPage', () => {
 
     fireEvent.click(screen.getByTestId('chess-square-e4'))
     expect(screen.getByText('Played e4. Black to move.')).toBeTruthy()
+  })
+
+  it('supports typed move input and updates the live analysis snapshot', () => {
+    renderChess(<ChessAppPage />)
+
+    fireEvent.change(screen.getByLabelText('Move notation'), { target: { value: 'e2e4' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply move' }))
+
+    expect(screen.getByText('Played e4. Black to move.')).toBeTruthy()
+    expect(screen.getByText('Last move: e4')).toBeTruthy()
+    expect(screen.getByText('Legal moves: 20')).toBeTruthy()
+    expect(
+      sendState.mock.calls.some(
+        ([payload]) =>
+          payload.status === 'active' &&
+          payload.state?.lastMove === 'e4' &&
+          payload.state?.turn === 'b'
+      )
+    ).toBe(true)
+  })
+
+  it('lets the user undo and reset the board from the move tools panel', () => {
+    renderChess(<ChessAppPage />)
+
+    fireEvent.change(screen.getByLabelText('Move notation'), { target: { value: 'e2e4' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply move' }))
+    expect(screen.getByText('Last move: e4')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo move' }))
+    expect(screen.getByText('Undid the last move. Review the new position.')).toBeTruthy()
+    expect(screen.getByText('Last move: No moves yet')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Move notation'), { target: { value: 'd2d4' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply move' }))
+    expect(screen.getByText('Last move: d4')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset board' }))
+    expect(screen.getByText('Board reset to the starting position.')).toBeTruthy()
+    expect(screen.getByText('Last move: No moves yet')).toBeTruthy()
+    expect(screen.getByText('Recent moves: No moves yet')).toBeTruthy()
   })
 })
