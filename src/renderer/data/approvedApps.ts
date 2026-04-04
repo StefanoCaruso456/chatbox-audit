@@ -765,7 +765,20 @@ export const approvedApps: ApprovedApp[] = [
 ]
 
 export const approvedAppsById = new Map(approvedApps.map((app) => [app.id, app] as const))
+export const approvedAppsByRuntimeAppId = new Map(
+  approvedApps.reduce<[string, ApprovedApp][]>((entries, app) => {
+    if (app.runtimeBridge?.appId) {
+      entries.push([app.runtimeBridge.appId, app])
+    }
+
+    return entries
+  }, [])
+)
 
 export function getApprovedAppById(appId: string) {
   return approvedAppsById.get(appId)
+}
+
+export function getApprovedAppByRuntimeAppId(runtimeAppId: string) {
+  return approvedAppsByRuntimeAppId.get(runtimeAppId)
 }

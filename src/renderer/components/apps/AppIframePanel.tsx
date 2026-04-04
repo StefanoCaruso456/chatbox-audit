@@ -1,14 +1,26 @@
 import { ActionIcon, Box, Button, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
 import { IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
+import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import EmbeddedAppHost from '@/components/message-parts/EmbeddedAppHost'
 import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
+import { currentSessionIdAtom } from '@/stores/atoms'
+import { useSession } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { appIntegrationModeMeta, type ApprovedApp } from '@/types/apps'
 import AppIcon from './AppIcon'
+import {
+  buildConversationEmbeddedAppRuntime,
+  closeApprovedAppConversationPart,
+  getApprovedAppConversationPartDescription,
+  getApprovedAppConversationPartError,
+  getApprovedAppConversationPartState,
+  restartApprovedAppConversationPart,
+  selectLatestApprovedAppConversationPart,
+} from './app-panel-conversation-sync'
 import { buildSidebarEmbeddedAppRuntime, resolveAppPanelLaunchUrl } from './app-panel-runtime'
 
 const iframeSandbox = [
@@ -163,6 +175,8 @@ function AppLoadingFallback({
 
 function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const { t } = useTranslation()
+  const currentSessionId = useAtomValue(currentSessionIdAtom)
+  const { session: currentSession } = useSession(currentSessionId)
   const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
   const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
 
@@ -171,18 +185,26 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const [launchSessionKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
+  const conversationPart = useMemo(
+    () => selectLatestApprovedAppConversationPart(currentSession, app),
+    [app, currentSession]
+  )
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
+  const launchUrl = conversationPart?.part.sourceUrl ?? app.launchUrl
   const resolvedLaunchUrl = useMemo(
     () =>
-      resolveAppPanelLaunchUrl(app.launchUrl, {
+      resolveAppPanelLaunchUrl(launchUrl, {
         cacheBustKey: `${launchSessionKey}-${reloadNonce}`,
       }),
-    [app.launchUrl, launchSessionKey, reloadNonce]
+    [launchSessionKey, launchUrl, reloadNonce]
   )
   const embeddedRuntime = useMemo(
-    () => buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
-    [app, reloadNonce, resolvedLaunchUrl]
+    () =>
+      currentSessionId && conversationPart
+        ? buildConversationEmbeddedAppRuntime(currentSessionId, conversationPart)
+        : buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
+    [app, conversationPart, currentSessionId, reloadNonce, resolvedLaunchUrl]
   )
   const usesEmbeddedRuntime = app.experience === 'tutormeai-runtime' && Boolean(embeddedRuntime)
 
@@ -217,6 +239,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }, [startLoadingAttempt, clearLoadTimeout])
 
   const handleReload = () => {
+    if (currentSessionId && conversationPart) {
+      void restartApprovedAppConversationPart(currentSessionId, conversationPart)
+    }
     setReloadNonce((value) => value + 1)
     startLoadingAttempt()
   }
@@ -279,16 +304,27 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
             appName={app.name}
             appSlug={app.id}
             src={resolvedLaunchUrl}
+            state={conversationPart ? getApprovedAppConversationPartState(conversationPart.part) : undefined}
             title={`${app.name} live session`}
-            subtitle="TutorMeAI sidebar runtime"
-            description={`${app.name} is running inside the governed TutorMeAI sidebar runtime.`}
+            subtitle={conversationPart?.part.appSessionId ?? 'TutorMeAI sidebar runtime'}
+            description={
+              conversationPart
+                ? getApprovedAppConversationPartDescription(conversationPart.part)
+                : `${app.name} is running inside the governed TutorMeAI sidebar runtime.`
+            }
             loadingLabel={t('Connecting {{name}} runtime', { name: app.name })}
+            errorMessage={conversationPart ? getApprovedAppConversationPartError(conversationPart.part) : undefined}
             className="h-full min-h-0"
             height="100%"
             sandbox={iframeSandbox}
             runtime={embeddedRuntime}
             onRetry={handleReload}
-            onContinueInChat={closeApprovedApp}
+            onContinueInChat={() => {
+              if (currentSessionId && conversationPart) {
+                void closeApprovedAppConversationPart(currentSessionId, conversationPart)
+              }
+              closeApprovedApp()
+            }}
           />
         </Box>
       ) : (

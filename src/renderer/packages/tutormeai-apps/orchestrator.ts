@@ -514,10 +514,10 @@ function buildClarificationMessage(text: string): Message {
 
 function buildLaunchCopy(appName: string, authState: AppSessionAuthState) {
   if (authState === 'required') {
-    return `Opening ${appName}. You'll need to connect your account before the app can finish the request.`
+    return `Opening ${appName} in the right sidebar. You'll need to connect your account before the app can finish the request.`
   }
 
-  return `Launching ${appName} inside chat.`
+  return `Launching ${appName} in the right sidebar.`
 }
 
 function buildEmbeddedAppMessagePart(input: {
