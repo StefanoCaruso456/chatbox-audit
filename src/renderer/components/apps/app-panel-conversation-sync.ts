@@ -213,15 +213,20 @@ export function buildConversationEmbeddedAppRuntime(
       void updateApprovedAppConversationPart(sessionId, ref, (currentPart) => {
         const state = toJsonObject(message.payload.state)
         const authState = inferAuthStateFromJsonValue(state?.authState)
+        const nextStatus =
+          message.payload.status === 'failed' ? 'error' : message.payload.status === 'pending' ? 'loading' : 'ready'
+        const shouldClearPendingInvocation =
+          Boolean(currentPart.bridge?.pendingInvocation) && message.payload.status !== 'pending' && message.payload.status !== 'failed'
 
         return {
           ...currentPart,
-          status: message.payload.status === 'failed' ? 'error' : message.payload.status === 'pending' ? 'loading' : 'ready',
+          status: nextStatus,
           summary: message.payload.summary,
           errorMessage: message.payload.status === 'failed' ? currentPart.errorMessage : undefined,
           bridge: currentPart.bridge
             ? {
                 ...currentPart.bridge,
+                pendingInvocation: shouldClearPendingInvocation ? undefined : currentPart.bridge.pendingInvocation,
                 bootstrap: currentPart.bridge.bootstrap
                   ? {
                       ...currentPart.bridge.bootstrap,
