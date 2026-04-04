@@ -12,7 +12,8 @@ function EmbeddedAppsLayout() {
       h="100vh"
       bg="var(--mantine-color-body)"
       style={{
-        overflow: 'hidden',
+        overflowX: 'hidden',
+        overflowY: 'auto',
       }}
     >
       <Outlet />
