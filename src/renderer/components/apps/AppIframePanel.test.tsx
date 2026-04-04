@@ -4,16 +4,10 @@
 
 import { MantineProvider } from '@mantine/core'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { getDefaultStore } from 'jotai'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { currentSessionIdAtom } from '@/stores/atoms'
 import { uiStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
-
-const { mockUseSession } = vi.hoisted(() => ({
-  mockUseSession: vi.fn(),
-}))
 
 const { mockProbeForNewerBuild } = vi.hoisted(() => ({
   mockProbeForNewerBuild: vi.fn(),
@@ -52,14 +46,6 @@ vi.mock('@/hooks/useScreenChange', () => ({
 vi.mock('@/lib/build-freshness', () => ({
   probeForNewerBuild: () => mockProbeForNewerBuild(),
 }))
-
-vi.mock('@/stores/chatStore', async () => {
-  const actual = await vi.importActual<typeof import('@/stores/chatStore')>('@/stores/chatStore')
-  return {
-    ...actual,
-    useSession: (sessionId: string | null) => mockUseSession(sessionId),
-  }
-})
 
 vi.mock('react-i18next', async () => {
   const actual = await vi.importActual<typeof import('react-i18next')>('react-i18next')
@@ -114,9 +100,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
-  mockUseSession.mockReturnValue({ session: undefined })
   mockProbeForNewerBuild.mockResolvedValue(false)
-  getDefaultStore().set(currentSessionIdAtom, 'session.test')
   uiStore.setState({
     approvedAppsModalOpen: false,
     activeApprovedAppId: null,
@@ -125,7 +109,6 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
-  getDefaultStore().set(currentSessionIdAtom, null)
   uiStore.setState(initialUiState)
 })
 
@@ -191,161 +174,26 @@ describe('AppIframePanel', () => {
 
     renderPanel(<AppIframePanel />)
 
-    expect(screen.getByTestId('embedded-app-host').textContent).toContain('Chess Tutor live session')
+    const host = screen.getByTestId('embedded-app-host')
+    expect(host.textContent).toContain('Chess Tutor live session')
+    expect(host.getAttribute('data-subtitle')).toBe('TutorMeAI sidebar runtime')
+    expect(host.getAttribute('data-description')).toContain('governed TutorMeAI sidebar runtime')
+    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.chess-tutor"')
     expect(screen.queryByTitle('Chess Tutor app panel')).toBeNull()
   })
 
-  it('binds the sidebar runtime to the active conversation app session when one exists', () => {
-    mockUseSession.mockReturnValue({
-      session: {
-        id: 'session.1',
-        messages: [
-          {
-            id: 'message.1',
-            timestamp: Date.parse('2026-04-03T20:43:21.000Z'),
-            role: 'assistant',
-            contentParts: [
-              {
-                type: 'embedded-app',
-                appId: 'chess.internal',
-                appName: 'Chess Tutor',
-                appSessionId: 'app-session.chess.real',
-                sourceUrl: 'http://localhost:3000/embedded-apps/chess',
-                title: 'Chess Tutor',
-                summary: 'Current board FEN: real-session-board',
-                status: 'ready',
-                allowedOrigin: 'http://localhost:3000',
-                bridge: {
-                  expectedOrigin: 'http://localhost:3000',
-                  conversationId: 'conversation.real',
-                  appSessionId: 'app-session.chess.real',
-                  handshakeToken: 'runtime.real',
-                  bootstrap: {
-                    launchReason: 'chat-tool',
-                    authState: 'connected',
-                    availableTools: [],
-                  },
-                  pendingInvocation: {
-                    toolCallId: 'tool-call.real',
-                    toolName: 'chess.launch-game',
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    })
-    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
-
-    renderPanel(<AppIframePanel />)
-
-    const host = screen.getByTestId('embedded-app-host')
-    expect(host.getAttribute('data-description')).toContain('real-session-board')
-    expect(host.getAttribute('data-subtitle')).toBe('app-session.chess.real')
-    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.real"')
-    expect(host.getAttribute('data-runtime')).not.toContain('conversation.sidebar.chess-tutor')
-  })
-
-  it('keeps runtime apps on the current canonical launch url instead of a stale conversation iframe url', () => {
-    mockUseSession.mockReturnValue({
-      session: {
-        id: 'session.2',
-        messages: [
-          {
-            id: 'message.2',
-            timestamp: Date.parse('2026-04-03T21:33:21.000Z'),
-            role: 'assistant',
-            contentParts: [
-              {
-                type: 'embedded-app',
-                appId: 'chess.internal',
-                appName: 'Chess Tutor',
-                appSessionId: 'app-session.chess.stale',
-                sourceUrl: 'https://old-preview.example/embedded-apps/chess',
-                title: 'Chess Tutor',
-                summary: 'Current board FEN: stale-preview-board',
-                status: 'ready',
-                allowedOrigin: 'https://old-preview.example',
-                bridge: {
-                  expectedOrigin: 'https://old-preview.example',
-                  conversationId: 'conversation.stale',
-                  appSessionId: 'app-session.chess.stale',
-                  handshakeToken: 'runtime.stale',
-                  bootstrap: {
-                    launchReason: 'chat-tool',
-                    authState: 'connected',
-                    availableTools: [],
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    })
-    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
-
-    renderPanel(<AppIframePanel />)
-
-    const host = screen.getByTestId('embedded-app-host')
-    expect(host.getAttribute('data-src')).toMatch(
-      /^http:\/\/localhost:3000\/embedded-apps\/chess\?chatbridge_panel=1&chatbridge_launch=.+$/
-    )
-    expect(host.getAttribute('data-runtime')).toContain('"expectedOrigin":"http://localhost:3000"')
-    expect(host.getAttribute('data-runtime')).not.toContain('old-preview.example')
-  })
-
-  it('relaunches runtime apps from a fresh sidebar runtime when the latest conversation part is blocked', () => {
-    mockUseSession.mockReturnValue({
-      session: {
-        id: 'session.3',
-        messages: [
-          {
-            id: 'message.3',
-            timestamp: Date.parse('2026-04-03T22:17:35.000Z'),
-            role: 'assistant',
-            contentParts: [
-              {
-                type: 'embedded-app',
-                appId: 'chess.internal',
-                appName: 'Chess Tutor',
-                appSessionId: 'app-session.chess.blocked',
-                sourceUrl: 'http://localhost:3000/embedded-apps/chess',
-                title: 'Chess Tutor',
-                summary: 'Current board FEN: blocked-board',
-                status: 'error',
-                errorMessage: 'The embedded app stopped responding after 45 seconds.',
-                allowedOrigin: 'http://localhost:3000',
-                bridge: {
-                  expectedOrigin: 'http://localhost:3000',
-                  conversationId: 'conversation.blocked',
-                  appSessionId: 'app-session.chess.blocked',
-                  handshakeToken: 'runtime.blocked',
-                  bootstrap: {
-                    launchReason: 'chat-tool',
-                    authState: 'connected',
-                    availableTools: [],
-                  },
-                  pendingInvocation: {
-                    toolCallId: 'tool-call.blocked',
-                    toolName: 'chess.launch-game',
-                  },
-                },
-              },
-            ],
-          },
-        ],
-      },
-    })
+  it('always launches runtime apps from a fresh sidebar runtime configuration', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 
     renderPanel(<AppIframePanel />)
 
     const host = screen.getByTestId('embedded-app-host')
     expect(host.getAttribute('data-subtitle')).toBe('TutorMeAI sidebar runtime')
-    expect(host.getAttribute('data-description')).toContain('relaunching in a fresh sidebar runtime')
+    expect(host.getAttribute('data-description')).toContain('governed TutorMeAI sidebar runtime')
+    expect(host.getAttribute('data-src')).toMatch(
+      /^http:\/\/localhost:3000\/embedded-apps\/chess\?chatbridge_panel=1&chatbridge_launch=.+$/
+    )
     expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.chess-tutor"')
-    expect(host.getAttribute('data-runtime')).not.toContain('"conversationId":"conversation.blocked"')
+    expect(host.getAttribute('data-runtime')).toContain('"expectedOrigin":"http://localhost:3000"')
   })
 })
