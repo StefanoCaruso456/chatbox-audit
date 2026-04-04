@@ -190,12 +190,15 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     () => selectLatestApprovedAppConversationPart(currentSession, app),
     [app, currentSession]
   )
+  const blockedRuntimeConversationPart =
+    app.experience === 'tutormeai-runtime' && conversationPart?.part.status === 'error' ? conversationPart : null
+  const activeRuntimeConversationPart = blockedRuntimeConversationPart ? null : conversationPart
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
   const launchUrl =
     app.experience === 'tutormeai-runtime'
       ? app.launchUrl
-      : conversationPart?.part.sourceUrl ?? app.launchUrl
+      : activeRuntimeConversationPart?.part.sourceUrl ?? app.launchUrl
   const resolvedLaunchUrl = useMemo(
     () =>
       resolveAppPanelLaunchUrl(launchUrl, {
@@ -205,10 +208,10 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   )
   const embeddedRuntime = useMemo(
     () =>
-      currentSessionId && conversationPart
-        ? buildConversationEmbeddedAppRuntime(currentSessionId, conversationPart, resolvedLaunchUrl)
+      currentSessionId && activeRuntimeConversationPart
+        ? buildConversationEmbeddedAppRuntime(currentSessionId, activeRuntimeConversationPart, resolvedLaunchUrl)
         : buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
-    [app, conversationPart, currentSessionId, reloadNonce, resolvedLaunchUrl]
+    [activeRuntimeConversationPart, app, currentSessionId, reloadNonce, resolvedLaunchUrl]
   )
   const usesEmbeddedRuntime = app.experience === 'tutormeai-runtime' && Boolean(embeddedRuntime)
 
@@ -253,8 +256,8 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }, [startLoadingAttempt, clearLoadTimeout])
 
   const handleReload = () => {
-    if (currentSessionId && conversationPart) {
-      void restartApprovedAppConversationPart(currentSessionId, conversationPart)
+    if (currentSessionId && activeRuntimeConversationPart) {
+      void restartApprovedAppConversationPart(currentSessionId, activeRuntimeConversationPart)
     }
     setReloadNonce((value) => value + 1)
     startLoadingAttempt()
@@ -318,24 +321,28 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
             appName={app.name}
             appSlug={app.id}
             src={resolvedLaunchUrl}
-            state={conversationPart ? getApprovedAppConversationPartState(conversationPart.part) : undefined}
+            state={activeRuntimeConversationPart ? getApprovedAppConversationPartState(activeRuntimeConversationPart.part) : undefined}
             title={`${app.name} live session`}
-            subtitle={conversationPart?.part.appSessionId ?? 'TutorMeAI sidebar runtime'}
+            subtitle={activeRuntimeConversationPart?.part.appSessionId ?? 'TutorMeAI sidebar runtime'}
             description={
-              conversationPart
-                ? getApprovedAppConversationPartDescription(conversationPart.part)
+              activeRuntimeConversationPart
+                ? getApprovedAppConversationPartDescription(activeRuntimeConversationPart.part)
+                : blockedRuntimeConversationPart
+                  ? `${app.name} is relaunching in a fresh sidebar runtime after a blocked session.`
                 : `${app.name} is running inside the governed TutorMeAI sidebar runtime.`
             }
             loadingLabel={t('Connecting {{name}} runtime', { name: app.name })}
-            errorMessage={conversationPart ? getApprovedAppConversationPartError(conversationPart.part) : undefined}
+            errorMessage={
+              activeRuntimeConversationPart ? getApprovedAppConversationPartError(activeRuntimeConversationPart.part) : undefined
+            }
             className="h-full min-h-0"
             height="100%"
             sandbox={iframeSandbox}
             runtime={embeddedRuntime}
             onRetry={handleReload}
             onContinueInChat={() => {
-              if (currentSessionId && conversationPart) {
-                void closeApprovedAppConversationPart(currentSessionId, conversationPart)
+              if (currentSessionId && activeRuntimeConversationPart) {
+                void closeApprovedAppConversationPart(currentSessionId, activeRuntimeConversationPart)
               }
               closeApprovedApp()
             }}
