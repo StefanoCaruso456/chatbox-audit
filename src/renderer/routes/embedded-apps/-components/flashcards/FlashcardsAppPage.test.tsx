@@ -5,7 +5,7 @@
 import { MantineProvider } from '@mantine/core'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FlashcardsAppPage } from './FlashcardsAppPage'
 
 const sendCompletion = vi.fn()
@@ -50,6 +50,7 @@ describe('FlashcardsAppPage', () => {
     sendState.mockReset()
     bridgeState.runtimeContext = defaultRuntimeContext
     bridgeState.invocationMessage = defaultInvocationMessage
+    window.history.replaceState({}, '', 'http://localhost:3000/embedded-apps/flashcards')
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -63,6 +64,10 @@ describe('FlashcardsAppPage', () => {
         dispatchEvent: vi.fn(),
       })),
     })
+  })
+
+  afterEach(() => {
+    window.history.replaceState({}, '', 'http://localhost:3000/embedded-apps/flashcards')
   })
 
   it('renders the flashcards deck with a dark runtime surface', () => {
@@ -137,6 +142,19 @@ describe('FlashcardsAppPage', () => {
         }),
       })
     )
+  })
+
+  it('rebuilds the deck from the direct iframe launch topic when runtime messages are absent', () => {
+    bridgeState.runtimeContext = null
+    bridgeState.invocationMessage = null
+    window.history.replaceState({}, '', 'http://localhost:3000/embedded-apps/flashcards?topic=fractions')
+
+    renderFlashcards(<FlashcardsAppPage />)
+
+    expect(screen.queryByText('Waiting for the host to send a study topic.')).toBeNull()
+    expect(screen.getByText('Current deck')).toBeTruthy()
+    expect(screen.getByText('fractions')).toBeTruthy()
+    expect(screen.getByText('What is the clearest definition of fractions?')).toBeTruthy()
   })
 
   it('keeps the live card state synced when the user navigates through the deck', () => {

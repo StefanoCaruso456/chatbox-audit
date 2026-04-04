@@ -36,18 +36,23 @@ function getSeedTopic(initialState: Record<string, unknown> | undefined, invocat
     return topic || 'fractions'
   }
 
-  if (!initialState) {
-    return null
+  if (initialState) {
+    if (typeof initialState.topic === 'string' && initialState.topic.trim()) {
+      return initialState.topic.trim()
+    }
+
+    const toolArguments = initialState.toolArguments
+    if (toolArguments && typeof toolArguments === 'object' && 'topic' in toolArguments) {
+      const topic = String(toolArguments.topic ?? '').trim()
+      return topic || 'fractions'
+    }
   }
 
-  if (typeof initialState.topic === 'string' && initialState.topic.trim()) {
-    return initialState.topic.trim()
-  }
-
-  const toolArguments = initialState.toolArguments
-  if (toolArguments && typeof toolArguments === 'object' && 'topic' in toolArguments) {
-    const topic = String(toolArguments.topic ?? '').trim()
-    return topic || 'fractions'
+  if (typeof window !== 'undefined') {
+    const topic = new URLSearchParams(window.location.search).get('topic')?.trim()
+    if (topic) {
+      return topic
+    }
   }
 
   return null
