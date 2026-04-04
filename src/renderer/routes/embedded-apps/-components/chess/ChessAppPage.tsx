@@ -212,7 +212,21 @@ function buildCompletionSignal(input: {
 function getSquareColor(square: Square) {
   const file = square.charCodeAt(0) - 97
   const rank = Number(square[1]) - 1
-  return (file + rank) % 2 === 0 ? '#f1f5f9' : '#cbd5e1'
+  return (file + rank) % 2 === 0 ? '#d9e2f1' : '#8091b3'
+}
+
+function getCoordinatePalette(isLightSquare: boolean) {
+  return isLightSquare
+    ? {
+        text: '#0f172a',
+        background: 'rgba(255,255,255,0.88)',
+        border: 'rgba(15,23,42,0.14)',
+      }
+    : {
+        text: '#f8fafc',
+        background: 'rgba(15,23,42,0.44)',
+        border: 'rgba(248,250,252,0.16)',
+      }
 }
 
 const boardSquares = (['8', '7', '6', '5', '4', '3', '2', '1'] as const).flatMap((rank) =>
@@ -490,7 +504,8 @@ export function ChessAppPage() {
             {boardSquares.map((square) => {
               const isSelected = selection.from === square
               const piece = pieces.get(square)
-              const isLightSquare = getSquareColor(square) === '#f1f5f9'
+              const isLightSquare = getSquareColor(square) === '#d9e2f1'
+              const coordinatePalette = getCoordinatePalette(isLightSquare)
 
               return (
                 <UnstyledButton
@@ -509,10 +524,10 @@ export function ChessAppPage() {
                     width: '100%',
                     aspectRatio: '1 / 1',
                     borderRadius: '12px',
-                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.08)',
-                    background: isSelected ? '#bfdbfe' : isLightSquare ? '#f8fafc' : '#94a3b8',
+                    border: isSelected ? '2px solid rgba(59, 130, 246, 0.98)' : '1px solid rgba(15, 23, 42, 0.12)',
+                    background: isSelected ? '#93c5fd' : getSquareColor(square),
                     boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
-                    color: piece?.color === 'w' ? '#f8fafc' : '#0f172a',
+                    color: piece?.color === 'w' ? '#ffffff' : '#111827',
                     overflow: 'hidden',
                   }}
                 >
@@ -521,7 +536,12 @@ export function ChessAppPage() {
                     style={{
                       fontSize: 'clamp(1.15rem, 3vw, 1.9rem)',
                       lineHeight: 1,
-                      textShadow: piece?.color === 'w' ? '0 1px 1px rgba(15,23,42,0.55)' : 'none',
+                      textShadow:
+                        piece?.color === 'w'
+                          ? '0 1px 0 rgba(15,23,42,0.9), 0 0 8px rgba(15,23,42,0.2)'
+                          : '0 1px 0 rgba(248,250,252,0.25)',
+                      WebkitTextStroke:
+                        piece?.color === 'w' ? '0.6px rgba(15,23,42,0.7)' : '0.4px rgba(255,255,255,0.22)',
                     }}
                   >
                     {piece?.glyph ?? ''}
@@ -534,7 +554,13 @@ export function ChessAppPage() {
                       position: 'absolute',
                       right: 6,
                       bottom: 4,
-                      color: isLightSquare ? 'rgba(15,23,42,0.52)' : 'rgba(248,250,252,0.8)',
+                      color: coordinatePalette.text,
+                      background: coordinatePalette.background,
+                      border: `1px solid ${coordinatePalette.border}`,
+                      borderRadius: 999,
+                      padding: '1px 5px',
+                      lineHeight: 1.1,
+                      letterSpacing: '0.02em',
                     }}
                   >
                     {square.toUpperCase()}
