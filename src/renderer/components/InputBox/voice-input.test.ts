@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   appendVoiceTranscript,
   getSpeechRecognitionConstructor,
+  getVoiceInputSupportReason,
   readSpeechRecognitionTranscript,
   resolveVoiceInputLanguage,
 } from './voice-input'
@@ -35,6 +36,25 @@ describe('voice input helpers', () => {
     expect(resolveVoiceInputLanguage('en', 'fr-CA')).toBe('en-US')
     expect(resolveVoiceInputLanguage('pt-PT', 'en-US')).toBe('pt-PT')
     expect(resolveVoiceInputLanguage(undefined, 'fr-CA')).toBe('fr-CA')
+  })
+
+  it('disables browser speech recognition inside the desktop runtime', () => {
+    class StandardRecognition extends EventTarget {}
+
+    expect(
+      getVoiceInputSupportReason({
+        SpeechRecognition: StandardRecognition as never,
+        electronAPI: {},
+      } as never)
+    ).toBe('desktop-runtime-unsupported')
+
+    expect(
+      getVoiceInputSupportReason({
+        SpeechRecognition: StandardRecognition as never,
+      } as never)
+    ).toBe('supported')
+
+    expect(getVoiceInputSupportReason({} as never)).toBe('browser-unsupported')
   })
 
   it('separates final and interim transcripts from recognition results', () => {
