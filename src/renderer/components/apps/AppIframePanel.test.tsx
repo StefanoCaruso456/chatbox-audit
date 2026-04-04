@@ -4,8 +4,11 @@
 
 import { MantineProvider } from '@mantine/core'
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import { getDefaultStore } from 'jotai'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { currentSessionIdAtom } from '@/stores/atoms'
+import { getSidebarAppRuntimeSnapshot, resetSidebarAppRuntimeSnapshots } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
 
@@ -140,6 +143,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockProbeForNewerBuild.mockResolvedValue(false)
+  getDefaultStore().set(currentSessionIdAtom, 'session.test')
+  resetSidebarAppRuntimeSnapshots()
   uiStore.setState({
     approvedAppsModalOpen: false,
     activeApprovedAppId: null,
@@ -148,6 +153,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  resetSidebarAppRuntimeSnapshots()
   uiStore.setState(initialUiState)
 })
 
@@ -240,6 +246,60 @@ describe('AppIframePanel', () => {
       source: 'host',
       type: 'host.invoke',
       appId: 'chess.internal',
+    })
+  })
+
+  it('publishes live Chess sidebar state so chat can read the visible board', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    const bootstrapMessage = postMessage.mock.calls[0]?.[0]
+    expect(bootstrapMessage).toMatchObject({
+      source: 'host',
+      type: 'host.bootstrap',
+      appId: 'chess.internal',
+    })
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            version: 'v1',
+            source: 'app',
+            type: 'app.state',
+            messageId: 'app.state.1',
+            conversationId: bootstrapMessage.conversationId,
+            appSessionId: bootstrapMessage.appSessionId,
+            appId: 'chess.internal',
+            sequence: 3,
+            sentAt: new Date().toISOString(),
+            security: bootstrapMessage.security,
+            payload: {
+              status: 'active',
+              summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+              state: {
+                fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                turn: 'w',
+                moveCount: 0,
+              },
+            },
+          },
+        })
+      )
+    })
+
+    expect(getSidebarAppRuntimeSnapshot('session.test', 'chess.internal')).toMatchObject({
+      approvedAppId: 'chess-tutor',
+      appSessionId: bootstrapMessage.appSessionId,
+      status: 'active',
     })
   })
 

@@ -1,9 +1,14 @@
 import { exampleChessGetBoardStateToolSchema, exampleChessLaunchToolSchema } from '@shared/contracts/v1'
 import { createMessage } from '@shared/types'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { resetSidebarAppRuntimeSnapshots, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { deriveConversationAppContext, routeTutorMeAiAppRequest } from './orchestrator'
 
 describe('routeTutorMeAiAppRequest', () => {
+  beforeEach(() => {
+    resetSidebarAppRuntimeSnapshots()
+  })
+
   it('launches chess for a clear play request', async () => {
     const result = await routeTutorMeAiAppRequest({
       origin: 'http://localhost:1212',
@@ -262,6 +267,50 @@ describe('routeTutorMeAiAppRequest', () => {
         (part) => part.type === 'text' && part.text.includes('direct move execution from chat is not wired yet')
       )
     ).toBeTruthy()
+  })
+
+  it('reads the live Chess board from the active sidebar runtime when the board was opened outside chat', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.sidebar.9',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state'],
+      status: 'active',
+      summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      updatedAt: '2026-04-04T05:25:00.000Z',
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.sidebar.9',
+      userId: 'user.9',
+      userRequest: 'move some of the pieces on the board',
+      requestMessageId: 'message.9',
+      previousMessages: [createMessage('user', 'hello')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain(
+      'direct move execution from chat is not wired yet'
+    )
   })
 
   it('keeps the latest unfinished app active when a later completed app exists', () => {
