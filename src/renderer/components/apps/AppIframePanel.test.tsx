@@ -295,4 +295,57 @@ describe('AppIframePanel', () => {
     expect(host.getAttribute('data-runtime')).toContain('"expectedOrigin":"http://localhost:3000"')
     expect(host.getAttribute('data-runtime')).not.toContain('old-preview.example')
   })
+
+  it('relaunches runtime apps from a fresh sidebar runtime when the latest conversation part is blocked', () => {
+    mockUseSession.mockReturnValue({
+      session: {
+        id: 'session.3',
+        messages: [
+          {
+            id: 'message.3',
+            timestamp: Date.parse('2026-04-03T22:17:35.000Z'),
+            role: 'assistant',
+            contentParts: [
+              {
+                type: 'embedded-app',
+                appId: 'chess.internal',
+                appName: 'Chess Tutor',
+                appSessionId: 'app-session.chess.blocked',
+                sourceUrl: 'http://localhost:3000/embedded-apps/chess',
+                title: 'Chess Tutor',
+                summary: 'Current board FEN: blocked-board',
+                status: 'error',
+                errorMessage: 'The embedded app stopped responding after 45 seconds.',
+                allowedOrigin: 'http://localhost:3000',
+                bridge: {
+                  expectedOrigin: 'http://localhost:3000',
+                  conversationId: 'conversation.blocked',
+                  appSessionId: 'app-session.chess.blocked',
+                  handshakeToken: 'runtime.blocked',
+                  bootstrap: {
+                    launchReason: 'chat-tool',
+                    authState: 'connected',
+                    availableTools: [],
+                  },
+                  pendingInvocation: {
+                    toolCallId: 'tool-call.blocked',
+                    toolName: 'chess.launch-game',
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const host = screen.getByTestId('embedded-app-host')
+    expect(host.getAttribute('data-subtitle')).toBe('TutorMeAI sidebar runtime')
+    expect(host.getAttribute('data-description')).toContain('relaunching in a fresh sidebar runtime')
+    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.chess-tutor"')
+    expect(host.getAttribute('data-runtime')).not.toContain('"conversationId":"conversation.blocked"')
+  })
 })
