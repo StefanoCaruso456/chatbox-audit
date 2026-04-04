@@ -217,6 +217,71 @@ export const exampleChessGetBoardStateToolSchema: ToolSchema = ToolSchemaSchema.
   requiredPermissions: ['session:read', 'tool:invoke'],
 })
 
+export const exampleChessMakeMoveToolSchema: ToolSchema = ToolSchemaSchema.parse({
+  name: 'chess.make-move',
+  displayName: 'Make Chess Move',
+  description:
+    'Apply a legal move to the active live chess board in the sidebar session and return the updated position.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      move: {
+        type: 'string',
+        description: 'A SAN or coordinate move like d4, Nf3, e2e4, or a2-a4.',
+      },
+      expectedFen: {
+        type: 'string',
+        description: 'The board FEN the chat used before sending the move, for stale-state protection.',
+      },
+    },
+    required: ['move', 'expectedFen'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      appSessionId: { type: 'string' },
+      requestedMove: { type: 'string' },
+      appliedMove: { type: 'string' },
+      fen: { type: 'string' },
+      turn: {
+        type: 'string',
+        enum: ['white', 'black'],
+      },
+      moveCount: { type: 'integer' },
+      lastMove: { type: 'string' },
+      legalMoveCount: { type: 'integer' },
+      candidateMoves: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+      },
+      summary: { type: 'string' },
+      explanation: { type: 'string' },
+      moveExecutionAvailable: { type: 'boolean' },
+    },
+    required: [
+      'appSessionId',
+      'requestedMove',
+      'appliedMove',
+      'fen',
+      'turn',
+      'moveCount',
+      'lastMove',
+      'legalMoveCount',
+      'candidateMoves',
+      'summary',
+      'explanation',
+      'moveExecutionAvailable',
+    ],
+  },
+  authRequirement: 'platform-session',
+  timeoutMs: 15_000,
+  idempotent: false,
+  invocationMode: 'embedded-bridge',
+  requiredPermissions: ['session:read', 'session:write', 'tool:invoke'],
+})
+
 export const exampleFlashcardsStartToolSchema: ToolSchema = ToolSchemaSchema.parse({
   name: 'flashcards.start-session',
   displayName: 'Start Flashcard Session',
@@ -270,6 +335,7 @@ export const examplePlannerDashboardToolSchema: ToolSchema = ToolSchemaSchema.pa
 export const exampleToolSchemas = [
   exampleChessLaunchToolSchema,
   exampleChessGetBoardStateToolSchema,
+  exampleChessMakeMoveToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
 ]

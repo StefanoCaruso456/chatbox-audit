@@ -1,12 +1,67 @@
-import { exampleChessGetBoardStateToolSchema, exampleChessLaunchToolSchema } from '@shared/contracts/v1'
+import {
+  exampleChessGetBoardStateToolSchema,
+  exampleChessLaunchToolSchema,
+  exampleChessMakeMoveToolSchema,
+} from '@shared/contracts/v1'
 import { createMessage } from '@shared/types'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetSidebarAppRuntimeSnapshots, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { deriveConversationAppContext, routeTutorMeAiAppRequest } from './orchestrator'
+
+const { mockEnqueueSidebarAppRuntimeCommand } = vi.hoisted(() => ({
+  mockEnqueueSidebarAppRuntimeCommand: vi.fn(),
+}))
+
+vi.mock('@/stores/sidebarAppRuntimeCommandStore', () => ({
+  enqueueSidebarAppRuntimeCommand: (...args: unknown[]) => mockEnqueueSidebarAppRuntimeCommand(...args),
+}))
 
 describe('routeTutorMeAiAppRequest', () => {
   beforeEach(() => {
     resetSidebarAppRuntimeSnapshots()
+    mockEnqueueSidebarAppRuntimeCommand.mockReset()
+    mockEnqueueSidebarAppRuntimeCommand.mockResolvedValue({
+      ok: true,
+      command: {
+        hostSessionId: 'conversation.sidebar.9',
+        runtimeAppId: 'chess.internal',
+        appSessionId: 'app-session.sidebar.chess',
+        toolCallId: 'tool-call.chess.make-move.mock',
+        toolName: 'chess.make-move',
+        arguments: {
+          move: 'd4',
+          expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        },
+        createdAt: '2026-04-04T05:25:00.000Z',
+      },
+      completion: {
+        version: 'v1',
+        conversationId: 'conversation.sidebar.9',
+        appSessionId: 'app-session.sidebar.chess',
+        appId: 'chess.internal',
+        toolCallId: 'tool-call.chess.make-move.mock',
+        status: 'succeeded',
+        resultSummary: 'Move played: d4. Black to move.',
+        result: {
+          appSessionId: 'app-session.sidebar.chess',
+          requestedMove: 'd4',
+          appliedMove: 'd4',
+          fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+          turn: 'black',
+          moveCount: 1,
+          lastMove: 'd4',
+          legalMoveCount: 20,
+          candidateMoves: ['d5', 'e5'],
+          summary: 'Move played: d4. Black to move.',
+          explanation: 'It claims central space and opens lines for your pieces.',
+          moveExecutionAvailable: true,
+        },
+        completedAt: '2026-04-04T05:25:02.000Z',
+        followUpContext: {
+          summary: 'Use the updated live chess board to recommend the best next move from this position.',
+        },
+      },
+    })
   })
 
   it('launches chess for a clear play request', async () => {
@@ -122,7 +177,7 @@ describe('routeTutorMeAiAppRequest', () => {
               moveCount: 2,
               lastMove: 'e5',
             },
-            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
+            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
           },
         },
       },
@@ -175,7 +230,7 @@ describe('routeTutorMeAiAppRequest', () => {
               moveCount: 2,
               lastMove: 'e5',
             },
-            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
+            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
           },
         },
       },
@@ -207,7 +262,7 @@ describe('routeTutorMeAiAppRequest', () => {
       moveCount: 2,
       lastMove: 'e5',
       legalMoveCount: 29,
-      moveExecutionAvailable: false,
+      moveExecutionAvailable: true,
     })
 
     expect(
@@ -220,37 +275,26 @@ describe('routeTutorMeAiAppRequest', () => {
     ).toBeTruthy()
   })
 
-  it('stops move requests from pretending the live chess board changed when move execution is not wired yet', async () => {
-    const priorAssistant = createMessage('assistant', 'Launching Chess Tutor in the right sidebar.')
-    priorAssistant.contentParts = [
-      {
-        type: 'embedded-app',
-        appId: 'chess.internal',
-        appName: 'Chess Tutor',
-        appSessionId: 'app-session.chess.8',
-        sourceUrl: 'http://localhost:1212/embedded-apps/chess',
-        title: 'Chess Tutor',
-        summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w. White to move.',
-        status: 'ready',
-        allowedOrigin: 'http://localhost:1212',
-        bridge: {
-          expectedOrigin: 'http://localhost:1212',
-          conversationId: 'conversation.8',
-          appSessionId: 'app-session.chess.8',
-          bootstrap: {
-            launchReason: 'chat-tool',
-            authState: 'connected',
-            grantedPermissions: ['session:read', 'session:write', 'tool:invoke'],
-            initialState: {
-              fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-              turn: 'w',
-              moveCount: 0,
-            },
-            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
-          },
-        },
+  it('moves the live chess board from chat when a sidebar chess session is active', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
       },
-    ]
+      updatedAt: '2026-04-04T05:25:00.000Z',
+    })
 
     const result = await routeTutorMeAiAppRequest({
       origin: 'http://localhost:1212',
@@ -258,7 +302,7 @@ describe('routeTutorMeAiAppRequest', () => {
       userId: 'user.8',
       userRequest: 'move any white piece now',
       requestMessageId: 'message.8',
-      previousMessages: [createMessage('user', "let's play chess"), priorAssistant],
+      previousMessages: [createMessage('user', "let's play chess")],
     })
 
     expect(result.kind).toBe('invoke-tool')
@@ -267,11 +311,18 @@ describe('routeTutorMeAiAppRequest', () => {
     }
 
     expect(result.message.contentParts.some((part) => part.type === 'embedded-app')).toBe(false)
-    expect(
-      result.message.contentParts.find(
-        (part) => part.type === 'text' && part.text.includes('direct move execution from chat is not wired yet')
-      )
-    ).toBeTruthy()
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.make-move')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      requestedMove: 'd4',
+      appliedMove: 'd4',
+      turn: 'black',
+      moveExecutionAvailable: true,
+    })
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Move played: d4')
+    expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
   })
 
   it('reads the live Chess board from the active sidebar runtime when the board was opened outside chat', async () => {
@@ -284,7 +335,7 @@ describe('routeTutorMeAiAppRequest', () => {
       expectedOrigin: 'http://localhost:1212',
       sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
       authState: 'connected',
-      availableToolNames: ['chess.launch-game', 'chess.get-board-state'],
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
       status: 'active',
       summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
       latestStateDigest: {
@@ -312,10 +363,13 @@ describe('routeTutorMeAiAppRequest', () => {
     const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
     const textPart = result.message.contentParts.find((part) => part.type === 'text')
 
-    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
-    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain(
-      'direct move execution from chat is not wired yet'
-    )
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.make-move')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      requestedMove: 'd4',
+      appliedMove: 'd4',
+      turn: 'black',
+    })
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Move played: d4')
   })
 
   it('keeps the latest unfinished app active when a later completed app exists', () => {

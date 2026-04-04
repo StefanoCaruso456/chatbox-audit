@@ -9,6 +9,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChessAppPage } from './ChessAppPage'
 
 const sendCompletion = vi.fn()
+const sendError = vi.fn()
 const sendState = vi.fn()
 let runtimeContext: { conversationId: string; appSessionId: string } | null = null
 let invocationMessage:
@@ -16,9 +17,7 @@ let invocationMessage:
       payload: {
         toolName: string
         toolCallId: string
-        arguments: {
-          mode: 'practice' | 'analysis'
-        }
+        arguments: Record<string, string>
       }
     }
   | null = null
@@ -28,6 +27,7 @@ vi.mock('../useEmbeddedAppBridge', () => ({
     runtimeContext,
     invocationMessage,
     sendCompletion,
+    sendError,
     sendState,
   }),
 }))
@@ -68,6 +68,7 @@ describe('ChessAppPage', () => {
       },
     }
     sendCompletion.mockReset()
+    sendError.mockReset()
     sendState.mockReset()
   })
 
@@ -116,6 +117,38 @@ describe('ChessAppPage', () => {
           payload.state?.turn === 'b'
       )
     ).toBe(true)
+  })
+
+  it('applies chess.make-move invocations from the sidebar host and completes with updated board state', async () => {
+    invocationMessage = {
+      payload: {
+        toolName: 'chess.make-move',
+        toolCallId: 'tool-call.sidebar.chess.move',
+        arguments: {
+          move: 'd4',
+          expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        },
+      },
+    }
+
+    renderChess(<ChessAppPage />)
+
+    await waitFor(() =>
+      expect(sendCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolCallId: 'tool-call.sidebar.chess.move',
+          status: 'succeeded',
+          result: expect.objectContaining({
+            requestedMove: 'd4',
+            appliedMove: 'd4',
+            turn: 'black',
+            moveExecutionAvailable: true,
+          }),
+        })
+      )
+    )
+
+    expect(screen.getByText('Played d4. Black to move.')).toBeTruthy()
   })
 
   it('publishes the visible board state to the sidebar parent even without runtime bootstrap', async () => {

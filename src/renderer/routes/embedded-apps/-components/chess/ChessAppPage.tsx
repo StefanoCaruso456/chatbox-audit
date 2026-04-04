@@ -1,9 +1,10 @@
 import { Alert, Badge, Box, Group, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import type { CompletionSignal, RuntimeAppStatus } from '@shared/contracts/v1'
 import { Chess, type Square } from 'chess.js'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { postSidebarDirectIframeStateMessage } from '@/components/apps/sidebarDirectIframeState'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
+import { applyRequestedChessMove } from './chessMove'
 
 type SelectionState = {
   from: Square | null
@@ -97,6 +98,65 @@ function buildCompletionSignal(input: {
   }
 }
 
+function buildMoveCompletionSignal(input: {
+  conversationId: string
+  appSessionId: string
+  toolCallId: string
+  requestedMove: string
+  chess: Chess
+  appliedMoveSan: string
+}) {
+  const candidateMoves = input.chess.moves().slice(0, 6)
+  const turn = input.chess.turn() === 'w' ? 'white' : 'black'
+  const moveCount = input.chess.history().length
+  const explanation =
+    input.appliedMoveSan === 'd4' || input.appliedMoveSan === 'e4'
+      ? 'It claims central space and opens lines for your pieces.'
+      : input.appliedMoveSan === 'Nf3' || input.appliedMoveSan === 'Nc3'
+        ? 'It develops a knight toward the center while keeping options flexible.'
+        : input.appliedMoveSan === 'O-O' || input.appliedMoveSan === 'O-O-O'
+          ? 'It improves king safety and helps coordinate the rooks.'
+          : 'It is a legal move that improves the position.'
+
+  const resultSummary = `Move played: ${input.appliedMoveSan}. ${turn === 'white' ? 'White' : 'Black'} to move.`
+
+  return {
+    version: 'v1' as const,
+    conversationId: input.conversationId,
+    appSessionId: input.appSessionId,
+    appId: 'chess.internal',
+    toolCallId: input.toolCallId,
+    status: 'succeeded' as const,
+    resultSummary,
+    result: {
+      appSessionId: input.appSessionId,
+      requestedMove: input.requestedMove,
+      appliedMove: input.appliedMoveSan,
+      fen: input.chess.fen(),
+      turn,
+      moveCount,
+      lastMove: input.appliedMoveSan,
+      legalMoveCount: input.chess.moves().length,
+      candidateMoves,
+      summary: resultSummary,
+      explanation,
+      moveExecutionAvailable: true,
+    },
+    completedAt: new Date().toISOString(),
+    followUpContext: {
+      summary: `Use the updated live chess board to recommend the best next move from this position.`,
+      userVisibleSummary: resultSummary,
+      recommendedPrompts: ['What should the other side play next?', 'Explain the best plan from this position.'],
+      stateDigest: {
+        fen: input.chess.fen(),
+        turn,
+        moveCount,
+        lastMove: input.appliedMoveSan,
+      },
+    },
+  } satisfies CompletionSignal
+}
+
 function getSquareColor(square: Square) {
   const file = square.charCodeAt(0) - 97
   const rank = Number(square[1]) - 1
@@ -137,10 +197,12 @@ const pieceGlyphs: Record<string, string> = {
 }
 
 export function ChessAppPage() {
-  const { runtimeContext, invocationMessage, sendCompletion, sendState } = useEmbeddedAppBridge('chess.internal')
+  const { runtimeContext, invocationMessage, sendCompletion, sendError, sendState } =
+    useEmbeddedAppBridge('chess.internal')
   const [chess, setChess] = useState(() => new Chess())
   const [selection, setSelection] = useState<SelectionState>({ from: null })
   const [feedback, setFeedback] = useState<string | null>(null)
+  const handledToolCallIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!runtimeContext) {
@@ -177,10 +239,50 @@ export function ChessAppPage() {
     })
   }, [chess, currentMode])
 
+  const commitMoveState = useCallback(
+    (nextChess: Chess, message: string, lastMove?: string, options?: { sendGameOverCompletion?: boolean }) => {
+      setChess(nextChess)
+      setSelection({ from: null })
+      setFeedback(message)
+
+      sendState({
+        status: nextChess.isGameOver() ? 'completed' : 'active',
+        summary: formatSummary(nextChess),
+        state: {
+          fen: nextChess.fen(),
+          turn: nextChess.turn(),
+          moveCount: nextChess.history().length,
+          lastMove,
+        },
+        progress: {
+          label: `Move ${Math.max(1, nextChess.history().length)}`,
+          percent: Math.min(95, 5 + nextChess.history().length * 5),
+        },
+      })
+
+      if ((options?.sendGameOverCompletion ?? true) && nextChess.isGameOver() && runtimeContext) {
+        sendCompletion(
+          buildCompletionSignal({
+            conversationId: runtimeContext.conversationId,
+            appSessionId: runtimeContext.appSessionId,
+            toolCallId: invocationMessage?.payload.toolCallId,
+            chess: nextChess,
+          })
+        )
+      }
+    },
+    [invocationMessage?.payload.toolCallId, runtimeContext, sendCompletion, sendState]
+  )
+
   useEffect(() => {
     if (!invocationMessage || invocationMessage.payload.toolName !== 'chess.launch-game') {
       return
     }
+
+    if (handledToolCallIdsRef.current.has(invocationMessage.payload.toolCallId)) {
+      return
+    }
+    handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
 
     const nextChess = new Chess()
     setChess(nextChess)
@@ -202,6 +304,84 @@ export function ChessAppPage() {
       },
     })
   }, [invocationMessage, sendState])
+
+  useEffect(() => {
+    if (!invocationMessage || invocationMessage.payload.toolName !== 'chess.make-move') {
+      return
+    }
+
+    if (handledToolCallIdsRef.current.has(invocationMessage.payload.toolCallId)) {
+      return
+    }
+    handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
+
+    const requestedMove =
+      typeof invocationMessage.payload.arguments.move === 'string' ? invocationMessage.payload.arguments.move.trim() : ''
+    const expectedFen =
+      typeof invocationMessage.payload.arguments.expectedFen === 'string'
+        ? invocationMessage.payload.arguments.expectedFen.trim()
+        : ''
+
+    if (!runtimeContext) {
+      setFeedback('The chess runtime is not connected yet.')
+      return
+    }
+
+    if (!requestedMove) {
+      sendError({
+        code: 'chess.invalid-move-request',
+        message: 'A chess move request must include a move string.',
+        recoverable: true,
+        details: {
+          toolCallId: invocationMessage.payload.toolCallId,
+        },
+      })
+      return
+    }
+
+    if (expectedFen && expectedFen !== chess.fen()) {
+      sendError({
+        code: 'chess.stale-board-state',
+        message: 'The chess board changed before the requested move could be applied.',
+        recoverable: true,
+        details: {
+          toolCallId: invocationMessage.payload.toolCallId,
+          expectedFen,
+          currentFen: chess.fen(),
+        },
+      })
+      return
+    }
+
+    const nextChess = new Chess(chess.fen())
+    const move = applyRequestedChessMove(nextChess, requestedMove)
+    if (!move) {
+      sendError({
+        code: 'chess.illegal-move',
+        message: `"${requestedMove}" is not a legal move from the current position.`,
+        recoverable: true,
+        details: {
+          toolCallId: invocationMessage.payload.toolCallId,
+          requestedMove,
+        },
+      })
+      return
+    }
+
+    commitMoveState(nextChess, `Played ${move.san}. ${formatTurn(nextChess.turn())} to move.`, move.san, {
+      sendGameOverCompletion: false,
+    })
+    sendCompletion(
+      buildMoveCompletionSignal({
+        conversationId: runtimeContext.conversationId,
+        appSessionId: runtimeContext.appSessionId,
+        toolCallId: invocationMessage.payload.toolCallId,
+        requestedMove,
+        chess: nextChess,
+        appliedMoveSan: move.san,
+      })
+    )
+  }, [chess, commitMoveState, invocationMessage, runtimeContext, sendCompletion])
 
   useEffect(() => {
     publishSidebarSnapshot()
@@ -247,41 +427,6 @@ export function ChessAppPage() {
         san: move.san,
       }))
   }, [chess, selection.from])
-
-  const commitMoveState = useCallback(
-    (nextChess: Chess, message: string, lastMove?: string) => {
-      setChess(nextChess)
-      setSelection({ from: null })
-      setFeedback(message)
-
-      sendState({
-        status: nextChess.isGameOver() ? 'completed' : 'active',
-        summary: formatSummary(nextChess),
-        state: {
-          fen: nextChess.fen(),
-          turn: nextChess.turn(),
-          moveCount: nextChess.history().length,
-          lastMove,
-        },
-        progress: {
-          label: `Move ${Math.max(1, nextChess.history().length)}`,
-          percent: Math.min(95, 5 + nextChess.history().length * 5),
-        },
-      })
-
-      if (nextChess.isGameOver() && runtimeContext) {
-        sendCompletion(
-          buildCompletionSignal({
-            conversationId: runtimeContext.conversationId,
-            appSessionId: runtimeContext.appSessionId,
-            toolCallId: invocationMessage?.payload.toolCallId,
-            chess: nextChess,
-          })
-        )
-      }
-    },
-    [invocationMessage?.payload.toolCallId, runtimeContext, sendCompletion, sendState]
-  )
 
   const handleSquareClick = useCallback(
     (square: Square) => {

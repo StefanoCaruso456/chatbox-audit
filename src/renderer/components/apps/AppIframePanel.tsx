@@ -17,6 +17,12 @@ import { probeForNewerBuild } from '@/lib/build-freshness'
 import { cn } from '@/lib/utils'
 import { currentSessionIdAtom } from '@/stores/atoms'
 import { useSession } from '@/stores/chatStore'
+import {
+  getSidebarAppRuntimeCommand,
+  rejectSidebarAppRuntimeCommand,
+  resolveSidebarAppRuntimeCommand,
+  subscribeSidebarAppRuntimeCommands,
+} from '@/stores/sidebarAppRuntimeCommandStore'
 import { clearSidebarAppRuntimeSnapshot, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
@@ -202,9 +208,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const runtimeInvocationKeyRef = useRef<string | null>(null)
   const runtimeReplayTimersRef = useRef<number[]>([])
   const hasRuntimeResponseRef = useRef(false)
+  const lastSidebarCommandToolCallIdRef = useRef<string | null>(null)
   const [launchSessionKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
+  const [sidebarCommandVersion, setSidebarCommandVersion] = useState(0)
   const runtimeAppId = app.runtimeBridge?.appId ?? app.id
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
@@ -237,6 +245,10 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     app.runtimeBridge?.sidebarMode === 'direct-iframe' &&
     Boolean(embeddedRuntime)
   const runtimeResetKey = `${app.id}:${embeddedRuntime?.appSessionId ?? ''}:${embeddedRuntime?.conversationId ?? ''}:${embeddedRuntime?.restartNonce ?? ''}:${reloadNonce}`
+  const pendingSidebarRuntimeCommand =
+    currentSessionId && app.experience === 'tutormeai-runtime'
+      ? getSidebarAppRuntimeCommand(currentSessionId, runtimeAppId)
+      : null
 
   const syncSidebarRuntimeSnapshot = useCallback(
     (input: {
@@ -278,6 +290,12 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       // If the probe fails, keep the current shell and let the sidebar continue.
     })
   }, [app.experience])
+
+  useEffect(() => {
+    return subscribeSidebarAppRuntimeCommands(() => {
+      setSidebarCommandVersion((value) => value + 1)
+    })
+  }, [])
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current !== null) {
@@ -321,6 +339,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     runtimeBootstrapKeyRef.current = null
     runtimeInvocationKeyRef.current = null
     hasRuntimeResponseRef.current = false
+    lastSidebarCommandToolCallIdRef.current = null
     clearRuntimeReplayTimers()
   }, [clearRuntimeReplayTimers, runtimeResetKey])
 
@@ -459,6 +478,49 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     [app.id, app.runtimeBridge?.appId, embeddedRuntime, resolvedLaunchUrl, usesDirectRuntimeBridge]
   )
 
+  const postDirectRuntimeCommand = useCallback(
+    (command: { toolCallId: string; toolName: string; arguments: JsonObject; timeoutMs?: number }) => {
+      if (!usesDirectRuntimeBridge || !embeddedRuntime) {
+        return false
+      }
+
+      const iframeWindow = iframeRef.current?.contentWindow
+      if (!iframeWindow) {
+        return false
+      }
+
+      const originCheck = validateRuntimeMessageOrigin(embeddedRuntime.expectedOrigin, embeddedRuntime.expectedOrigin)
+      if (!originCheck.valid || !originCheck.normalizedExpectedOrigin) {
+        return false
+      }
+
+      runtimeSequenceRef.current += 1
+      const sequence = runtimeSequenceRef.current
+
+      iframeWindow.postMessage(
+        createHostInvokeMessage({
+          messageId: buildRuntimeMessageId('invoke', runtimeAppId, embeddedRuntime.appSessionId, sequence),
+          correlationId: `${runtimeAppId}.${command.toolCallId}`,
+          conversationId: embeddedRuntime.conversationId,
+          appSessionId: embeddedRuntime.appSessionId,
+          appId: runtimeAppId,
+          sequence,
+          sentAt: new Date().toISOString(),
+          expectedOrigin: originCheck.normalizedExpectedOrigin,
+          handshakeToken: embeddedRuntime.handshakeToken,
+          toolCallId: command.toolCallId,
+          toolName: command.toolName,
+          arguments: command.arguments,
+          timeoutMs: command.timeoutMs,
+        }),
+        originCheck.normalizedExpectedOrigin
+      )
+
+      return true
+    },
+    [embeddedRuntime, runtimeAppId, usesDirectRuntimeBridge]
+  )
+
   const scheduleRuntimeHandshakeReplay = useCallback(() => {
     clearRuntimeReplayTimers()
     if (!usesDirectRuntimeBridge || !embeddedRuntime) {
@@ -561,6 +623,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
               ? message.payload.resultSummary
               : undefined,
         })
+        if (message.payload.toolCallId) {
+          resolveSidebarAppRuntimeCommand(message.payload.toolCallId, message.payload)
+        }
         embeddedRuntime.onCompletion?.(message.payload)
         return
       }
@@ -573,6 +638,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           latestStateDigest: embeddedRuntime.bootstrap?.initialState,
           errorMessage: message.payload.message,
         })
+        const erroredToolCallId =
+          typeof message.payload.details?.toolCallId === 'string' ? message.payload.details.toolCallId : null
+        if (erroredToolCallId) {
+          rejectSidebarAppRuntimeCommand(erroredToolCallId, message.payload.message)
+        }
         embeddedRuntime.onRuntimeError?.(message)
       }
     }
@@ -588,6 +658,38 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     clearRuntimeReplayTimers,
     embeddedRuntime,
     syncSidebarRuntimeSnapshot,
+    usesDirectRuntimeBridge,
+  ])
+
+  useEffect(() => {
+    if (!usesDirectRuntimeBridge || !pendingSidebarRuntimeCommand || !currentSessionId) {
+      return
+    }
+
+    if (pendingSidebarRuntimeCommand.hostSessionId !== currentSessionId) {
+      return
+    }
+
+    if (lastSidebarCommandToolCallIdRef.current === pendingSidebarRuntimeCommand.toolCallId) {
+      return
+    }
+
+    const didPost = postDirectRuntimeCommand({
+      toolCallId: pendingSidebarRuntimeCommand.toolCallId,
+      toolName: pendingSidebarRuntimeCommand.toolName,
+      arguments: pendingSidebarRuntimeCommand.arguments,
+      timeoutMs: pendingSidebarRuntimeCommand.timeoutMs,
+    })
+
+    if (didPost) {
+      lastSidebarCommandToolCallIdRef.current = pendingSidebarRuntimeCommand.toolCallId
+      setLoadState('loading')
+    }
+  }, [
+    currentSessionId,
+    pendingSidebarRuntimeCommand,
+    postDirectRuntimeCommand,
+    sidebarCommandVersion,
     usesDirectRuntimeBridge,
   ])
 

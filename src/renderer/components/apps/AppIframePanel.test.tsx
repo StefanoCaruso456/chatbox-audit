@@ -3,11 +3,15 @@
  */
 
 import { MantineProvider } from '@mantine/core'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { getDefaultStore } from 'jotai'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { currentSessionIdAtom } from '@/stores/atoms'
+import {
+  enqueueSidebarAppRuntimeCommand,
+  resetSidebarAppRuntimeCommands,
+} from '@/stores/sidebarAppRuntimeCommandStore'
 import { getSidebarAppRuntimeSnapshot, resetSidebarAppRuntimeSnapshots } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
@@ -145,6 +149,7 @@ beforeEach(() => {
   mockProbeForNewerBuild.mockResolvedValue(false)
   getDefaultStore().set(currentSessionIdAtom, 'session.test')
   resetSidebarAppRuntimeSnapshots()
+  resetSidebarAppRuntimeCommands()
   uiStore.setState({
     approvedAppsModalOpen: false,
     activeApprovedAppId: null,
@@ -154,6 +159,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   resetSidebarAppRuntimeSnapshots()
+  resetSidebarAppRuntimeCommands()
   uiStore.setState(initialUiState)
 })
 
@@ -300,6 +306,101 @@ describe('AppIframePanel', () => {
       approvedAppId: 'chess-tutor',
       appSessionId: bootstrapMessage.appSessionId,
       status: 'active',
+    })
+  })
+
+  it('sends a queued chess.make-move command into the already-open sidebar iframe', async () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    const bootstrapMessage = postMessage.mock.calls[0]?.[0]
+
+    const commandPromise = enqueueSidebarAppRuntimeCommand({
+      hostSessionId: 'session.test',
+      runtimeAppId: 'chess.internal',
+      appSessionId: bootstrapMessage.appSessionId,
+      toolCallId: 'tool-call.chess.make-move.1',
+      toolName: 'chess.make-move',
+      arguments: {
+        move: 'd4',
+        expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      },
+      timeoutMs: 3_000,
+      createdAt: new Date().toISOString(),
+    })
+
+    await waitFor(() => {
+      expect(postMessage).toHaveBeenCalledTimes(3)
+    })
+    expect(postMessage.mock.calls[2]?.[0]).toMatchObject({
+      source: 'host',
+      type: 'host.invoke',
+      appId: 'chess.internal',
+      payload: expect.objectContaining({
+        toolCallId: 'tool-call.chess.make-move.1',
+        toolName: 'chess.make-move',
+        arguments: expect.objectContaining({
+          move: 'd4',
+        }),
+      }),
+    })
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            version: 'v1',
+            source: 'app',
+            type: 'app.complete',
+            messageId: 'app.complete.1',
+            conversationId: bootstrapMessage.conversationId,
+            appSessionId: bootstrapMessage.appSessionId,
+            appId: 'chess.internal',
+            sequence: 4,
+            sentAt: new Date().toISOString(),
+            security: bootstrapMessage.security,
+            payload: {
+              version: 'v1',
+              conversationId: bootstrapMessage.conversationId,
+              appSessionId: bootstrapMessage.appSessionId,
+              appId: 'chess.internal',
+              toolCallId: 'tool-call.chess.make-move.1',
+              status: 'succeeded',
+              resultSummary: 'Move played: d4. Black to move.',
+              result: {
+                appSessionId: bootstrapMessage.appSessionId,
+                requestedMove: 'd4',
+                appliedMove: 'd4',
+                fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+                turn: 'black',
+                moveCount: 1,
+                lastMove: 'd4',
+                legalMoveCount: 20,
+                candidateMoves: ['d5'],
+                summary: 'Move played: d4. Black to move.',
+                explanation: 'It claims central space and opens lines for your pieces.',
+                moveExecutionAvailable: true,
+              },
+              completedAt: new Date().toISOString(),
+              followUpContext: {
+                summary: 'Use the updated live chess board to recommend the best next move from this position.',
+              },
+            },
+          },
+        })
+      )
+
+      await expect(commandPromise).resolves.toMatchObject({
+        ok: true,
+      })
     })
   })
 
