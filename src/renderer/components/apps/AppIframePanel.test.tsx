@@ -309,6 +309,89 @@ describe('AppIframePanel', () => {
     })
   })
 
+  it('preserves the live chess board snapshot after a recoverable move error instead of blocking the panel', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    const bootstrapMessage = postMessage.mock.calls[0]?.[0]
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            version: 'v1',
+            source: 'app',
+            type: 'app.state',
+            messageId: 'app.state.2',
+            conversationId: bootstrapMessage.conversationId,
+            appSessionId: bootstrapMessage.appSessionId,
+            appId: 'chess.internal',
+            sequence: 3,
+            sentAt: new Date().toISOString(),
+            security: bootstrapMessage.security,
+            payload: {
+              status: 'active',
+              summary: 'Played d4. Black to move.',
+              state: {
+                fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+                turn: 'b',
+                moveCount: 1,
+                lastMove: 'd4',
+              },
+            },
+          },
+        })
+      )
+    })
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            version: 'v1',
+            source: 'app',
+            type: 'app.error',
+            messageId: 'app.error.2',
+            conversationId: bootstrapMessage.conversationId,
+            appSessionId: bootstrapMessage.appSessionId,
+            appId: 'chess.internal',
+            sequence: 4,
+            sentAt: new Date().toISOString(),
+            security: bootstrapMessage.security,
+            payload: {
+              code: 'chess.stale-board-state',
+              message: 'The chess board changed before the requested move could be applied.',
+              recoverable: true,
+              details: {
+                toolCallId: 'tool-call.chess.make-move.2',
+              },
+            },
+          },
+        })
+      )
+    })
+
+    expect(screen.queryByTestId('app-iframe-panel-fallback')).toBeNull()
+    expect(getSidebarAppRuntimeSnapshot('session.test', 'chess.internal')).toMatchObject({
+      status: 'active',
+      errorMessage: 'The chess board changed before the requested move could be applied.',
+      latestStateDigest: expect.objectContaining({
+        fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+        lastMove: 'd4',
+      }),
+    })
+  })
+
   it('sends a queued chess.make-move command into the already-open sidebar iframe', async () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 

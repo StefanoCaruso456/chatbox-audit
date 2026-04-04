@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getApprovedAppById } from '@/data/approvedApps'
 
 const { mockGetSession, mockModifyMessage } = vi.hoisted(() => ({
@@ -22,6 +22,11 @@ vi.mock('@/stores/session/messages', () => ({
 import { buildConversationEmbeddedAppRuntime, selectLatestApprovedAppConversationPart } from './app-panel-conversation-sync'
 
 describe('app-panel conversation sync', () => {
+  beforeEach(() => {
+    mockGetSession.mockReset()
+    mockModifyMessage.mockReset()
+  })
+
   it('selects the latest active runtime part for the approved app', () => {
     const app = getApprovedAppById('chess-tutor')
     if (!app) {
@@ -167,8 +172,8 @@ describe('app-panel conversation sync', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(mockModifyMessage).toHaveBeenCalledTimes(1)
-    const updatedMessage = mockModifyMessage.mock.calls[0]?.[1]
+    expect(mockModifyMessage).toHaveBeenCalled()
+    const updatedMessage = mockModifyMessage.mock.calls.at(-1)?.[1]
     const updatedPart = updatedMessage?.contentParts?.[0]
 
     expect(updatedPart?.status).toBe('ready')
@@ -178,6 +183,98 @@ describe('app-panel conversation sync', () => {
       turn: 'b',
       moveCount: 1,
       lastMove: 'e4',
+    })
+  })
+
+  it('keeps the live runtime session and clears the failed invocation after a recoverable app error', async () => {
+    const app = getApprovedAppById('chess-tutor')
+    if (!app) {
+      throw new Error('Missing chess-tutor fixture')
+    }
+
+    const session = {
+      id: 'session.3',
+      messages: [
+        {
+          id: 'message.active',
+          timestamp: Date.parse('2026-04-04T20:10:00.000Z'),
+          role: 'assistant',
+          contentParts: [
+            {
+              type: 'embedded-app',
+              appId: 'chess.internal',
+              appName: 'Chess Tutor',
+              appSessionId: 'app-session.active',
+              sourceUrl: 'http://localhost:3000/embedded-apps/chess',
+              summary: 'Played d4. Black to move.',
+              status: 'loading',
+              bridge: {
+                expectedOrigin: 'http://localhost:3000',
+                conversationId: 'conversation.3',
+                appSessionId: 'app-session.active',
+                pendingInvocation: {
+                  toolCallId: 'tool-call.move',
+                  toolName: 'chess.make-move',
+                },
+                bootstrap: {
+                  launchReason: 'chat-tool',
+                  authState: 'connected',
+                  initialState: {
+                    fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+                    turn: 'b',
+                    moveCount: 1,
+                    lastMove: 'd4',
+                  },
+                  availableTools: [],
+                },
+              },
+            },
+          ],
+        },
+      ],
+      threads: [],
+    } as never
+
+    mockGetSession.mockResolvedValue(session)
+    mockModifyMessage.mockResolvedValue(undefined)
+
+    const ref = selectLatestApprovedAppConversationPart(session, app)
+    if (!ref) {
+      throw new Error('Expected active chess runtime ref')
+    }
+
+    const runtime = buildConversationEmbeddedAppRuntime('session.3', ref, 'http://localhost:3000/embedded-apps/chess')
+    if (!runtime?.onRuntimeError) {
+      throw new Error('Expected runtime error handler')
+    }
+
+    runtime.onRuntimeError({
+      payload: {
+        code: 'chess.stale-board-state',
+        message: 'The chess board changed before the requested move could be applied.',
+        recoverable: true,
+        details: {
+          toolCallId: 'tool-call.move',
+        },
+      },
+    } as never)
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mockModifyMessage).toHaveBeenCalledTimes(1)
+    const updatedMessage = mockModifyMessage.mock.calls[0]?.[1]
+    const updatedPart = updatedMessage?.contentParts?.[0]
+
+    expect(updatedPart?.status).toBe('ready')
+    expect(updatedPart?.summary).toBe('Played d4. Black to move.')
+    expect(updatedPart?.errorMessage).toBe('The chess board changed before the requested move could be applied.')
+    expect(updatedPart?.bridge?.pendingInvocation).toBeUndefined()
+    expect(updatedPart?.bridge?.bootstrap?.initialState).toMatchObject({
+      fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+      turn: 'b',
+      moveCount: 1,
+      lastMove: 'd4',
     })
   })
 })

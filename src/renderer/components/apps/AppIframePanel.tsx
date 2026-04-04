@@ -723,11 +723,16 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       }
 
       if (message.type === 'app.error') {
-        setLoadState('blocked')
+        const existingSnapshot =
+          currentSessionId && app.experience === 'tutormeai-runtime'
+            ? getSidebarAppRuntimeSnapshot(currentSessionId, runtimeAppId)
+            : null
+
+        setLoadState(message.payload.recoverable ? 'ready' : 'blocked')
         syncSidebarRuntimeSnapshot({
-          status: 'failed',
+          status: message.payload.recoverable ? existingSnapshot?.status ?? 'active' : 'failed',
           summary: message.payload.message,
-          latestStateDigest: embeddedRuntime.bootstrap?.initialState,
+          latestStateDigest: existingSnapshot?.latestStateDigest ?? embeddedRuntime.bootstrap?.initialState,
           errorMessage: message.payload.message,
         })
         const erroredToolCallId =
