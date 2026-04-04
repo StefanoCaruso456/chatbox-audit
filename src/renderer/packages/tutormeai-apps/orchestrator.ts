@@ -243,33 +243,44 @@ function inferChessPhase(chess: Chess) {
 }
 
 function buildChessCandidateMoves(chess: Chess) {
+  return buildChessCandidateMoveRecommendations(chess).map((move) => move.san)
+}
+
+function buildChessCandidateMoveRecommendations(chess: Chess) {
   return chess
     .moves({ verbose: true })
     .map((move) => {
       let score = 0
+      let reason = 'keeps your pieces active and your position flexible'
 
       if (move.san.includes('#')) {
         score += 100
+        reason = 'ends the game immediately with checkmate'
       } else if (move.san.includes('+')) {
         score += 24
+        reason = 'checks the king and forces an immediate response'
       } else if (move.flags.includes('k') || move.flags.includes('q')) {
         score += 16
+        reason = 'improves king safety by castling'
       } else if (move.flags.includes('c')) {
         score += 14
+        reason = 'wins material or improves the material balance'
       } else if (move.piece === 'p' && ['d4', 'e4', 'd5', 'e5'].includes(move.to)) {
         score += 10
+        reason = 'claims central space and opens lines for development'
       } else if ((move.piece === 'n' || move.piece === 'b') && ['c3', 'f3', 'c6', 'f6'].includes(move.to)) {
         score += 8
+        reason = 'develops a minor piece to an active square'
       }
 
       return {
         san: move.san,
         score,
+        reason,
       }
     })
     .sort((left, right) => right.score - left.score || left.san.localeCompare(right.san))
     .slice(0, 6)
-    .map((move) => move.san)
 }
 
 function describeChessStatus(chess: Chess) {
@@ -421,12 +432,45 @@ function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest
   const candidateMoves =
     result.candidateMoves.length > 0 ? ` Candidate moves: ${result.candidateMoves.join(', ')}.` : ''
   const sharedSummary = `Current live Chess board: ${result.turn === 'white' ? 'White' : 'Black'} to move. ${result.status}. Last move: ${result.lastMove}. Legal moves: ${result.legalMoveCount}.${candidateMoves}`
+  const recommendation =
+    result.candidateMoves.length > 0
+      ? ` Recommended next move: ${result.candidateMoves[0]} because it ${buildChessMoveExplanation(result.candidateMoves[0])}.`
+      : ''
 
   if (isChessMoveIntent(userRequest)) {
-    return `I can read the live Chess board now, but direct move execution from chat is not wired yet. ${sharedSummary}`
+    return `I can read the live Chess board now, but direct move execution from chat is not wired yet. ${sharedSummary}${recommendation}`
   }
 
-  return sharedSummary
+  return `${sharedSummary}${recommendation}`
+}
+
+function buildChessMoveExplanation(moveSan: string) {
+  if (moveSan.includes('#')) {
+    return 'finishes the game'
+  }
+
+  if (moveSan.includes('+')) {
+    return 'forces the opponent to respond to check'
+  }
+
+  if (moveSan === 'O-O' || moveSan === 'O-O-O') {
+    return 'improves king safety'
+  }
+
+  const normalized = moveSan.toLowerCase()
+  if (normalized === 'e4' || normalized === 'd4' || normalized === 'e5' || normalized === 'd5') {
+    return 'claims the center and opens lines for the pieces behind it'
+  }
+
+  if (normalized === 'nf3' || normalized === 'nc3' || normalized === 'nf6' || normalized === 'nc6') {
+    return 'develops a knight toward the center while keeping options flexible'
+  }
+
+  if (moveSan.includes('x')) {
+    return 'wins material or improves the balance on the board'
+  }
+
+  return 'improves the position without creating unnecessary risk'
 }
 
 function buildChessBoardStateMessage(reference: EmbeddedAppReference, userRequest: string): Message | null {

@@ -9,7 +9,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChessAppPage } from './ChessAppPage'
 
 const sendCompletion = vi.fn()
-const sendError = vi.fn()
 const sendState = vi.fn()
 let runtimeContext: { conversationId: string; appSessionId: string } | null = null
 let invocationMessage:
@@ -29,7 +28,6 @@ vi.mock('../useEmbeddedAppBridge', () => ({
     runtimeContext,
     invocationMessage,
     sendCompletion,
-    sendError,
     sendState,
   }),
 }))
@@ -70,7 +68,6 @@ describe('ChessAppPage', () => {
       },
     }
     sendCompletion.mockReset()
-    sendError.mockReset()
     sendState.mockReset()
   })
 
@@ -83,18 +80,15 @@ describe('ChessAppPage', () => {
     expect(screen.getAllByRole('button').length).toBeGreaterThanOrEqual(64)
   })
 
-  it('shows board analysis and move tools in the sidebar UI', () => {
+  it('keeps the sidebar Chess UI board-first and delegates analysis to chat', () => {
     renderChess(<ChessAppPage />)
 
-    expect(screen.getByText('Board analysis')).toBeTruthy()
-    expect(screen.getByText('Move tools')).toBeTruthy()
-    expect(screen.getByText('Quick actions')).toBeTruthy()
-    expect(screen.getByText('Opening')).toBeTruthy()
-    expect(screen.getByText('Material is even.')).toBeTruthy()
-    expect(screen.getByText('Legal moves: 20')).toBeTruthy()
-    expect(screen.getByLabelText('Move notation')).toBeTruthy()
-    expect(screen.getByText('Candidate moves')).toBeTruthy()
-    expect(screen.queryByText('Practice or analyze a live chess board without leaving the chat.')).toBeNull()
+    expect(screen.getByText('Live board only')).toBeTruthy()
+    expect(screen.getByText(/Ask the chat to analyze this position/i)).toBeTruthy()
+    expect(screen.queryByText('Board analysis')).toBeNull()
+    expect(screen.queryByText('Move tools')).toBeNull()
+    expect(screen.queryByText('Quick actions')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Apply move' })).toBeNull()
   })
 
   it('lets the user make a simple opening move on the board', () => {
@@ -107,15 +101,13 @@ describe('ChessAppPage', () => {
     expect(screen.getByText('Played e4. Black to move.')).toBeTruthy()
   })
 
-  it('supports typed move input and updates the live analysis snapshot', () => {
+  it('publishes updated board state after a manual board move', () => {
     renderChess(<ChessAppPage />)
 
-    fireEvent.change(screen.getByLabelText('Move notation'), { target: { value: 'e2e4' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Apply move' }))
+    fireEvent.click(screen.getByTestId('chess-square-e2'))
+    fireEvent.click(screen.getByTestId('chess-square-e4'))
 
     expect(screen.getByText('Played e4. Black to move.')).toBeTruthy()
-    expect(screen.getByText('Last move: e4')).toBeTruthy()
-    expect(screen.getByText('Legal moves: 20')).toBeTruthy()
     expect(
       sendState.mock.calls.some(
         ([payload]) =>
@@ -167,24 +159,14 @@ describe('ChessAppPage', () => {
     }
   })
 
-  it('lets the user undo and reset the board from the move tools panel', () => {
+  it('shows legal destinations for the selected piece in the board helper', () => {
     renderChess(<ChessAppPage />)
 
-    fireEvent.change(screen.getByLabelText('Move notation'), { target: { value: 'e2e4' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Apply move' }))
-    expect(screen.getByText('Last move: e4')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('chess-square-g1'))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Undo move' }))
-    expect(screen.getByText('Undid the last move. Review the new position.')).toBeTruthy()
-    expect(screen.getByText('Last move: No moves yet')).toBeTruthy()
-
-    fireEvent.change(screen.getByLabelText('Move notation'), { target: { value: 'd2d4' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Apply move' }))
-    expect(screen.getByText('Last move: d4')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Reset board' }))
-    expect(screen.getByText('Board reset to the starting position.')).toBeTruthy()
-    expect(screen.getByText('Last move: No moves yet')).toBeTruthy()
-    expect(screen.getByText('Recent moves: No moves yet')).toBeTruthy()
+    const legalDestinations = screen.getByText(/Legal destinations:/)
+    expect(screen.getByText('Selected G1. Choose a destination square.')).toBeTruthy()
+    expect(legalDestinations.textContent).toContain('F3')
+    expect(legalDestinations.textContent).toContain('H3')
   })
 })

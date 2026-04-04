@@ -213,6 +213,11 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(
       result.message.contentParts.find((part) => part.type === 'text' && part.text.includes('Current live Chess board'))
     ).toBeTruthy()
+    expect(
+      result.message.contentParts.find(
+        (part) => part.type === 'text' && part.text.includes('Recommended next move:')
+      )
+    ).toBeTruthy()
   })
 
   it('stops move requests from pretending the live chess board changed when move execution is not wired yet', async () => {
