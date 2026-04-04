@@ -93,6 +93,11 @@ export function buildSidebarEmbeddedAppRuntime(
         source: 'approved-app-sidebar',
         approvedAppId: app.id,
         approvedAppName: app.name,
+        ...(runtimeBridge.pendingInvocation?.arguments
+          ? {
+              toolArguments: runtimeBridge.pendingInvocation.arguments,
+            }
+          : {}),
         ...(runtimeBridge.initialState ?? {}),
       },
       availableTools: runtimeBridge.availableTools ?? [],

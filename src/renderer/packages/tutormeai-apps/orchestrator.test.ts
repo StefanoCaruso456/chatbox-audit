@@ -38,9 +38,16 @@ describe('routeTutorMeAiAppRequest', () => {
       return
     }
 
-    expect(
-      result.message.contentParts.some((part) => part.type === 'embedded-app' && part.appId === 'flashcards.public')
-    ).toBe(true)
+    const flashcardsPart = result.message.contentParts.find(
+      (part) => part.type === 'embedded-app' && part.appId === 'flashcards.public'
+    )
+
+    expect(flashcardsPart).toBeTruthy()
+    expect(flashcardsPart && flashcardsPart.type === 'embedded-app' ? flashcardsPart.bridge?.bootstrap?.initialState : null).toMatchObject({
+      toolArguments: {
+        topic: 'fractions',
+      },
+    })
   })
 
   it('opens the authenticated planner app in connect-required mode when auth is missing', async () => {
