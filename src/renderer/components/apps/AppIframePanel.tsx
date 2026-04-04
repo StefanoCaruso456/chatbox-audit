@@ -191,7 +191,10 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   )
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
-  const launchUrl = conversationPart?.part.sourceUrl ?? app.launchUrl
+  const launchUrl =
+    app.experience === 'tutormeai-runtime'
+      ? app.launchUrl
+      : conversationPart?.part.sourceUrl ?? app.launchUrl
   const resolvedLaunchUrl = useMemo(
     () =>
       resolveAppPanelLaunchUrl(launchUrl, {
@@ -202,7 +205,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const embeddedRuntime = useMemo(
     () =>
       currentSessionId && conversationPart
-        ? buildConversationEmbeddedAppRuntime(currentSessionId, conversationPart)
+        ? buildConversationEmbeddedAppRuntime(currentSessionId, conversationPart, resolvedLaunchUrl)
         : buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, reloadNonce),
     [app, conversationPart, currentSessionId, reloadNonce, resolvedLaunchUrl]
   )

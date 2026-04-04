@@ -21,6 +21,19 @@ export interface ApprovedAppConversationPartRef {
   timestamp: number
 }
 
+function getLaunchOrigin(launchUrl: string): string | null {
+  try {
+    const parsed = new URL(launchUrl)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null
+    }
+
+    return parsed.origin
+  } catch {
+    return null
+  }
+}
+
 function getMessageTimestamp(message: Message, fallbackIndex: number) {
   if (typeof message.timestamp === 'number' && Number.isFinite(message.timestamp)) {
     return message.timestamp
@@ -169,15 +182,18 @@ async function updateApprovedAppConversationPart(
 
 export function buildConversationEmbeddedAppRuntime(
   sessionId: string,
-  ref: ApprovedAppConversationPartRef
+  ref: ApprovedAppConversationPartRef,
+  currentLaunchUrl?: string
 ): EmbeddedAppHostRuntimeConfig | undefined {
   const { part } = ref
   if (!part.bridge) {
     return undefined
   }
 
+  const currentLaunchOrigin = currentLaunchUrl ? getLaunchOrigin(currentLaunchUrl) : null
+
   return {
-    expectedOrigin: part.bridge.expectedOrigin,
+    expectedOrigin: currentLaunchOrigin ?? part.bridge.expectedOrigin,
     conversationId: part.bridge.conversationId,
     appSessionId: part.bridge.appSessionId ?? part.appSessionId,
     handshakeToken: part.bridge.handshakeToken,
