@@ -2,9 +2,24 @@
  * @vitest-environment jsdom
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { getApprovedAppById } from '@/data/approvedApps'
-import { selectLatestApprovedAppConversationPart } from './app-panel-conversation-sync'
+
+const { mockGetSession, mockModifyMessage } = vi.hoisted(() => ({
+  mockGetSession: vi.fn(),
+  mockModifyMessage: vi.fn(),
+}))
+
+vi.mock('@/stores/chatStore', () => ({
+  getSession: (...args: unknown[]) => mockGetSession(...args),
+}))
+
+vi.mock('@/stores/session/messages', () => ({
+  modifyMessage: (...args: unknown[]) => mockModifyMessage(...args),
+  insertMessageAfter: vi.fn(),
+}))
+
+import { buildConversationEmbeddedAppRuntime, selectLatestApprovedAppConversationPart } from './app-panel-conversation-sync'
 
 describe('app-panel conversation sync', () => {
   it('selects the latest active runtime part for the approved app', () => {
@@ -75,5 +90,94 @@ describe('app-panel conversation sync', () => {
 
     expect(ref?.messageId).toBe('message.active')
     expect(ref?.part.appSessionId).toBe('app-session.active')
+  })
+
+  it('clears a stale pending launch invocation after the runtime reports ready state', async () => {
+    const app = getApprovedAppById('chess-tutor')
+    if (!app) {
+      throw new Error('Missing chess-tutor fixture')
+    }
+
+    const session = {
+      id: 'session.2',
+      messages: [
+        {
+          id: 'message.active',
+          timestamp: Date.parse('2026-04-04T20:05:00.000Z'),
+          role: 'assistant',
+          contentParts: [
+            {
+              type: 'embedded-app',
+              appId: 'chess.internal',
+              appName: 'Chess Tutor',
+              appSessionId: 'app-session.active',
+              sourceUrl: 'http://localhost:3000/embedded-apps/chess',
+              summary: 'Opening position.',
+              status: 'loading',
+              bridge: {
+                expectedOrigin: 'http://localhost:3000',
+                conversationId: 'conversation.2',
+                appSessionId: 'app-session.active',
+                pendingInvocation: {
+                  toolCallId: 'tool-call.launch',
+                  toolName: 'chess.launch-game',
+                },
+                bootstrap: {
+                  launchReason: 'chat-tool',
+                  authState: 'connected',
+                  initialState: {
+                    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                  },
+                  availableTools: [],
+                },
+              },
+            },
+          ],
+        },
+      ],
+      threads: [],
+    } as never
+
+    mockGetSession.mockResolvedValue(session)
+    mockModifyMessage.mockResolvedValue(undefined)
+
+    const ref = selectLatestApprovedAppConversationPart(session, app)
+    if (!ref) {
+      throw new Error('Expected active chess runtime ref')
+    }
+
+    const runtime = buildConversationEmbeddedAppRuntime('session.2', ref, 'http://localhost:3000/embedded-apps/chess')
+    if (!runtime?.onStateUpdate) {
+      throw new Error('Expected runtime state handler')
+    }
+
+    runtime.onStateUpdate({
+      payload: {
+        status: 'active',
+        summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1. Black to move.',
+        state: {
+          fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          turn: 'b',
+          moveCount: 1,
+          lastMove: 'e4',
+        },
+      },
+    } as never)
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(mockModifyMessage).toHaveBeenCalledTimes(1)
+    const updatedMessage = mockModifyMessage.mock.calls[0]?.[1]
+    const updatedPart = updatedMessage?.contentParts?.[0]
+
+    expect(updatedPart?.status).toBe('ready')
+    expect(updatedPart?.bridge?.pendingInvocation).toBeUndefined()
+    expect(updatedPart?.bridge?.bootstrap?.initialState).toMatchObject({
+      fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+      turn: 'b',
+      moveCount: 1,
+      lastMove: 'e4',
+    })
   })
 })
