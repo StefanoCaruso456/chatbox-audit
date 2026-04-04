@@ -11,6 +11,7 @@ import {
   SlugSchema,
 } from '../shared'
 import {
+  exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
@@ -231,7 +232,7 @@ export const exampleInternalChessManifest: AppManifest = AppManifestSchema.parse
       minHeight: 480,
     },
   },
-  toolDefinitions: [exampleChessLaunchToolSchema],
+  toolDefinitions: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema],
   safetyMetadata: {
     reviewStatus: 'approved',
     ageRating: 'all-ages',
@@ -247,7 +248,8 @@ export const examplePublicFlashcardsManifest: AppManifest = AppManifestSchema.pa
   appId: 'flashcards.public',
   slug: 'flashcards',
   name: 'Flashcards Coach',
-  shortDescription: 'Study a live topic-based flashcard deck while keeping the current card and progress connected to chat.',
+  shortDescription:
+    'Study a live topic-based flashcard deck while keeping the current card and progress connected to chat.',
   appVersion: '1.0.0',
   distribution: 'public-external',
   authType: 'none',

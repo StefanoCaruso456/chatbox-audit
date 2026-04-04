@@ -3,6 +3,7 @@ import {
   type AppSessionAuthState,
   type ConversationAppContext,
   exampleAuthenticatedPlannerManifest,
+  exampleChessGetBoardStateToolSchema,
   exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
   examplePublicFlashcardsManifest,
@@ -11,6 +12,7 @@ import {
 } from '@shared/contracts/v1'
 import type { JsonObject } from '@shared/contracts/v1/shared'
 import { createMessage, type Message, type MessageEmbeddedAppPart } from '@shared/types'
+import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
 import {
   AvailableToolDiscoveryService,
@@ -18,7 +20,7 @@ import {
   ToolRoutingService,
 } from '../../../../backend/orchestration'
 import { type AppRegistryRecord, AppRegistryService, InMemoryAppRegistryRepository } from '../../../../backend/registry'
-import { selectConversationAppReference } from './conversation-state'
+import { type EmbeddedAppReference, selectConversationAppReference } from './conversation-state'
 
 type LocalAppCategory = 'games' | 'study' | 'productivity'
 
@@ -220,10 +222,240 @@ function extractPlannerFocus(userRequest: string): 'today' | 'week' | 'overdue' 
   return 'today'
 }
 
+function formatChessTurn(turn: 'w' | 'b') {
+  return turn === 'w' ? 'White' : 'Black'
+}
+
+function inferChessPhase(chess: Chess) {
+  const pieces = chess.board().flat().filter(Boolean).length
+  const fullMoveNumber = Number.parseInt(chess.fen().split(/\s+/u)[5] ?? '1', 10)
+
+  if (pieces <= 12) {
+    return 'Endgame'
+  }
+
+  if (fullMoveNumber <= 6) {
+    return 'Opening'
+  }
+
+  return 'Middlegame'
+}
+
+function buildChessCandidateMoves(chess: Chess) {
+  return chess
+    .moves({ verbose: true })
+    .map((move) => {
+      let score = 0
+
+      if (move.san.includes('#')) {
+        score += 100
+      } else if (move.san.includes('+')) {
+        score += 24
+      } else if (move.flags.includes('k') || move.flags.includes('q')) {
+        score += 16
+      } else if (move.flags.includes('c')) {
+        score += 14
+      } else if (move.piece === 'p' && ['d4', 'e4', 'd5', 'e5'].includes(move.to)) {
+        score += 10
+      } else if ((move.piece === 'n' || move.piece === 'b') && ['c3', 'f3', 'c6', 'f6'].includes(move.to)) {
+        score += 8
+      }
+
+      return {
+        san: move.san,
+        score,
+      }
+    })
+    .sort((left, right) => right.score - left.score || left.san.localeCompare(right.san))
+    .slice(0, 6)
+    .map((move) => move.san)
+}
+
+function describeChessStatus(chess: Chess) {
+  if (chess.isCheckmate()) {
+    return 'Checkmate'
+  }
+
+  if (chess.isStalemate()) {
+    return 'Stalemate'
+  }
+
+  if (chess.isDraw()) {
+    return 'Draw'
+  }
+
+  if (chess.inCheck()) {
+    return `${formatChessTurn(chess.turn())} is in check`
+  }
+
+  return 'Position is stable'
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isChessBoardReadIntent(userRequest: string) {
+  const normalized = normalizeComparable(userRequest)
+  const boardPhrases = [
+    'board',
+    'position',
+    'fen',
+    'state',
+    'legal move',
+    'legal moves',
+    'analy',
+    'best move',
+    'what should i do',
+    'whose turn',
+    'white to move',
+    'black to move',
+    'last move',
+    'recent move',
+    'see the board',
+    'current game',
+  ]
+
+  return boardPhrases.some((phrase) => normalized.includes(phrase))
+}
+
+function isChessMoveIntent(userRequest: string) {
+  const normalized = normalizeComparable(userRequest)
+
+  if (/[a-h][1-8]\s*(?:to|-)\s*[a-h][1-8]/iu.test(userRequest) || /\b[a-h][1-8][a-h][1-8]\b/iu.test(userRequest)) {
+    return true
+  }
+
+  const moveKeywords = ['move', 'castle', 'capture', 'take', 'advance', 'push', 'play']
+  const pieceKeywords = ['piece', 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king']
+
+  return (
+    moveKeywords.some((keyword) => normalized.includes(keyword)) &&
+    pieceKeywords.some((keyword) => normalized.includes(keyword))
+  )
+}
+
+function shouldUseChessBoardStateTool(userRequest: string) {
+  return isChessBoardReadIntent(userRequest) || isChessMoveIntent(userRequest)
+}
+
+type ChessBoardStateToolResult = {
+  appSessionId: string
+  fen: string
+  turn: 'white' | 'black'
+  moveCount: number
+  lastMove: string
+  legalMoveCount: number
+  legalMoves: string[]
+  candidateMoves: string[]
+  phase: string
+  status: string
+  summary: string
+  moveExecutionAvailable: boolean
+  mode?: string
+}
+
+function buildChessBoardStateResult(reference: EmbeddedAppReference): ChessBoardStateToolResult | null {
+  const stateDigest = reference.part.bridge?.completion?.result ?? reference.part.bridge?.bootstrap?.initialState
+  if (!isJsonObject(stateDigest)) {
+    return null
+  }
+
+  const fenValue =
+    typeof stateDigest.fen === 'string'
+      ? stateDigest.fen
+      : typeof stateDigest.boardState === 'string'
+        ? stateDigest.boardState
+        : null
+
+  if (!fenValue) {
+    return null
+  }
+
+  let chess: Chess
+  try {
+    chess = new Chess(fenValue)
+  } catch {
+    return null
+  }
+
+  const legalMoves = chess.moves()
+  const moveCount =
+    typeof stateDigest.moveCount === 'number' && Number.isFinite(stateDigest.moveCount) ? stateDigest.moveCount : 0
+
+  return {
+    appSessionId: reference.appSessionId,
+    fen: chess.fen(),
+    turn: chess.turn() === 'w' ? 'white' : 'black',
+    moveCount,
+    lastMove:
+      typeof stateDigest.lastMove === 'string' && stateDigest.lastMove.trim().length > 0
+        ? stateDigest.lastMove
+        : 'No moves yet',
+    legalMoveCount: legalMoves.length,
+    legalMoves: legalMoves.slice(0, 20),
+    candidateMoves: buildChessCandidateMoves(chess),
+    phase: inferChessPhase(chess),
+    status: describeChessStatus(chess),
+    summary:
+      typeof reference.part.summary === 'string' && reference.part.summary.trim().length > 0
+        ? reference.part.summary
+        : `Current board FEN: ${chess.fen()}. ${formatChessTurn(chess.turn())} to move.`,
+    moveExecutionAvailable: false,
+    ...(typeof stateDigest.mode === 'string' ? { mode: stateDigest.mode } : {}),
+  }
+}
+
+function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest: string) {
+  const candidateMoves =
+    result.candidateMoves.length > 0 ? ` Candidate moves: ${result.candidateMoves.join(', ')}.` : ''
+  const sharedSummary = `Current live Chess board: ${result.turn === 'white' ? 'White' : 'Black'} to move. ${result.status}. Last move: ${result.lastMove}. Legal moves: ${result.legalMoveCount}.${candidateMoves}`
+
+  if (isChessMoveIntent(userRequest)) {
+    return `I can read the live Chess board now, but direct move execution from chat is not wired yet. ${sharedSummary}`
+  }
+
+  return sharedSummary
+}
+
+function buildChessBoardStateMessage(reference: EmbeddedAppReference, userRequest: string): Message | null {
+  const result = buildChessBoardStateResult(reference)
+  if (!result) {
+    return null
+  }
+
+  const message = createMessage('assistant')
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: `tool-call.chess.get-board-state.${uuidv4()}`,
+      toolName: exampleChessGetBoardStateToolSchema.name,
+      args: {
+        scope: 'current-position',
+      },
+      result,
+    },
+    {
+      type: 'text',
+      text: buildChessBoardStateText(result, userRequest),
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
 function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
   if (tool.name === 'chess.launch-game') {
     return {
       mode: normalizeComparable(userRequest).includes('analysis') ? 'analysis' : 'practice',
+    }
+  }
+
+  if (tool.name === exampleChessGetBoardStateToolSchema.name) {
+    return {
+      scope: 'current-position',
     }
   }
 
@@ -631,12 +863,62 @@ export async function routeTutorMeAiAppRequest(
 
   const platform = await getLocalAppPlatform(input.origin)
   const generatedAt = new Date().toISOString()
+  const normalizedRequest = normalizeComparable(input.userRequest)
   const activeAppContext = deriveConversationAppContext(
     input.conversationId,
     input.previousMessages,
     generatedAt,
     input.userRequest
   )
+  const selectedReference = selectConversationAppReference(input.previousMessages, input.userRequest)
+
+  if (
+    selectedReference?.appId === exampleInternalChessManifest.appId &&
+    shouldUseChessBoardStateTool(input.userRequest)
+  ) {
+    const boardStateMessage = buildChessBoardStateMessage(selectedReference, input.userRequest)
+    if (boardStateMessage) {
+      return {
+        kind: 'invoke-tool',
+        message: boardStateMessage,
+      }
+    }
+
+    return {
+      kind: 'clarify',
+      message: buildClarificationMessage(
+        "Chess Tutor is open, but I can't read the live board state yet. Reload the sidebar board and try again."
+      ),
+    }
+  }
+
+  const isExplicitChessLaunchRequest =
+    hasLaunchIntent(input.userRequest) &&
+    !shouldUseChessBoardStateTool(input.userRequest) &&
+    (normalizedRequest.includes(normalizeComparable(exampleInternalChessManifest.name)) ||
+      normalizedRequest.includes(normalizeComparable(exampleInternalChessManifest.slug)))
+
+  if (isExplicitChessLaunchRequest) {
+    const chessApp = platform.appsById.get(exampleInternalChessManifest.appId)
+    const chessTool = chessApp?.currentVersion.manifest.toolDefinitions.find(
+      (tool) => tool.name === 'chess.launch-game'
+    )
+
+    if (chessApp && chessTool) {
+      return {
+        kind: 'invoke-tool',
+        message: buildLaunchMessage({
+          app: chessApp,
+          conversationId: input.conversationId,
+          userRequest: input.userRequest,
+          tool: chessTool,
+          toolArguments: buildToolArguments(chessTool, input.userRequest),
+          authState: 'connected',
+        }),
+      }
+    }
+  }
+
   const appOAuthStates = deriveAppOAuthStates(input.previousMessages)
 
   const discoveryResult = await platform.discovery.discoverAvailableTools({

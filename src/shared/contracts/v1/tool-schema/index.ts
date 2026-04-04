@@ -150,6 +150,73 @@ export const exampleChessLaunchToolSchema: ToolSchema = ToolSchemaSchema.parse({
   requiredPermissions: ['session:write', 'tool:invoke'],
 })
 
+export const exampleChessGetBoardStateToolSchema: ToolSchema = ToolSchemaSchema.parse({
+  name: 'chess.get-board-state',
+  displayName: 'Get Chess Board State',
+  description:
+    'Read the current live chess board state, including FEN, turn, last move, and legal move options from the active sidebar session.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      scope: {
+        type: 'string',
+        enum: ['current-position'],
+      },
+    },
+    required: ['scope'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      appSessionId: { type: 'string' },
+      fen: { type: 'string' },
+      turn: {
+        type: 'string',
+        enum: ['white', 'black'],
+      },
+      moveCount: { type: 'integer' },
+      lastMove: { type: 'string' },
+      legalMoveCount: { type: 'integer' },
+      legalMoves: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+      },
+      candidateMoves: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+      },
+      phase: { type: 'string' },
+      status: { type: 'string' },
+      summary: { type: 'string' },
+      moveExecutionAvailable: { type: 'boolean' },
+      mode: { type: 'string', nullable: true },
+    },
+    required: [
+      'appSessionId',
+      'fen',
+      'turn',
+      'moveCount',
+      'lastMove',
+      'legalMoveCount',
+      'legalMoves',
+      'candidateMoves',
+      'phase',
+      'status',
+      'summary',
+      'moveExecutionAvailable',
+    ],
+  },
+  authRequirement: 'platform-session',
+  timeoutMs: 10_000,
+  idempotent: true,
+  invocationMode: 'embedded-bridge',
+  requiredPermissions: ['session:read', 'tool:invoke'],
+})
+
 export const exampleFlashcardsStartToolSchema: ToolSchema = ToolSchemaSchema.parse({
   name: 'flashcards.start-session',
   displayName: 'Start Flashcard Session',
@@ -202,6 +269,7 @@ export const examplePlannerDashboardToolSchema: ToolSchema = ToolSchemaSchema.pa
 
 export const exampleToolSchemas = [
   exampleChessLaunchToolSchema,
+  exampleChessGetBoardStateToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
 ]
