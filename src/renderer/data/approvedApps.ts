@@ -668,7 +668,7 @@ const tutorMeAiApps: ApprovedApp[] = [
     name: 'Flashcards Coach',
     icon: '/icons/apps/flashcards-coach.png',
     shortSummary:
-      'A TutorMeAI flashcards session that keeps study topics, progress, and completion summaries connected to the conversation.',
+      'A TutorMeAI flashcards study surface that keeps the current card, progress, and session context connected to the conversation.',
     category: 'Study, Assessment & Engagement',
     gradeRanges: ['3-5', '6-8', '9-12'],
     launchUrl: '/embedded-apps/flashcards',

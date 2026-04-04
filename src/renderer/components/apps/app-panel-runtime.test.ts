@@ -37,6 +37,11 @@ describe('app panel runtime helpers', () => {
       appSessionId: 'app-session.sidebar.flashcards-coach',
       bootstrap: {
         authState: 'not-required',
+        initialState: {
+          toolArguments: {
+            topic: 'fractions',
+          },
+        },
       },
       pendingInvocation: {
         toolName: 'flashcards.start-session',

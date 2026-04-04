@@ -566,6 +566,7 @@ function buildEmbeddedAppMessagePart(input: {
         initialState: {
           requestedByUser: input.userRequest,
           toolName: input.tool.name,
+          toolArguments: input.toolArguments,
         },
         availableTools: manifest.toolDefinitions,
       },

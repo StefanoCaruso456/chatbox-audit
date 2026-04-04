@@ -10,11 +10,11 @@ import { FlashcardsAppPage } from './FlashcardsAppPage'
 
 const sendCompletion = vi.fn()
 const sendState = vi.fn()
-const runtimeContext = {
+const defaultRuntimeContext = {
   conversationId: 'conversation.sidebar.flashcards',
   appSessionId: 'app-session.sidebar.flashcards',
 }
-const invocationMessage = {
+const defaultInvocationMessage = {
   payload: {
     toolName: 'flashcards.start-session',
     toolCallId: 'tool-call.sidebar.flashcards',
@@ -23,11 +23,18 @@ const invocationMessage = {
     },
   },
 }
+const bridgeState: {
+  runtimeContext: Record<string, unknown> | null
+  invocationMessage: typeof defaultInvocationMessage | null
+} = {
+  runtimeContext: defaultRuntimeContext,
+  invocationMessage: defaultInvocationMessage,
+}
 
 vi.mock('../useEmbeddedAppBridge', () => ({
   useEmbeddedAppBridge: () => ({
-    runtimeContext,
-    invocationMessage,
+    runtimeContext: bridgeState.runtimeContext,
+    invocationMessage: bridgeState.invocationMessage,
     sendCompletion,
     sendState,
   }),
@@ -41,6 +48,8 @@ describe('FlashcardsAppPage', () => {
   beforeEach(() => {
     sendCompletion.mockReset()
     sendState.mockReset()
+    bridgeState.runtimeContext = defaultRuntimeContext
+    bridgeState.invocationMessage = defaultInvocationMessage
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -63,16 +72,111 @@ describe('FlashcardsAppPage', () => {
     expect(screen.getByText('Flashcards Coach')).toBeTruthy()
     expect(screen.getByText('Current deck')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reveal answer' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Finish session' })).toBeTruthy()
   })
 
-  it('reveals answers and can send the study summary back to chat', () => {
+  it('rebuilds the deck from bootstrap tool arguments when invoke is missing', () => {
+    bridgeState.runtimeContext = {
+      ...defaultRuntimeContext,
+      initialState: {
+        toolArguments: {
+          topic: 'fractions',
+        },
+      },
+    }
+    bridgeState.invocationMessage = null
+
+    renderFlashcards(<FlashcardsAppPage />)
+
+    expect(screen.queryByText('Waiting for the host to send a study topic.')).toBeNull()
+    expect(screen.getByText('Current deck')).toBeTruthy()
+    expect(screen.getByText('fractions')).toBeTruthy()
+    expect(screen.getByText('What is the clearest definition of fractions?')).toBeTruthy()
+    expect(sendState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'active',
+        state: expect.objectContaining({
+          topic: 'fractions',
+          currentCard: 1,
+          currentPrompt: 'What is the clearest definition of fractions?',
+          currentAnswer:
+            'fractions is the core idea the student should be able to explain in one or two clear sentences.',
+          answerRevealed: false,
+          reviewedCount: 0,
+        }),
+      })
+    )
+  })
+
+  it('rebuilds the deck from bootstrap state when invoke is missing', () => {
+    bridgeState.runtimeContext = {
+      ...defaultRuntimeContext,
+      initialState: {
+        topic: 'fractions',
+        currentCard: 2,
+        reviewedCardIds: ['fractions-1'],
+      },
+    }
+    bridgeState.invocationMessage = null
+
+    renderFlashcards(<FlashcardsAppPage />)
+
+    expect(screen.queryByText('Waiting for the host to send a study topic.')).toBeNull()
+    expect(screen.getByText('Current deck')).toBeTruthy()
+    expect(screen.getByText('fractions')).toBeTruthy()
+    expect(screen.getByText('Reviewed 1 of 5 cards')).toBeTruthy()
+    expect(screen.getByText('Give one classroom-ready example of fractions.')).toBeTruthy()
+    expect(sendState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'active',
+        state: expect.objectContaining({
+          topic: 'fractions',
+          currentCard: 2,
+          reviewedCardIds: ['fractions-1'],
+          reviewedCount: 1,
+        }),
+      })
+    )
+  })
+
+  it('keeps the live card state synced when the user navigates through the deck', () => {
+    renderFlashcards(<FlashcardsAppPage />)
+
+    sendState.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Next card' }))
+
+    expect(screen.getByText('Give one classroom-ready example of fractions.')).toBeTruthy()
+    expect(sendState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'active',
+        state: expect.objectContaining({
+          currentCard: 2,
+          currentPrompt: 'Give one classroom-ready example of fractions.',
+          answerRevealed: false,
+          canMovePrevious: true,
+          canMoveNext: true,
+        }),
+      })
+    )
+  })
+
+  it('reveals answers and finishes the study session with a completion summary', () => {
     renderFlashcards(<FlashcardsAppPage />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }))
-    expect(screen.getByText('Reviewed')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Hide answer' })).toBeTruthy()
     expect(screen.getByText(/fractions is the core idea/i)).toBeTruthy()
+    expect(sendState).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        state: expect.objectContaining({
+          answerRevealed: true,
+          reviewedCardIds: ['fractions-1'],
+          reviewedCount: 1,
+        }),
+      })
+    )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send study summary to chat' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Finish session' }))
     expect(sendCompletion).toHaveBeenCalledTimes(1)
   })
 })
