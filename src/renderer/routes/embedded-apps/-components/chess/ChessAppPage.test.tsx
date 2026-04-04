@@ -151,6 +151,47 @@ describe('ChessAppPage', () => {
     expect(screen.getByText('Played d4. Black to move.')).toBeTruthy()
   })
 
+  it('waits for runtime bootstrap before marking a chess.make-move invocation as handled', async () => {
+    runtimeContext = null
+    invocationMessage = {
+      payload: {
+        toolName: 'chess.make-move',
+        toolCallId: 'tool-call.sidebar.chess.wait-for-bootstrap',
+        arguments: {
+          move: 'd4',
+          expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        },
+      },
+    }
+
+    const view = renderChess(<ChessAppPage />)
+
+    expect(sendCompletion).not.toHaveBeenCalled()
+    expect(screen.getByText('The chess runtime is not connected yet.')).toBeTruthy()
+
+    runtimeContext = {
+      conversationId: 'conversation.sidebar.chess',
+      appSessionId: 'app-session.sidebar.chess',
+    }
+
+    view.rerender(
+      <MantineProvider>
+        <ChessAppPage />
+      </MantineProvider>
+    )
+
+    await waitFor(() =>
+      expect(sendCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolCallId: 'tool-call.sidebar.chess.wait-for-bootstrap',
+          status: 'succeeded',
+        })
+      )
+    )
+
+    expect(screen.getByText('Played d4. Black to move.')).toBeTruthy()
+  })
+
   it('publishes the visible board state to the sidebar parent even without runtime bootstrap', async () => {
     runtimeContext = null
     invocationMessage = null

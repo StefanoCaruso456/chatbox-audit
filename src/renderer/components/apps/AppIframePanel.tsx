@@ -23,7 +23,11 @@ import {
   resolveSidebarAppRuntimeCommand,
   subscribeSidebarAppRuntimeCommands,
 } from '@/stores/sidebarAppRuntimeCommandStore'
-import { clearSidebarAppRuntimeSnapshot, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
+import {
+  clearSidebarAppRuntimeSnapshot,
+  getSidebarAppRuntimeSnapshot,
+  upsertSidebarAppRuntimeSnapshot,
+} from '@/stores/sidebarAppRuntimeStore'
 import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
 import { isSidebarDirectIframeStateMessage } from './sidebarDirectIframeState'
@@ -54,6 +58,22 @@ function toJsonObject(value: unknown): JsonObject | undefined {
   }
 
   return undefined
+}
+
+function hasRenderableIframeContent(iframe: HTMLIFrameElement | null) {
+  try {
+    const frameHref = iframe?.contentWindow?.location?.href
+    const frameDocument = iframe?.contentDocument
+    const bodyText = frameDocument?.body?.textContent?.trim() ?? ''
+
+    if (!frameHref || frameHref === 'about:blank') {
+      return false
+    }
+
+    return Boolean(frameDocument?.body?.children.length || bodyText.length > 0)
+  } catch {
+    return Boolean(iframe?.contentWindow)
+  }
 }
 
 function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>['t']) {
@@ -207,8 +227,10 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const runtimeBootstrapKeyRef = useRef<string | null>(null)
   const runtimeInvocationKeyRef = useRef<string | null>(null)
   const runtimeReplayTimersRef = useRef<number[]>([])
+  const directCommandReplayTimersRef = useRef<number[]>([])
   const hasRuntimeResponseRef = useRef(false)
   const lastSidebarCommandToolCallIdRef = useRef<string | null>(null)
+  const activeSidebarCommandRef = useRef<{ toolCallId: string; toolName: string } | null>(null)
   const [launchSessionKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
@@ -309,6 +331,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     runtimeReplayTimersRef.current = []
   }, [])
 
+  const clearDirectCommandReplayTimers = useCallback(() => {
+    directCommandReplayTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    directCommandReplayTimersRef.current = []
+  }, [])
+
   const startLoadingAttempt = useCallback(() => {
     clearLoadTimeout()
 
@@ -330,8 +357,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     return () => {
       clearLoadTimeout()
       clearRuntimeReplayTimers()
+      clearDirectCommandReplayTimers()
     }
-  }, [clearLoadTimeout, clearRuntimeReplayTimers, startLoadingAttempt])
+  }, [clearDirectCommandReplayTimers, clearLoadTimeout, clearRuntimeReplayTimers, startLoadingAttempt])
 
   useEffect(() => {
     void runtimeResetKey
@@ -340,8 +368,10 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     runtimeInvocationKeyRef.current = null
     hasRuntimeResponseRef.current = false
     lastSidebarCommandToolCallIdRef.current = null
+    activeSidebarCommandRef.current = null
     clearRuntimeReplayTimers()
-  }, [clearRuntimeReplayTimers, runtimeResetKey])
+    clearDirectCommandReplayTimers()
+  }, [clearDirectCommandReplayTimers, clearRuntimeReplayTimers, runtimeResetKey])
 
   useEffect(() => {
     if (app.experience !== 'tutormeai-runtime' || !currentSessionId || !embeddedRuntime) {
@@ -537,6 +567,63 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     )
   }, [clearRuntimeReplayTimers, embeddedRuntime, postDirectRuntimeHandshake, usesDirectRuntimeBridge])
 
+  const scheduleDirectRuntimeCommandReplay = useCallback(
+    (command: { toolCallId: string; toolName: string; arguments: JsonObject; timeoutMs?: number }) => {
+      clearDirectCommandReplayTimers()
+      if (!usesDirectRuntimeBridge || !embeddedRuntime || !currentSessionId) {
+        return
+      }
+
+      const replayDelays = [220, 850, 1_800]
+      directCommandReplayTimersRef.current = replayDelays.map((delayMs) =>
+        window.setTimeout(() => {
+          const queuedCommand = getSidebarAppRuntimeCommand(currentSessionId, runtimeAppId)
+          if (!queuedCommand || queuedCommand.toolCallId !== command.toolCallId) {
+            return
+          }
+
+          postDirectRuntimeHandshake(true)
+          postDirectRuntimeCommand(command)
+        }, delayMs)
+      )
+    },
+    [
+      clearDirectCommandReplayTimers,
+      currentSessionId,
+      embeddedRuntime,
+      postDirectRuntimeCommand,
+      postDirectRuntimeHandshake,
+      runtimeAppId,
+      usesDirectRuntimeBridge,
+    ]
+  )
+
+  const finalizeUnconfirmedSidebarCommand = useCallback(
+    (command: { toolCallId: string; toolName: string }) => {
+      clearDirectCommandReplayTimers()
+      activeSidebarCommandRef.current = null
+      lastSidebarCommandToolCallIdRef.current = null
+
+      const existingSnapshot =
+        currentSessionId && app.experience === 'tutormeai-runtime'
+          ? getSidebarAppRuntimeSnapshot(currentSessionId, runtimeAppId)
+          : null
+      const errorMessage =
+        command.toolName === 'chess.make-move'
+          ? 'Chess Tutor did not confirm the latest move before the timeout expired.'
+          : `${app.name} did not confirm ${command.toolName} before the timeout expired.`
+
+      syncSidebarRuntimeSnapshot({
+        status: 'failed',
+        summary: errorMessage,
+        latestStateDigest: existingSnapshot?.latestStateDigest ?? embeddedRuntime?.bootstrap?.initialState,
+        errorMessage,
+      })
+      setLoadState(hasRuntimeResponseRef.current || hasRenderableIframeContent(iframeRef.current) ? 'ready' : 'blocked')
+    },
+    [app.experience, app.name, clearDirectCommandReplayTimers, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot]
+  )
+
   useEffect(() => {
     if (!usesDirectRuntimeBridge || !embeddedRuntime) {
       return
@@ -624,6 +711,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
               : undefined,
         })
         if (message.payload.toolCallId) {
+          if (activeSidebarCommandRef.current?.toolCallId === message.payload.toolCallId) {
+            activeSidebarCommandRef.current = null
+            lastSidebarCommandToolCallIdRef.current = null
+            clearDirectCommandReplayTimers()
+          }
           resolveSidebarAppRuntimeCommand(message.payload.toolCallId, message.payload)
         }
         embeddedRuntime.onCompletion?.(message.payload)
@@ -641,6 +733,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         const erroredToolCallId =
           typeof message.payload.details?.toolCallId === 'string' ? message.payload.details.toolCallId : null
         if (erroredToolCallId) {
+          if (activeSidebarCommandRef.current?.toolCallId === erroredToolCallId) {
+            activeSidebarCommandRef.current = null
+            lastSidebarCommandToolCallIdRef.current = null
+            clearDirectCommandReplayTimers()
+          }
           rejectSidebarAppRuntimeCommand(erroredToolCallId, message.payload.message)
         }
         embeddedRuntime.onRuntimeError?.(message)
@@ -655,6 +752,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     app.id,
     app.runtimeBridge?.appId,
     clearLoadTimeout,
+    clearDirectCommandReplayTimers,
     clearRuntimeReplayTimers,
     embeddedRuntime,
     syncSidebarRuntimeSnapshot,
@@ -662,7 +760,14 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   ])
 
   useEffect(() => {
-    if (!usesDirectRuntimeBridge || !pendingSidebarRuntimeCommand || !currentSessionId) {
+    if (!usesDirectRuntimeBridge || !currentSessionId) {
+      return
+    }
+
+    if (!pendingSidebarRuntimeCommand) {
+      if (activeSidebarCommandRef.current) {
+        finalizeUnconfirmedSidebarCommand(activeSidebarCommandRef.current)
+      }
       return
     }
 
@@ -682,18 +787,33 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     })
 
     if (didPost) {
+      activeSidebarCommandRef.current = {
+        toolCallId: pendingSidebarRuntimeCommand.toolCallId,
+        toolName: pendingSidebarRuntimeCommand.toolName,
+      }
       lastSidebarCommandToolCallIdRef.current = pendingSidebarRuntimeCommand.toolCallId
+      scheduleDirectRuntimeCommandReplay({
+        toolCallId: pendingSidebarRuntimeCommand.toolCallId,
+        toolName: pendingSidebarRuntimeCommand.toolName,
+        arguments: pendingSidebarRuntimeCommand.arguments,
+        timeoutMs: pendingSidebarRuntimeCommand.timeoutMs,
+      })
       setLoadState('loading')
     }
   }, [
     currentSessionId,
+    finalizeUnconfirmedSidebarCommand,
     pendingSidebarRuntimeCommand,
     postDirectRuntimeCommand,
+    scheduleDirectRuntimeCommandReplay,
     sidebarCommandVersion,
     usesDirectRuntimeBridge,
   ])
 
   const handleReload = () => {
+    clearDirectCommandReplayTimers()
+    activeSidebarCommandRef.current = null
+    lastSidebarCommandToolCallIdRef.current = null
     setReloadNonce((value) => value + 1)
     startLoadingAttempt()
   }
@@ -707,26 +827,41 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       setLoadState('loading')
       postDirectRuntimeHandshake(false)
       scheduleRuntimeHandshakeReplay()
+
+      if (
+        pendingSidebarRuntimeCommand &&
+        pendingSidebarRuntimeCommand.hostSessionId === currentSessionId &&
+        lastSidebarCommandToolCallIdRef.current !== pendingSidebarRuntimeCommand.toolCallId
+      ) {
+        const didPost = postDirectRuntimeCommand({
+          toolCallId: pendingSidebarRuntimeCommand.toolCallId,
+          toolName: pendingSidebarRuntimeCommand.toolName,
+          arguments: pendingSidebarRuntimeCommand.arguments,
+          timeoutMs: pendingSidebarRuntimeCommand.timeoutMs,
+        })
+
+        if (didPost) {
+          activeSidebarCommandRef.current = {
+            toolCallId: pendingSidebarRuntimeCommand.toolCallId,
+            toolName: pendingSidebarRuntimeCommand.toolName,
+          }
+          lastSidebarCommandToolCallIdRef.current = pendingSidebarRuntimeCommand.toolCallId
+          scheduleDirectRuntimeCommandReplay({
+            toolCallId: pendingSidebarRuntimeCommand.toolCallId,
+            toolName: pendingSidebarRuntimeCommand.toolName,
+            arguments: pendingSidebarRuntimeCommand.arguments,
+            timeoutMs: pendingSidebarRuntimeCommand.timeoutMs,
+          })
+        }
+      }
       return
     }
 
     clearLoadTimeout()
 
-    try {
-      const frameHref = iframeRef.current?.contentWindow?.location?.href
-      const frameDocument = iframeRef.current?.contentDocument
-      const bodyText = frameDocument?.body?.textContent?.trim() ?? ''
-
-      if (
-        !frameHref ||
-        frameHref === 'about:blank' ||
-        (!frameDocument?.body?.children.length && bodyText.length === 0)
-      ) {
-        setLoadState('blocked')
-        return
-      }
-    } catch {
-      // Cross-origin vendor frames are expected. If we cannot inspect the frame, assume it loaded.
+    if (!hasRenderableIframeContent(iframeRef.current)) {
+      setLoadState('blocked')
+      return
     }
 
     setLoadState('ready')
