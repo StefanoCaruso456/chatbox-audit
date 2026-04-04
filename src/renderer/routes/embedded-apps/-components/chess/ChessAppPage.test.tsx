@@ -6,6 +6,7 @@ import { MantineProvider } from '@mantine/core'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetChessSessions } from '@/stores/chessSessionStore'
 import { ChessAppPage } from './ChessAppPage'
 
 const sendCompletion = vi.fn()
@@ -54,6 +55,7 @@ beforeAll(() => {
 
 describe('ChessAppPage', () => {
   beforeEach(() => {
+    resetChessSessions()
     runtimeContext = {
       conversationId: 'conversation.sidebar.chess',
       appSessionId: 'app-session.sidebar.chess',

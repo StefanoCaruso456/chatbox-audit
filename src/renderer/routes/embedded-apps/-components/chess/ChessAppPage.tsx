@@ -1,10 +1,17 @@
 import { Alert, Badge, Box, Group, Paper, Stack, Text, Title, UnstyledButton } from '@mantine/core'
 import type { CompletionSignal, RuntimeAppStatus } from '@shared/contracts/v1'
 import { Chess, type Square } from 'chess.js'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { postSidebarDirectIframeStateMessage } from '@/components/apps/sidebarDirectIframeState'
+import {
+  applyChessSessionMove,
+  getChessSessionSnapshot,
+  initializeChessSession,
+  resetChessSession,
+  subscribeChessSession,
+  type ChessMode,
+} from '@/stores/chessSessionStore'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
-import { applyRequestedChessMove } from './chessMove'
 
 type SelectionState = {
   from: Square | null
@@ -53,8 +60,9 @@ function buildCompletionSignal(input: {
   appSessionId: string
   toolCallId?: string
   chess: Chess
+  historySan?: string[]
 }): CompletionSignal {
-  const history = input.chess.history()
+  const history = input.historySan ?? input.chess.history()
   const ended = input.chess.isGameOver()
   const ending = input.chess.isCheckmate()
     ? 'checkmate'
@@ -105,10 +113,11 @@ function buildMoveCompletionSignal(input: {
   requestedMove: string
   chess: Chess
   appliedMoveSan: string
+  moveCount?: number
 }) {
   const candidateMoves = input.chess.moves().slice(0, 6)
   const turn = input.chess.turn() === 'w' ? 'white' : 'black'
-  const moveCount = input.chess.history().length
+  const moveCount = input.moveCount ?? input.chess.history().length
   const explanation =
     input.appliedMoveSan === 'd4' || input.appliedMoveSan === 'e4'
       ? 'It claims central space and opens lines for your pieces.'
@@ -157,6 +166,33 @@ function buildMoveCompletionSignal(input: {
   } satisfies CompletionSignal
 }
 
+function asChessMode(value: unknown): ChessMode | undefined {
+  return value === 'practice' || value === 'analysis' ? value : undefined
+}
+
+function useSharedChessSessionSnapshot(conversationId: string | null, appSessionId: string | null) {
+  return useSyncExternalStore(
+    useCallback(
+      (listener) => {
+        if (!conversationId || !appSessionId) {
+          return () => {}
+        }
+
+        return subscribeChessSession(conversationId, appSessionId, listener)
+      },
+      [appSessionId, conversationId]
+    ),
+    useCallback(() => {
+      if (!conversationId || !appSessionId) {
+        return null
+      }
+
+      return getChessSessionSnapshot(conversationId, appSessionId)
+    }, [appSessionId, conversationId]),
+    () => null
+  )
+}
+
 function getSquareColor(square: Square) {
   const file = square.charCodeAt(0) - 97
   const rank = Number(square[1]) - 1
@@ -199,80 +235,85 @@ const pieceGlyphs: Record<string, string> = {
 export function ChessAppPage() {
   const { runtimeContext, invocationMessage, sendCompletion, sendError, sendState } =
     useEmbeddedAppBridge('chess.internal')
-  const [chess, setChess] = useState(() => new Chess())
+  const [fallbackChess, setFallbackChess] = useState(() => new Chess())
   const [selection, setSelection] = useState<SelectionState>({ from: null })
   const [feedback, setFeedback] = useState<string | null>(null)
   const handledToolCallIdsRef = useRef<Set<string>>(new Set())
+  const sharedChessSnapshot = useSharedChessSessionSnapshot(
+    runtimeContext?.conversationId ?? null,
+    runtimeContext?.appSessionId ?? null
+  )
 
   useEffect(() => {
     if (!runtimeContext) {
       return
     }
 
-    const bootstrapChess = new Chess()
-    setFeedback(null)
-    sendState({
+    initializeChessSession({
+      conversationId: runtimeContext.conversationId,
+      appSessionId: runtimeContext.appSessionId,
+      fen: typeof runtimeContext.initialState?.fen === 'string' ? runtimeContext.initialState.fen : undefined,
+      moveCount:
+        typeof runtimeContext.initialState?.moveCount === 'number' ? runtimeContext.initialState.moveCount : undefined,
+      lastMove:
+        typeof runtimeContext.initialState?.lastMove === 'string' ? runtimeContext.initialState.lastMove : undefined,
+      mode: asChessMode(runtimeContext.initialState?.mode),
       status: 'waiting-user',
-      summary: formatSummary(bootstrapChess),
-      state: {
-        fen: bootstrapChess.fen(),
-        turn: bootstrapChess.turn(),
-        moveCount: bootstrapChess.history().length,
-      },
-      progress: {
-        label: 'Opening position',
-        percent: 0,
-      },
     })
-  }, [runtimeContext, sendState])
+    setFeedback(null)
+  }, [runtimeContext])
 
   const currentMode =
     invocationMessage?.payload.toolName === 'chess.launch-game' ? invocationMessage.payload.arguments.mode : undefined
+  const chess = useMemo(
+    () => new Chess(sharedChessSnapshot?.fen ?? fallbackChess.fen()),
+    [fallbackChess, sharedChessSnapshot?.fen]
+  )
+  const activeSidebarSnapshot = useMemo(() => {
+    if (sharedChessSnapshot) {
+      return {
+        status: sharedChessSnapshot.status,
+        summary: sharedChessSnapshot.summary,
+        state: {
+          fen: sharedChessSnapshot.fen,
+          turn: sharedChessSnapshot.turn,
+          moveCount: sharedChessSnapshot.moveCount,
+          ...(sharedChessSnapshot.lastMove !== 'No moves yet' ? { lastMove: sharedChessSnapshot.lastMove } : {}),
+          ...(sharedChessSnapshot.mode ? { mode: sharedChessSnapshot.mode } : {}),
+        },
+      }
+    }
+
+    return buildSidebarRuntimeSnapshot(chess, asChessMode(currentMode))
+  }, [chess, currentMode, sharedChessSnapshot])
 
   const publishSidebarSnapshot = useCallback(() => {
-    const snapshot = buildSidebarRuntimeSnapshot(chess, currentMode)
     postSidebarDirectIframeStateMessage({
       appId: 'chess.internal',
-      status: snapshot.status,
-      summary: snapshot.summary,
-      state: snapshot.state,
+      status: activeSidebarSnapshot.status,
+      summary: activeSidebarSnapshot.summary,
+      state: activeSidebarSnapshot.state,
     })
-  }, [chess, currentMode])
+  }, [activeSidebarSnapshot])
 
-  const commitMoveState = useCallback(
-    (nextChess: Chess, message: string, lastMove?: string, options?: { sendGameOverCompletion?: boolean }) => {
-      setChess(nextChess)
-      setSelection({ from: null })
-      setFeedback(message)
+  useEffect(() => {
+    if (!runtimeContext) {
+      return
+    }
 
-      sendState({
-        status: nextChess.isGameOver() ? 'completed' : 'active',
-        summary: formatSummary(nextChess),
-        state: {
-          fen: nextChess.fen(),
-          turn: nextChess.turn(),
-          moveCount: nextChess.history().length,
-          lastMove,
-        },
-        progress: {
-          label: `Move ${Math.max(1, nextChess.history().length)}`,
-          percent: Math.min(95, 5 + nextChess.history().length * 5),
-        },
-      })
-
-      if ((options?.sendGameOverCompletion ?? true) && nextChess.isGameOver() && runtimeContext) {
-        sendCompletion(
-          buildCompletionSignal({
-            conversationId: runtimeContext.conversationId,
-            appSessionId: runtimeContext.appSessionId,
-            toolCallId: invocationMessage?.payload.toolCallId,
-            chess: nextChess,
-          })
-        )
-      }
-    },
-    [invocationMessage?.payload.toolCallId, runtimeContext, sendCompletion, sendState]
-  )
+    sendState({
+      status: activeSidebarSnapshot.status,
+      summary: activeSidebarSnapshot.summary,
+      state: activeSidebarSnapshot.state,
+      progress: {
+        label: activeSidebarSnapshot.state.moveCount === 0 ? 'Opening position' : `Move ${activeSidebarSnapshot.state.moveCount}`,
+        percent:
+          activeSidebarSnapshot.state.moveCount === 0
+            ? 0
+            : Math.min(95, 5 + activeSidebarSnapshot.state.moveCount * 5),
+      },
+    })
+  }, [activeSidebarSnapshot, runtimeContext, sendState])
 
   useEffect(() => {
     if (!invocationMessage || invocationMessage.payload.toolName !== 'chess.launch-game') {
@@ -282,28 +323,21 @@ export function ChessAppPage() {
     if (handledToolCallIdsRef.current.has(invocationMessage.payload.toolCallId)) {
       return
     }
-    handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
 
-    const nextChess = new Chess()
-    setChess(nextChess)
+    if (!runtimeContext) {
+      return
+    }
+
+    handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
+    resetChessSession({
+      conversationId: runtimeContext.conversationId,
+      appSessionId: runtimeContext.appSessionId,
+      mode: asChessMode(invocationMessage.payload.arguments.mode),
+      status: 'active',
+    })
     setSelection({ from: null })
     setFeedback(null)
-
-    sendState({
-      status: 'active',
-      summary: formatSummary(nextChess),
-      state: {
-        fen: nextChess.fen(),
-        turn: nextChess.turn(),
-        moveCount: nextChess.history().length,
-        mode: invocationMessage.payload.arguments.mode,
-      },
-      progress: {
-        label: 'Move 1',
-        percent: 5,
-      },
-    })
-  }, [invocationMessage, sendState])
+  }, [invocationMessage, runtimeContext])
 
   useEffect(() => {
     if (!invocationMessage || invocationMessage.payload.toolName !== 'chess.make-move') {
@@ -356,12 +390,16 @@ export function ChessAppPage() {
       return
     }
 
-    const nextChess = new Chess(chess.fen())
-    const move = applyRequestedChessMove(nextChess, requestedMove)
-    if (!move) {
+    const moveResult = applyChessSessionMove({
+      conversationId: runtimeContext.conversationId,
+      appSessionId: runtimeContext.appSessionId,
+      requestedMove,
+      expectedFen,
+    })
+    if (!moveResult.ok) {
       sendError({
-        code: 'chess.illegal-move',
-        message: `"${requestedMove}" is not a legal move from the current position.`,
+        code: moveResult.code,
+        message: moveResult.message,
         recoverable: true,
         details: {
           toolCallId,
@@ -371,9 +409,9 @@ export function ChessAppPage() {
       return
     }
 
-    commitMoveState(nextChess, `Played ${move.san}. ${formatTurn(nextChess.turn())} to move.`, move.san, {
-      sendGameOverCompletion: false,
-    })
+    setSelection({ from: null })
+    setFeedback(`Played ${moveResult.appliedMoveSan}. ${formatTurn(moveResult.snapshot.turn)} to move.`)
+    const nextChess = new Chess(moveResult.snapshot.fen)
     sendCompletion(
       buildMoveCompletionSignal({
         conversationId: runtimeContext.conversationId,
@@ -381,10 +419,11 @@ export function ChessAppPage() {
         toolCallId,
         requestedMove,
         chess: nextChess,
-        appliedMoveSan: move.san,
+        appliedMoveSan: moveResult.appliedMoveSan,
+        moveCount: moveResult.snapshot.moveCount,
       })
     )
-  }, [chess, commitMoveState, invocationMessage, runtimeContext, sendCompletion])
+  }, [invocationMessage, runtimeContext, sendCompletion, sendError])
 
   useEffect(() => {
     publishSidebarSnapshot()
@@ -450,6 +489,41 @@ export function ChessAppPage() {
         return
       }
 
+      if (runtimeContext) {
+        const moveResult = applyChessSessionMove({
+          conversationId: runtimeContext.conversationId,
+          appSessionId: runtimeContext.appSessionId,
+          requestedMove: `${selection.from}${square}`,
+          expectedFen: chess.fen(),
+        })
+        if (!moveResult.ok) {
+          setFeedback(
+            moveResult.code === 'chess.illegal-move'
+              ? `That move from ${selection.from.toUpperCase()} to ${square.toUpperCase()} is not legal.`
+              : moveResult.message
+          )
+          setSelection({ from: null })
+          return
+        }
+
+        setSelection({ from: null })
+        setFeedback(`Played ${moveResult.appliedMoveSan}. ${formatTurn(moveResult.snapshot.turn)} to move.`)
+
+        const nextChess = new Chess(moveResult.snapshot.fen)
+        if (nextChess.isGameOver()) {
+          sendCompletion(
+            buildCompletionSignal({
+              conversationId: runtimeContext.conversationId,
+              appSessionId: runtimeContext.appSessionId,
+              toolCallId: invocationMessage?.payload.toolCallId,
+              chess: nextChess,
+              historySan: moveResult.historySan,
+            })
+          )
+        }
+        return
+      }
+
       const nextChess = new Chess(chess.fen())
       const move = nextChess.move({ from: selection.from, to: square, promotion: 'q' })
       if (!move) {
@@ -458,9 +532,11 @@ export function ChessAppPage() {
         return
       }
 
-      commitMoveState(nextChess, `Played ${move.san}. ${formatTurn(nextChess.turn())} to move.`, move.san)
+      setFallbackChess(nextChess)
+      setSelection({ from: null })
+      setFeedback(`Played ${move.san}. ${formatTurn(nextChess.turn())} to move.`)
     },
-    [chess, commitMoveState, selection.from]
+    [chess, invocationMessage?.payload.toolCallId, runtimeContext, selection.from, sendCompletion]
   )
 
   return (

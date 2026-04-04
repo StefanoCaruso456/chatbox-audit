@@ -5,6 +5,7 @@ import {
 } from '@shared/contracts/v1'
 import { createMessage } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { initializeChessSession, resetChessSessions } from '@/stores/chessSessionStore'
 import { resetSidebarAppRuntimeSnapshots, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { deriveConversationAppContext, routeTutorMeAiAppRequest } from './orchestrator'
 
@@ -18,6 +19,7 @@ vi.mock('@/stores/sidebarAppRuntimeCommandStore', () => ({
 
 describe('routeTutorMeAiAppRequest', () => {
   beforeEach(() => {
+    resetChessSessions()
     resetSidebarAppRuntimeSnapshots()
     mockEnqueueSidebarAppRuntimeCommand.mockReset()
     mockEnqueueSidebarAppRuntimeCommand.mockResolvedValue({
@@ -323,6 +325,95 @@ describe('routeTutorMeAiAppRequest', () => {
     })
     expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Move played: d4')
     expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the live Chess board from the shared chess session store before sidebar snapshots', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.shared.1',
+      appSessionId: 'app-session.shared.chess.1',
+      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      moveCount: 2,
+      lastMove: 'e5',
+      mode: 'practice',
+      status: 'active',
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.shared.1',
+      userId: 'user.shared.1',
+      userRequest: 'analyze the board',
+      requestMessageId: 'message.shared.1',
+      previousMessages: [createMessage('user', "let's play chess")],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      appSessionId: 'app-session.shared.chess.1',
+      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+      lastMove: 'e5',
+      moveExecutionAvailable: true,
+    })
+  })
+
+  it('moves the shared chess session from chat and makes the updated state available on the next turn', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.shared.2',
+      appSessionId: 'app-session.shared.chess.2',
+      status: 'active',
+      mode: 'practice',
+    })
+
+    const moveResult = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.shared.2',
+      userId: 'user.shared.2',
+      userRequest: 'play d4',
+      requestMessageId: 'message.shared.2.move',
+      previousMessages: [createMessage('user', "let's play chess")],
+    })
+
+    expect(moveResult.kind).toBe('invoke-tool')
+    if (moveResult.kind !== 'invoke-tool') {
+      return
+    }
+
+    const moveToolPart = moveResult.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(moveToolPart && moveToolPart.type === 'tool-call' ? moveToolPart.toolName : null).toBe('chess.make-move')
+    expect(moveToolPart && moveToolPart.type === 'tool-call' ? moveToolPart.result : null).toMatchObject({
+      requestedMove: 'd4',
+      appliedMove: 'd4',
+      turn: 'black',
+      moveCount: 1,
+    })
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+
+    const boardResult = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.shared.2',
+      userId: 'user.shared.2',
+      userRequest: 'analyze the board',
+      requestMessageId: 'message.shared.2.board',
+      previousMessages: [createMessage('user', "let's play chess")],
+    })
+
+    expect(boardResult.kind).toBe('invoke-tool')
+    if (boardResult.kind !== 'invoke-tool') {
+      return
+    }
+
+    const boardToolPart = boardResult.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(boardToolPart && boardToolPart.type === 'tool-call' ? boardToolPart.result : null).toMatchObject({
+      fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+      lastMove: 'd4',
+      moveCount: 1,
+    })
   })
 
   it('reads the live Chess board from the active sidebar runtime when the board was opened outside chat', async () => {
