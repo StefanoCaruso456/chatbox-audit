@@ -1,4 +1,5 @@
 import { ActionIcon, Box, Button, Drawer, Flex, Group, Loader, Stack, Text, Title } from '@mantine/core'
+import type { JsonObject } from '@shared/contracts/v1'
 import { IconLayoutGrid, IconReload, IconX } from '@tabler/icons-react'
 import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -16,8 +17,9 @@ import { probeForNewerBuild } from '@/lib/build-freshness'
 import { cn } from '@/lib/utils'
 import { currentSessionIdAtom } from '@/stores/atoms'
 import { useSession } from '@/stores/chatStore'
+import { clearSidebarAppRuntimeSnapshot, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { useUIStore } from '@/stores/uiStore'
-import { appIntegrationModeMeta, type ApprovedApp } from '@/types/apps'
+import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
 import AppIcon from './AppIcon'
 import { resolveAppPanelLaunchUrl, resolveApprovedAppPanelRuntime } from './app-panel-runtime'
 
@@ -38,6 +40,14 @@ function buildRuntimeMessageId(kind: string, appId: string, appSessionId: string
 }
 
 type AppLoadState = 'loading' | 'ready' | 'blocked'
+
+function toJsonObject(value: unknown): JsonObject | undefined {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as JsonObject
+  }
+
+  return undefined
+}
 
 function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>['t']) {
   if (app.integrationMode === 'browser-session') {
@@ -105,7 +115,9 @@ function AppPanelHeader({ app, onClose }: { app: ApprovedApp; onClose: () => voi
             {app.name}
           </Title>
           <Text size="xs" c="chatbox-secondary" className="truncate">
-            {app.experience === 'tutormeai-runtime' ? t('TutorMeAI runtime') : appIntegrationModeMeta[app.integrationMode].label}
+            {app.experience === 'tutormeai-runtime'
+              ? t('TutorMeAI runtime')
+              : appIntegrationModeMeta[app.integrationMode].label}
           </Text>
         </Stack>
       </Flex>
@@ -192,6 +204,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const [launchSessionKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
+  const runtimeAppId = app.runtimeBridge?.appId ?? app.id
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
   const directIframeLaunchArguments =
@@ -222,6 +235,38 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     app.experience === 'tutormeai-runtime' &&
     app.runtimeBridge?.sidebarMode === 'direct-iframe' &&
     Boolean(embeddedRuntime)
+  const runtimeResetKey = `${app.id}:${embeddedRuntime?.appSessionId ?? ''}:${embeddedRuntime?.conversationId ?? ''}:${embeddedRuntime?.restartNonce ?? ''}:${reloadNonce}`
+
+  const syncSidebarRuntimeSnapshot = useCallback(
+    (input: {
+      status: 'pending' | 'active' | 'waiting-auth' | 'waiting-user' | 'completed' | 'failed'
+      summary: string
+      latestStateDigest?: JsonObject
+      errorMessage?: string
+    }) => {
+      if (!currentSessionId || app.experience !== 'tutormeai-runtime' || !embeddedRuntime) {
+        return
+      }
+
+      upsertSidebarAppRuntimeSnapshot({
+        hostSessionId: currentSessionId,
+        approvedAppId: app.id,
+        runtimeAppId,
+        appSessionId: embeddedRuntime.appSessionId,
+        conversationId: embeddedRuntime.conversationId,
+        expectedOrigin: embeddedRuntime.expectedOrigin,
+        sourceUrl: resolvedLaunchUrl,
+        authState: embeddedRuntime.bootstrap?.authState ?? 'not-required',
+        availableToolNames: embeddedRuntime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
+        status: input.status,
+        summary: input.summary,
+        latestStateDigest: input.latestStateDigest,
+        updatedAt: new Date().toISOString(),
+        errorMessage: input.errorMessage,
+      })
+    },
+    [app.experience, app.id, currentSessionId, embeddedRuntime, resolvedLaunchUrl, runtimeAppId]
+  )
 
   useEffect(() => {
     if (app.experience !== 'tutormeai-runtime' || typeof window === 'undefined' || window.top !== window) {
@@ -231,7 +276,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     void probeForNewerBuild().catch(() => {
       // If the probe fails, keep the current shell and let the sidebar continue.
     })
-  }, [app.experience, app.id])
+  }, [app.experience])
 
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current !== null) {
@@ -270,19 +315,44 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }, [clearLoadTimeout, clearRuntimeReplayTimers, startLoadingAttempt])
 
   useEffect(() => {
+    void runtimeResetKey
     runtimeSequenceRef.current = 0
     runtimeBootstrapKeyRef.current = null
     runtimeInvocationKeyRef.current = null
     hasRuntimeResponseRef.current = false
     clearRuntimeReplayTimers()
-  }, [
-    app.id,
-    clearRuntimeReplayTimers,
-    embeddedRuntime?.appSessionId,
-    embeddedRuntime?.conversationId,
-    embeddedRuntime?.restartNonce,
-    reloadNonce,
-  ])
+  }, [clearRuntimeReplayTimers, runtimeResetKey])
+
+  useEffect(() => {
+    if (app.experience !== 'tutormeai-runtime' || !currentSessionId || !embeddedRuntime) {
+      return
+    }
+
+    syncSidebarRuntimeSnapshot({
+      status:
+        embeddedRuntime.completion?.status === 'failed' || embeddedRuntime.completion?.status === 'timed-out'
+          ? 'failed'
+          : embeddedRuntime.completion
+            ? 'completed'
+            : embeddedRuntime.bootstrap?.authState === 'required' || embeddedRuntime.bootstrap?.authState === 'expired'
+              ? 'waiting-auth'
+              : embeddedRuntime.pendingInvocation
+                ? 'pending'
+                : 'waiting-user',
+      summary:
+        embeddedRuntime.completion?.summary ??
+        (embeddedRuntime.pendingInvocation
+          ? `${app.name} is preparing ${embeddedRuntime.pendingInvocation.toolName}.`
+          : `${app.name} is open in the right sidebar.`),
+      latestStateDigest:
+        toJsonObject(embeddedRuntime.completion?.resultPayload) ?? embeddedRuntime.bootstrap?.initialState,
+      errorMessage: embeddedRuntime.completion?.errorMessage,
+    })
+
+    return () => {
+      clearSidebarAppRuntimeSnapshot(currentSessionId, runtimeAppId)
+    }
+  }, [app.experience, app.name, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot])
 
   const postDirectRuntimeHandshake = useCallback(
     (forceReplay = false) => {
@@ -448,6 +518,11 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
       if (message.type === 'app.state') {
         setLoadState(message.payload.status === 'failed' ? 'blocked' : 'ready')
+        syncSidebarRuntimeSnapshot({
+          status: message.payload.status,
+          summary: message.payload.summary,
+          latestStateDigest: message.payload.state,
+        })
         embeddedRuntime.onStateUpdate?.(message)
         return
       }
@@ -459,12 +534,28 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
       if (message.type === 'app.complete') {
         setLoadState('ready')
+        syncSidebarRuntimeSnapshot({
+          status:
+            message.payload.status === 'failed' || message.payload.status === 'timed-out' ? 'failed' : 'completed',
+          summary: message.payload.resultSummary,
+          latestStateDigest: toJsonObject(message.payload.result),
+          errorMessage:
+            message.payload.status === 'failed' || message.payload.status === 'timed-out'
+              ? message.payload.resultSummary
+              : undefined,
+        })
         embeddedRuntime.onCompletion?.(message.payload)
         return
       }
 
       if (message.type === 'app.error') {
         setLoadState('blocked')
+        syncSidebarRuntimeSnapshot({
+          status: 'failed',
+          summary: message.payload.message,
+          latestStateDigest: embeddedRuntime.bootstrap?.initialState,
+          errorMessage: message.payload.message,
+        })
         embeddedRuntime.onRuntimeError?.(message)
       }
     }
@@ -473,7 +564,15 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-  }, [app.id, app.runtimeBridge?.appId, clearLoadTimeout, clearRuntimeReplayTimers, embeddedRuntime, usesDirectRuntimeBridge])
+  }, [
+    app.id,
+    app.runtimeBridge?.appId,
+    clearLoadTimeout,
+    clearRuntimeReplayTimers,
+    embeddedRuntime,
+    syncSidebarRuntimeSnapshot,
+    usesDirectRuntimeBridge,
+  ])
 
   const handleReload = () => {
     setReloadNonce((value) => value + 1)

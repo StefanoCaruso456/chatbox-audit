@@ -14,6 +14,7 @@ import type { JsonObject } from '@shared/contracts/v1/shared'
 import { createMessage, type Message, type MessageEmbeddedAppPart } from '@shared/types'
 import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
+import { getSidebarAppRuntimeSnapshot, type SidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import {
   AvailableToolDiscoveryService,
   type ToolRouteDecision,
@@ -295,6 +296,10 @@ function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function toJsonObject(value: unknown): JsonObject | undefined {
+  return isJsonObject(value) ? value : undefined
+}
+
 function isChessBoardReadIntent(userRequest: string) {
   const normalized = normalizeComparable(userRequest)
   const boardPhrases = [
@@ -355,8 +360,14 @@ type ChessBoardStateToolResult = {
   mode?: string
 }
 
-function buildChessBoardStateResult(reference: EmbeddedAppReference): ChessBoardStateToolResult | null {
-  const stateDigest = reference.part.bridge?.completion?.result ?? reference.part.bridge?.bootstrap?.initialState
+type ChessBoardStateSource = {
+  appSessionId: string
+  summary?: string
+  latestStateDigest?: JsonObject
+}
+
+function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardStateToolResult | null {
+  const stateDigest = source.latestStateDigest
   if (!isJsonObject(stateDigest)) {
     return null
   }
@@ -384,7 +395,7 @@ function buildChessBoardStateResult(reference: EmbeddedAppReference): ChessBoard
     typeof stateDigest.moveCount === 'number' && Number.isFinite(stateDigest.moveCount) ? stateDigest.moveCount : 0
 
   return {
-    appSessionId: reference.appSessionId,
+    appSessionId: source.appSessionId,
     fen: chess.fen(),
     turn: chess.turn() === 'w' ? 'white' : 'black',
     moveCount,
@@ -398,8 +409,8 @@ function buildChessBoardStateResult(reference: EmbeddedAppReference): ChessBoard
     phase: inferChessPhase(chess),
     status: describeChessStatus(chess),
     summary:
-      typeof reference.part.summary === 'string' && reference.part.summary.trim().length > 0
-        ? reference.part.summary
+      typeof source.summary === 'string' && source.summary.trim().length > 0
+        ? source.summary
         : `Current board FEN: ${chess.fen()}. ${formatChessTurn(chess.turn())} to move.`,
     moveExecutionAvailable: false,
     ...(typeof stateDigest.mode === 'string' ? { mode: stateDigest.mode } : {}),
@@ -419,7 +430,47 @@ function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest
 }
 
 function buildChessBoardStateMessage(reference: EmbeddedAppReference, userRequest: string): Message | null {
-  const result = buildChessBoardStateResult(reference)
+  const result = buildChessBoardStateResult({
+    appSessionId: reference.appSessionId,
+    summary: reference.part.summary,
+    latestStateDigest:
+      toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
+  })
+  if (!result) {
+    return null
+  }
+
+  const message = createMessage('assistant')
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: `tool-call.chess.get-board-state.${uuidv4()}`,
+      toolName: exampleChessGetBoardStateToolSchema.name,
+      args: {
+        scope: 'current-position',
+      },
+      result,
+    },
+    {
+      type: 'text',
+      text: buildChessBoardStateText(result, userRequest),
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
+function buildChessBoardStateMessageFromSidebarSnapshot(
+  snapshot: SidebarAppRuntimeSnapshot,
+  userRequest: string
+): Message | null {
+  const result = buildChessBoardStateResult({
+    appSessionId: snapshot.appSessionId,
+    summary: snapshot.summary,
+    latestStateDigest: snapshot.latestStateDigest,
+  })
   if (!result) {
     return null
   }
@@ -871,12 +922,18 @@ export async function routeTutorMeAiAppRequest(
     input.userRequest
   )
   const selectedReference = selectConversationAppReference(input.previousMessages, input.userRequest)
+  const activeSidebarChessSnapshot = getSidebarAppRuntimeSnapshot(
+    input.conversationId,
+    exampleInternalChessManifest.appId
+  )
 
-  if (
-    selectedReference?.appId === exampleInternalChessManifest.appId &&
-    shouldUseChessBoardStateTool(input.userRequest)
-  ) {
-    const boardStateMessage = buildChessBoardStateMessage(selectedReference, input.userRequest)
+  if (shouldUseChessBoardStateTool(input.userRequest)) {
+    const boardStateMessage = activeSidebarChessSnapshot
+      ? buildChessBoardStateMessageFromSidebarSnapshot(activeSidebarChessSnapshot, input.userRequest)
+      : selectedReference?.appId === exampleInternalChessManifest.appId
+        ? buildChessBoardStateMessage(selectedReference, input.userRequest)
+        : null
+
     if (boardStateMessage) {
       return {
         kind: 'invoke-tool',
@@ -884,11 +941,13 @@ export async function routeTutorMeAiAppRequest(
       }
     }
 
-    return {
-      kind: 'clarify',
-      message: buildClarificationMessage(
-        "Chess Tutor is open, but I can't read the live board state yet. Reload the sidebar board and try again."
-      ),
+    if (activeSidebarChessSnapshot || selectedReference?.appId === exampleInternalChessManifest.appId) {
+      return {
+        kind: 'clarify',
+        message: buildClarificationMessage(
+          "Chess Tutor is open, but I can't read the live board state yet. Reload the sidebar board and try again."
+        ),
+      }
     }
   }
 
