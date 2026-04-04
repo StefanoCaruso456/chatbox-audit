@@ -1,5 +1,10 @@
 import type { EmbeddedAppHostRuntimeConfig } from '@/components/message-parts/embedded-app-host'
+import type { Session } from '@shared/types'
 import type { ApprovedApp } from '@/types/apps'
+import {
+  buildConversationEmbeddedAppRuntime,
+  selectLatestApprovedAppConversationPart,
+} from './app-panel-conversation-sync'
 
 type ResolveAppPanelLaunchUrlOptions = {
   cacheBustKey?: string
@@ -107,4 +112,33 @@ export function buildSidebarEmbeddedAppRuntime(
         }
       : undefined,
   }
+}
+
+export function resolveApprovedAppPanelRuntime(
+  app: ApprovedApp,
+  resolvedLaunchUrl: string,
+  restartNonce: number,
+  options?: {
+    sessionId?: string | null
+    session?: Session | null
+  }
+): EmbeddedAppHostRuntimeConfig | null {
+  if (!app.runtimeBridge) {
+    return null
+  }
+
+  const sessionId = options?.sessionId?.trim()
+  const session = options?.session
+
+  if (sessionId && session && app.experience === 'tutormeai-runtime') {
+    const ref = selectLatestApprovedAppConversationPart(session, app)
+    if (ref && ref.part.status !== 'error') {
+      const runtime = buildConversationEmbeddedAppRuntime(sessionId, ref, resolvedLaunchUrl)
+      if (runtime) {
+        return runtime
+      }
+    }
+  }
+
+  return buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, restartNonce)
 }

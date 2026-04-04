@@ -43,6 +43,12 @@ vi.mock('@/hooks/useScreenChange', () => ({
   useScreenDownToMD: () => false,
 }))
 
+vi.mock('@/stores/chatStore', () => ({
+  useSession: () => ({
+    session: null,
+  }),
+}))
+
 vi.mock('@/lib/build-freshness', () => ({
   probeForNewerBuild: () => mockProbeForNewerBuild(),
 }))
@@ -81,6 +87,39 @@ function attachCrossOriginIframeWindow(iframe: HTMLElement) {
     value: contentWindow,
     configurable: true,
   })
+}
+
+function attachSameOriginIframeWindow(
+  iframe: HTMLElement,
+  options?: {
+    postMessage?: ReturnType<typeof vi.fn>
+  }
+) {
+  const postMessage = options?.postMessage ?? vi.fn()
+  const contentWindow = {
+    postMessage,
+    location: {
+      href: 'http://localhost:3000/embedded-apps/chess?chatbridge_panel=1',
+    },
+  }
+
+  Object.defineProperty(iframe, 'contentWindow', {
+    value: contentWindow,
+    configurable: true,
+  })
+
+  Object.defineProperty(iframe, 'contentDocument', {
+    value: {
+      body: {
+        children: [document.createElement('div')],
+        childElementCount: 1,
+        textContent: 'Chess Tutor',
+      },
+    },
+    configurable: true,
+  })
+
+  return { postMessage }
 }
 
 beforeAll(() => {
@@ -179,6 +218,29 @@ describe('AppIframePanel', () => {
       /^http:\/\/localhost:3000\/embedded-apps\/chess\?chatbridge_panel=1&chatbridge_launch=.+$/
     )
     expect(screen.queryByTestId('embedded-app-host')).toBeNull()
+  })
+
+  it('sends the runtime bootstrap and invoke messages into the Chess sidebar iframe', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    expect(postMessage).toHaveBeenCalledTimes(2)
+    expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+      source: 'host',
+      type: 'host.bootstrap',
+      appId: 'chess.internal',
+    })
+    expect(postMessage.mock.calls[1]?.[0]).toMatchObject({
+      source: 'host',
+      type: 'host.invoke',
+      appId: 'chess.internal',
+    })
   })
 
   it('keeps Flashcards Coach on the embedded host runtime path', () => {
