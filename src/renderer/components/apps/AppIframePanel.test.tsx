@@ -21,17 +21,20 @@ vi.mock('@/components/message-parts/EmbeddedAppHost', () => ({
     description,
     subtitle,
     runtime,
+    src,
   }: {
     title: string
     description?: string
     subtitle?: string
     runtime?: object
+    src?: string
   }) => (
     <div
       data-testid="embedded-app-host"
       data-description={description}
       data-subtitle={subtitle}
       data-runtime={JSON.stringify(runtime)}
+      data-src={src}
     >
       {title}
     </div>
@@ -225,5 +228,54 @@ describe('AppIframePanel', () => {
     expect(host.getAttribute('data-subtitle')).toBe('app-session.chess.real')
     expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.real"')
     expect(host.getAttribute('data-runtime')).not.toContain('conversation.sidebar.chess-tutor')
+  })
+
+  it('keeps runtime apps on the current canonical launch url instead of a stale conversation iframe url', () => {
+    mockUseSession.mockReturnValue({
+      session: {
+        id: 'session.2',
+        messages: [
+          {
+            id: 'message.2',
+            timestamp: Date.parse('2026-04-03T21:33:21.000Z'),
+            role: 'assistant',
+            contentParts: [
+              {
+                type: 'embedded-app',
+                appId: 'chess.internal',
+                appName: 'Chess Tutor',
+                appSessionId: 'app-session.chess.stale',
+                sourceUrl: 'https://old-preview.example/embedded-apps/chess',
+                title: 'Chess Tutor',
+                summary: 'Current board FEN: stale-preview-board',
+                status: 'ready',
+                allowedOrigin: 'https://old-preview.example',
+                bridge: {
+                  expectedOrigin: 'https://old-preview.example',
+                  conversationId: 'conversation.stale',
+                  appSessionId: 'app-session.chess.stale',
+                  handshakeToken: 'runtime.stale',
+                  bootstrap: {
+                    launchReason: 'chat-tool',
+                    authState: 'connected',
+                    availableTools: [],
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const host = screen.getByTestId('embedded-app-host')
+    expect(host.getAttribute('data-src')).toMatch(
+      /^http:\/\/localhost:3000\/embedded-apps\/chess\?chatbridge_panel=1&chatbridge_launch=.+$/
+    )
+    expect(host.getAttribute('data-runtime')).toContain('"expectedOrigin":"http://localhost:3000"')
+    expect(host.getAttribute('data-runtime')).not.toContain('old-preview.example')
   })
 })
