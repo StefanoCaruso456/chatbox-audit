@@ -9,6 +9,7 @@ import { StrictMode, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import i18n from './i18n'
+import { installBuildFreshnessWatcher } from './lib/build-freshness'
 import { isEmbeddedAppPath } from './lib/root-layout-utils'
 import { getLogger } from './lib/utils'
 import platform from './platform'
@@ -152,6 +153,7 @@ const shouldFastBootEmbeddedApps =
   typeof window !== 'undefined' && isEmbeddedAppPath(window.location.pathname)
 
 let hasRenderedAppRoot = false
+let stopBuildFreshnessWatcher: (() => void) | null = null
 
 async function hydrateAppStores() {
   const [settings] = await Promise.all([initSettingsStore(), initLastUsedModelStore()])
@@ -179,6 +181,10 @@ async function renderAppRoot(options?: { deferStoreHydration?: boolean }) {
 
   finishSplashScreen()
   persistBrowserStorage()
+
+  if (!import.meta.env.DEV && stopBuildFreshnessWatcher === null) {
+    stopBuildFreshnessWatcher = installBuildFreshnessWatcher()
+  }
 
   if (options?.deferStoreHydration) {
     void hydrateAppStores().catch((e) => {
