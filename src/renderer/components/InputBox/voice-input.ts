@@ -35,13 +35,7 @@ export type VoiceInputWindow = Window &
   typeof globalThis & {
     SpeechRecognition?: SpeechRecognitionConstructor
     webkitSpeechRecognition?: SpeechRecognitionConstructor
-    electronAPI?: unknown
   }
-
-export type VoiceInputSupportReason =
-  | 'supported'
-  | 'browser-unsupported'
-  | 'desktop-runtime-unsupported'
 
 const VOICE_LANGUAGE_MAP: Record<string, string> = {
   ar: 'ar-SA',
@@ -65,25 +59,8 @@ export function getSpeechRecognitionConstructor(
   return win?.SpeechRecognition ?? win?.webkitSpeechRecognition ?? null
 }
 
-export function getVoiceInputSupportReason(
-  win?: VoiceInputWindow | null
-): VoiceInputSupportReason {
-  if (!win) {
-    return 'browser-unsupported'
-  }
-
-  // The current voice input path relies on the browser Web Speech service.
-  // In the Electron desktop app we do not ship a supported transcription backend,
-  // so keep the control honest until a real desktop implementation exists.
-  if (typeof win.electronAPI !== 'undefined') {
-    return 'desktop-runtime-unsupported'
-  }
-
-  return getSpeechRecognitionConstructor(win) ? 'supported' : 'browser-unsupported'
-}
-
 export function isVoiceInputSupported(win?: VoiceInputWindow | null): boolean {
-  return getVoiceInputSupportReason(win) === 'supported'
+  return !!getSpeechRecognitionConstructor(win)
 }
 
 export function appendVoiceTranscript(existing: string, transcript: string): string {

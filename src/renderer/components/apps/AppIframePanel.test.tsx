@@ -303,6 +303,22 @@ describe('AppIframePanel', () => {
     })
   })
 
+  it('seeds the Chess sidebar snapshot with the starting FEN before iframe messages arrive', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    expect(getSidebarAppRuntimeSnapshot('session.test', 'chess.internal')).toMatchObject({
+      approvedAppId: 'chess-tutor',
+      status: 'pending',
+      latestStateDigest: expect.objectContaining({
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      }),
+    })
+  })
+
   it('accepts same-origin sidebar-state messages even when the embedded runtime handshake has not completed yet', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 

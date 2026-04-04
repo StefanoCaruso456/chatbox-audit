@@ -9,6 +9,8 @@ type SelectionState = {
   from: Square | null
 }
 
+const CHESS_SYMBOL_FONT_STACK = '"Noto Sans Symbols 2", "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", serif'
+
 function formatTurn(turn: 'w' | 'b') {
   return turn === 'w' ? 'White' : 'Black'
 }
@@ -165,6 +167,16 @@ export function ChessAppPage() {
   const currentMode =
     invocationMessage?.payload.toolName === 'chess.launch-game' ? invocationMessage.payload.arguments.mode : undefined
 
+  const publishSidebarSnapshot = useCallback(() => {
+    const snapshot = buildSidebarRuntimeSnapshot(chess, currentMode)
+    postSidebarDirectIframeStateMessage({
+      appId: 'chess.internal',
+      status: snapshot.status,
+      summary: snapshot.summary,
+      state: snapshot.state,
+    })
+  }, [chess, currentMode])
+
   useEffect(() => {
     if (!invocationMessage || invocationMessage.payload.toolName !== 'chess.launch-game') {
       return
@@ -192,14 +204,13 @@ export function ChessAppPage() {
   }, [invocationMessage, sendState])
 
   useEffect(() => {
-    const snapshot = buildSidebarRuntimeSnapshot(chess, currentMode)
-    postSidebarDirectIframeStateMessage({
-      appId: 'chess.internal',
-      status: snapshot.status,
-      summary: snapshot.summary,
-      state: snapshot.state,
-    })
-  }, [chess, currentMode])
+    publishSidebarSnapshot()
+
+    const replayTimers = [120, 480, 1500].map((delayMs) => window.setTimeout(publishSidebarSnapshot, delayMs))
+    return () => {
+      replayTimers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [publishSidebarSnapshot])
 
   const pieces = useMemo(() => {
     const board = chess.board()
@@ -376,24 +387,26 @@ export function ChessAppPage() {
                     width: '100%',
                     aspectRatio: '1 / 1',
                     borderRadius: '12px',
-                    border: isSelected ? '2px solid rgba(59, 130, 246, 0.98)' : '1px solid rgba(15, 23, 42, 0.12)',
-                    background: isSelected ? '#93c5fd' : getSquareColor(square),
+                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.1)',
+                    background: isSelected ? '#bfdbfe' : getSquareColor(square),
                     boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
-                    color: piece?.color === 'w' ? '#ffffff' : '#111827',
+                    color: piece?.color === 'w' ? '#ffffff' : '#0f172a',
                     overflow: 'hidden',
                   }}
                 >
                   <Text
                     component="span"
                     style={{
-                      fontSize: 'clamp(1.15rem, 3vw, 1.9rem)',
+                      fontFamily: CHESS_SYMBOL_FONT_STACK,
+                      fontSize: 'clamp(1.3rem, 3vw, 2rem)',
+                      fontWeight: 700,
                       lineHeight: 1,
                       textShadow:
                         piece?.color === 'w'
-                          ? '0 1px 0 rgba(15,23,42,0.9), 0 0 8px rgba(15,23,42,0.2)'
-                          : '0 1px 0 rgba(248,250,252,0.25)',
+                          ? '0 1px 1px rgba(15,23,42,0.65), 0 0 3px rgba(15,23,42,0.45)'
+                          : '0 1px 0 rgba(248,250,252,0.2)',
                       WebkitTextStroke:
-                        piece?.color === 'w' ? '0.6px rgba(15,23,42,0.7)' : '0.4px rgba(255,255,255,0.22)',
+                        piece?.color === 'w' ? '1px rgba(15, 23, 42, 0.55)' : '0.4px rgba(248, 250, 252, 0.12)',
                     }}
                   >
                     {piece?.glyph ?? ''}

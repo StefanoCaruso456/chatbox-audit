@@ -107,7 +107,6 @@ import TokenCountMenu from './TokenCountMenu'
 import {
   appendVoiceTranscript,
   getSpeechRecognitionConstructor,
-  getVoiceInputSupportReason,
   isVoiceInputSupported,
   readSpeechRecognitionTranscript,
   resolveVoiceInputLanguage,
@@ -472,20 +471,10 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const voiceBaseTextRef = useRef('')
     const voiceFinalTranscriptRef = useRef('')
     const [isVoiceInputListening, setIsVoiceInputListening] = useState(false)
-    const voiceInputSupportReason = useMemo(
-      () => (typeof window !== 'undefined' ? getVoiceInputSupportReason(window as VoiceInputWindow) : 'browser-unsupported'),
-      []
-    )
     const voiceInputSupported = useMemo(
       () => (typeof window !== 'undefined' ? isVoiceInputSupported(window as VoiceInputWindow) : false),
       []
     )
-    const voiceInputUnsupportedLabel = useMemo(() => {
-      if (voiceInputSupportReason === 'desktop-runtime-unsupported') {
-        return t('Voice input is not available in the desktop app yet.')
-      }
-      return t('Voice input is not supported in this browser.')
-    }, [t, voiceInputSupportReason])
 
     useImperativeHandle(
       ref,
@@ -555,20 +544,10 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
         return
       }
 
-      if (!voiceInputSupported) {
-        if (voiceInputSupportReason === 'desktop-runtime-unsupported') {
-          console.warn(
-            '[voice-input] Desktop runtime detected. The current mic button depends on the browser Web Speech service, which is not a supported Electron desktop path.'
-          )
-        }
-        toastActions.add(voiceInputUnsupportedLabel)
-        return
-      }
-
       const recognitionConstructor =
         typeof window !== 'undefined' ? getSpeechRecognitionConstructor(window as VoiceInputWindow) : null
       if (!recognitionConstructor) {
-        toastActions.add(voiceInputUnsupportedLabel)
+        toastActions.add(t('Voice input is not supported in this browser.'))
         return
       }
 
@@ -612,18 +591,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
         setIsVoiceInputListening(false)
         voiceRecognitionRef.current = null
       }
-    }, [
-      getVoiceInputErrorMessage,
-      isVoiceInputListening,
-      language,
-      messageInput,
-      setMessageInput,
-      stopVoiceInput,
-      t,
-      voiceInputSupportReason,
-      voiceInputSupported,
-      voiceInputUnsupportedLabel,
-    ])
+    }, [getVoiceInputErrorMessage, isVoiceInputListening, language, messageInput, setMessageInput, stopVoiceInput, t])
 
     const { addInputBoxHistory, getPreviousHistoryInput, getNextHistoryInput, resetHistoryIndex } = useInputBoxHistory()
 
@@ -1312,7 +1280,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       ? isVoiceInputListening
                         ? t('Stop Voice Input')
                         : t('Voice Input')
-                      : voiceInputUnsupportedLabel
+                      : t('Voice input is not supported in this browser.')
                   }
                   position="top"
                   withArrow
@@ -1320,14 +1288,13 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                 >
                   <UnstyledButton
                     onClick={handleVoiceInputToggle}
+                    disabled={!voiceInputSupported}
                     className={cn(
-                      'flex items-center gap-1 px-2 py-1 rounded-lg transition-colors',
+                      'flex items-center gap-1 px-2 py-1 rounded-lg transition-colors disabled:opacity-50',
                       isVoiceInputListening
                         ? 'bg-[var(--chatbox-background-tertiary)]'
-                        : 'hover:bg-[var(--chatbox-background-tertiary)]',
-                      !voiceInputSupported && 'opacity-50'
+                        : 'hover:bg-[var(--chatbox-background-tertiary)]'
                     )}
-                    aria-disabled={!voiceInputSupported}
                   >
                     <IconMicrophone
                       size={toolbarIconSize}
