@@ -3,7 +3,7 @@
  */
 
 import { MantineProvider } from '@mantine/core'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChessAppPage } from './ChessAppPage'
@@ -124,6 +124,47 @@ describe('ChessAppPage', () => {
           payload.state?.turn === 'b'
       )
     ).toBe(true)
+  })
+
+  it('publishes the visible board state to the sidebar parent even without runtime bootstrap', async () => {
+    runtimeContext = null
+    invocationMessage = null
+
+    const originalParent = window.parent
+    const postMessage = vi.fn()
+    Object.defineProperty(window, 'parent', {
+      value: { postMessage },
+      configurable: true,
+    })
+
+    try {
+      renderChess(<ChessAppPage />)
+
+      await waitFor(() =>
+        expect(postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            source: 'chatbridge-sidebar-app',
+            type: 'sidebar-state',
+            appId: 'chess.internal',
+            payload: expect.objectContaining({
+              status: 'active',
+              summary: expect.stringContaining('Current board FEN'),
+              state: expect.objectContaining({
+                fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                turn: 'w',
+                moveCount: 0,
+              }),
+            }),
+          }),
+          window.location.origin
+        )
+      )
+    } finally {
+      Object.defineProperty(window, 'parent', {
+        value: originalParent,
+        configurable: true,
+      })
+    }
   })
 
   it('lets the user undo and reset the board from the move tools panel', () => {

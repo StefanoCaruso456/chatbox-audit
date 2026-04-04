@@ -303,6 +303,46 @@ describe('AppIframePanel', () => {
     })
   })
 
+  it('accepts same-origin sidebar-state messages even when the embedded runtime handshake has not completed yet', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    attachSameOriginIframeWindow(iframe)
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            source: 'chatbridge-sidebar-app',
+            type: 'sidebar-state',
+            appId: 'chess.internal',
+            payload: {
+              status: 'active',
+              summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+              state: {
+                fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+                turn: 'w',
+                moveCount: 0,
+              },
+            },
+          },
+        })
+      )
+    })
+
+    expect(getSidebarAppRuntimeSnapshot('session.test', 'chess.internal')).toMatchObject({
+      approvedAppId: 'chess-tutor',
+      status: 'active',
+      latestStateDigest: expect.objectContaining({
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      }),
+    })
+  })
+
   it('opens Flashcards Coach as a governed direct iframe in the sidebar', () => {
     uiStore.setState({ activeApprovedAppId: 'flashcards-coach' })
 
