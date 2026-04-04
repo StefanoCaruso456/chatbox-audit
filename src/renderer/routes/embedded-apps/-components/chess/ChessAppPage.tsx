@@ -100,7 +100,21 @@ function buildCompletionSignal(input: {
 function getSquareColor(square: Square) {
   const file = square.charCodeAt(0) - 97
   const rank = Number(square[1]) - 1
-  return (file + rank) % 2 === 0 ? '#f1f5f9' : '#cbd5e1'
+  return (file + rank) % 2 === 0 ? '#d9e2f1' : '#8091b3'
+}
+
+function getCoordinatePalette(isLightSquare: boolean) {
+  return isLightSquare
+    ? {
+        text: '#0f172a',
+        background: 'rgba(255,255,255,0.88)',
+        border: 'rgba(15,23,42,0.14)',
+      }
+    : {
+        text: '#f8fafc',
+        background: 'rgba(15,23,42,0.44)',
+        border: 'rgba(248,250,252,0.16)',
+      }
 }
 
 const boardSquares = (['8', '7', '6', '5', '4', '3', '2', '1'] as const).flatMap((rank) =>
@@ -353,10 +367,8 @@ export function ChessAppPage() {
             {boardSquares.map((square) => {
               const isSelected = selection.from === square
               const piece = pieces.get(square)
-              const isLightSquare = getSquareColor(square) === '#f1f5f9'
-              const squareBackground = isSelected ? '#bfdbfe' : isLightSquare ? '#f8fafc' : '#a8b4c9'
-              const coordinateBackground = isLightSquare ? 'rgba(15,23,42,0.14)' : 'rgba(15,23,42,0.68)'
-              const coordinateColor = isLightSquare ? '#0f172a' : '#f8fafc'
+              const isLightSquare = getSquareColor(square) === '#d9e2f1'
+              const coordinatePalette = getCoordinatePalette(isLightSquare)
 
               return (
                 <UnstyledButton
@@ -375,8 +387,8 @@ export function ChessAppPage() {
                     width: '100%',
                     aspectRatio: '1 / 1',
                     borderRadius: '12px',
-                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.08)',
-                    background: squareBackground,
+                    border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.1)',
+                    background: isSelected ? '#bfdbfe' : getSquareColor(square),
                     boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
                     color: piece?.color === 'w' ? '#ffffff' : '#0f172a',
                     overflow: 'hidden',
@@ -407,10 +419,12 @@ export function ChessAppPage() {
                       position: 'absolute',
                       right: 6,
                       bottom: 4,
+                      color: coordinatePalette.text,
+                      background: coordinatePalette.background,
+                      border: `1px solid ${coordinatePalette.border}`,
+                      borderRadius: 999,
                       padding: '1px 5px',
-                      borderRadius: '999px',
-                      background: coordinateBackground,
-                      color: coordinateColor,
+                      lineHeight: 1.1,
                       letterSpacing: '0.02em',
                     }}
                   >
