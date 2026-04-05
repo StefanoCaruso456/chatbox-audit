@@ -529,6 +529,7 @@ function buildChessStateDigestFromSharedSession(input: {
   turn: 'w' | 'b'
   moveCount: number
   lastMove: string
+  lastUpdateSource?: string
   mode?: string
 }): JsonObject {
   return {
@@ -536,6 +537,7 @@ function buildChessStateDigestFromSharedSession(input: {
     turn: input.turn,
     moveCount: input.moveCount,
     ...(input.lastMove !== 'No moves yet' ? { lastMove: input.lastMove } : {}),
+    ...(input.lastUpdateSource ? { lastUpdateSource: input.lastUpdateSource } : {}),
     ...(input.mode ? { mode: input.mode } : {}),
   }
 }
@@ -561,6 +563,7 @@ function buildChessBoardStateSourceFromSharedSession(input: {
       turn: sharedSnapshot.turn,
       moveCount: sharedSnapshot.moveCount,
       lastMove: sharedSnapshot.lastMove,
+      lastUpdateSource: sharedSnapshot.lastUpdateSource,
       mode: sharedSnapshot.mode,
     }),
     moveHistory: getChessSessionHistory(input.conversationId, sharedSnapshot.appSessionId),
@@ -1724,9 +1727,9 @@ function buildChessLaunchCopy(result: ChessBoardStateToolResult) {
   return `Chess Tutor is on the board. Ready to play some chess? I’d start with ${recommendedMove} because it ${reason}. Tap Play ${recommendedMove} and I’ll coach you move by move.`
 }
 
-export function buildChessApprovedAppKickoffToolCallId(eventId: string) {
-  const normalizedEventId = eventId.replace(/[^a-zA-Z0-9._-]+/g, '-')
-  return `tool-call.chess.get-board-state.kickoff.${normalizedEventId}`
+export function buildChessApprovedAppKickoffToolCallId(appSessionId: string) {
+  const normalizedAppSessionId = appSessionId.replace(/[^a-zA-Z0-9._-]+/g, '-')
+  return `tool-call.chess.get-board-state.kickoff.${normalizedAppSessionId}`
 }
 
 export function buildChessApprovedAppKickoffMessage(input: {
@@ -1751,7 +1754,7 @@ export function buildChessApprovedAppKickoffMessage(input: {
     {
       type: 'tool-call',
       state: 'result',
-      toolCallId: buildChessApprovedAppKickoffToolCallId(input.eventId),
+      toolCallId: buildChessApprovedAppKickoffToolCallId(input.appSessionId),
       toolName: exampleChessGetBoardStateToolSchema.name,
       args: {
         scope: 'current-position',
@@ -1761,6 +1764,62 @@ export function buildChessApprovedAppKickoffMessage(input: {
     {
       type: 'text',
       text: buildChessLaunchCopy(result),
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
+export function buildChessObservedBoardStateToolCallId(appSessionId: string, moveCount: number) {
+  const normalizedAppSessionId = appSessionId.replace(/[^a-zA-Z0-9._-]+/g, '-')
+  return `tool-call.chess.get-board-state.observe.${normalizedAppSessionId}.${moveCount}`
+}
+
+function buildChessObservedBoardCopy(result: ChessBoardStateToolResult) {
+  const recommendedMove = result.recommendedMove
+  const turn = result.turn === 'white' ? 'White' : 'Black'
+  const reason = recommendedMove && result.recommendationReason ? ` because it ${result.recommendationReason}` : ''
+
+  if (!recommendedMove) {
+    return `I saw ${result.lastMove} on the board. ${turn} to move now. Ask me for the best plan from here and I’ll coach the next idea.`
+  }
+
+  return `I saw ${result.lastMove} on the board. ${turn} to move now, and I’d recommend ${recommendedMove}${reason}. Tap Play ${recommendedMove} and I’ll keep coaching move by move.`
+}
+
+export function buildChessObservedBoardStateMessage(input: {
+  appSessionId: string
+  summary: string
+  latestStateDigest?: JsonObject
+  availableToolNames: string[]
+}): Message | null {
+  const result = buildChessBoardStateResult({
+    appSessionId: input.appSessionId,
+    summary: input.summary,
+    latestStateDigest: input.latestStateDigest,
+    availableToolNames: input.availableToolNames,
+  })
+  if (!result || result.moveCount === 0 || result.lastMove === 'No moves yet') {
+    return null
+  }
+
+  const text = buildChessObservedBoardCopy(result)
+  const message = createMessage('assistant', text)
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: buildChessObservedBoardStateToolCallId(input.appSessionId, result.moveCount),
+      toolName: exampleChessGetBoardStateToolSchema.name,
+      args: {
+        scope: 'current-position',
+      },
+      result,
+    },
+    {
+      type: 'text',
+      text,
     },
   ]
   message.generating = false

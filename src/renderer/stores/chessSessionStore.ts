@@ -3,6 +3,7 @@ import { Chess } from 'chess.js'
 import { applyRequestedChessMove } from '@/routes/embedded-apps/-components/chess/chessMove'
 
 export type ChessMode = 'practice' | 'analysis'
+export type ChessSessionUpdateSource = 'initialize' | 'launch' | 'tool-move' | 'manual-board-move'
 
 export interface ChessSessionSnapshot {
   conversationId: string
@@ -14,6 +15,7 @@ export interface ChessSessionSnapshot {
   status: RuntimeAppStatus
   summary: string
   updatedAt: string
+  lastUpdateSource: ChessSessionUpdateSource
   mode?: ChessMode
 }
 
@@ -26,6 +28,7 @@ type BuildChessSessionRecordInput = {
   conversationId: string
   appSessionId: string
   chess: Chess
+  updateSource: ChessSessionUpdateSource
   status?: RuntimeAppStatus
   mode?: ChessMode
   historySan?: string[]
@@ -96,6 +99,7 @@ function buildChessSessionRecord(input: BuildChessSessionRecordInput): ChessSess
       status: input.status ?? (input.chess.isGameOver() ? 'completed' : 'active'),
       summary: buildSummary(fen, turn, lastMove),
       updatedAt: input.updatedAt ?? new Date().toISOString(),
+      lastUpdateSource: input.updateSource,
       ...(input.mode ? { mode: input.mode } : {}),
     },
   }
@@ -157,6 +161,7 @@ export function initializeChessSession(input: {
       conversationId: input.conversationId,
       appSessionId: input.appSessionId,
       chess,
+      updateSource: 'initialize',
       moveCount: input.moveCount,
       lastMove: input.lastMove,
       mode: input.mode,
@@ -185,6 +190,7 @@ export function activateChessSession(input: {
       status: input.status ?? 'active',
       summary: buildSummary(existing.snapshot.fen, existing.snapshot.turn, existing.snapshot.lastMove),
       updatedAt: new Date().toISOString(),
+      lastUpdateSource: 'launch',
       ...(nextMode ? { mode: nextMode } : {}),
     },
   })
@@ -201,6 +207,7 @@ export function resetChessSession(input: {
       conversationId: input.conversationId,
       appSessionId: input.appSessionId,
       chess: new Chess(),
+      updateSource: 'launch',
       historySan: [],
       moveCount: 0,
       lastMove: 'No moves yet',
@@ -215,6 +222,7 @@ export function applyChessSessionMove(input: {
   appSessionId: string
   requestedMove: string
   expectedFen?: string
+  source?: Extract<ChessSessionUpdateSource, 'tool-move' | 'manual-board-move'>
 }): ChessSessionMoveResult {
   const key = buildSessionKey(input.conversationId, input.appSessionId)
   const existing = chessSessions.get(key)
@@ -252,6 +260,7 @@ export function applyChessSessionMove(input: {
       conversationId: existing.snapshot.conversationId,
       appSessionId: existing.snapshot.appSessionId,
       chess,
+      updateSource: input.source ?? 'manual-board-move',
       historySan,
       moveCount: existing.snapshot.moveCount + 1,
       lastMove: move.san,

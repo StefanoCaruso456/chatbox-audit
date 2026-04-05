@@ -410,6 +410,7 @@ export function ChessAppPage() {
       appSessionId: runtimeContext.appSessionId,
       requestedMove,
       expectedFen,
+      source: 'tool-move',
     })
     if (!moveResult.ok) {
       sendError({
@@ -510,6 +511,7 @@ export function ChessAppPage() {
           appSessionId: runtimeContext.appSessionId,
           requestedMove: `${selection.from}${square}`,
           expectedFen: chess.fen(),
+          source: 'manual-board-move',
         })
         if (!moveResult.ok) {
           setFeedback(
