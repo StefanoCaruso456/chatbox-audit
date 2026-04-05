@@ -98,6 +98,14 @@ function hasRenderableIframeContent(iframe: HTMLIFrameElement | null) {
   }
 }
 
+function resolveVisibleLoadState(iframe: HTMLIFrameElement | null, requestedState: 'ready' | 'blocked'): AppLoadState {
+  if (requestedState === 'blocked' && hasRenderableIframeContent(iframe)) {
+    return 'ready'
+  }
+
+  return requestedState
+}
+
 function getDefaultFallbackCopy(app: ApprovedApp, t: ReturnType<typeof useTranslation>['t']) {
   if (app.integrationMode === 'browser-session') {
     return {
@@ -473,7 +481,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
     setLoadState('loading')
     loadTimeoutRef.current = window.setTimeout(() => {
-      setLoadState((currentState) => (currentState === 'loading' ? 'blocked' : currentState))
+      setLoadState((currentState) =>
+        currentState === 'loading' ? resolveVisibleLoadState(iframeRef.current, 'blocked') : currentState
+      )
       loadTimeoutRef.current = null
     }, APP_LOAD_TIMEOUT_MS)
   }, [clearLoadTimeout, usesEmbeddedRuntime])
@@ -878,7 +888,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         }
 
         clearLoadTimeout()
-        setLoadState(event.data.payload.status === 'failed' ? 'blocked' : 'ready')
+        setLoadState(resolveVisibleLoadState(iframeRef.current, event.data.payload.status === 'failed' ? 'blocked' : 'ready'))
         syncSidebarRuntimeSnapshot({
           status: event.data.payload.status,
           summary: event.data.payload.summary,
@@ -913,7 +923,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       clearLoadTimeout()
 
       if (message.type === 'app.state') {
-        setLoadState(message.payload.status === 'failed' ? 'blocked' : 'ready')
+        setLoadState(resolveVisibleLoadState(iframeRef.current, message.payload.status === 'failed' ? 'blocked' : 'ready'))
         syncSidebarRuntimeSnapshot({
           status: message.payload.status,
           summary: message.payload.summary,
@@ -960,7 +970,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
             ? getSidebarAppRuntimeSnapshot(currentSessionId, runtimeAppId)
             : null
 
-        setLoadState(message.payload.recoverable ? 'ready' : 'blocked')
+        setLoadState(resolveVisibleLoadState(iframeRef.current, message.payload.recoverable ? 'ready' : 'blocked'))
         syncSidebarRuntimeSnapshot({
           status: message.payload.recoverable ? (existingSnapshot?.status ?? 'active') : 'failed',
           summary: message.payload.message,
