@@ -17,6 +17,7 @@ import { probeForNewerBuild } from '@/lib/build-freshness'
 import { cn } from '@/lib/utils'
 import { currentSessionIdAtom } from '@/stores/atoms'
 import { useSession } from '@/stores/chatStore'
+import { buildRuntimeTraceId, recordRuntimeTraceSpan } from '@/stores/runtimeTraceStore'
 import {
   getSidebarAppRuntimeCommand,
   rejectSidebarAppRuntimeCommand,
@@ -298,10 +299,18 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       summary: string
       latestStateDigest?: JsonObject
       errorMessage?: string
+      traceSource?: string
     }) => {
       if (!currentSessionId || app.experience !== 'tutormeai-runtime' || !embeddedRuntime) {
         return
       }
+
+      const traceId = buildRuntimeTraceId({
+        conversationId: currentSessionId,
+        appSessionId: embeddedRuntime.appSessionId,
+        runtimeAppId,
+      })
+      const traceStartedAt = new Date().toISOString()
 
       upsertSidebarAppRuntimeSnapshot({
         hostSessionId: currentSessionId,
@@ -318,6 +327,41 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         latestStateDigest: input.latestStateDigest,
         updatedAt: new Date().toISOString(),
         errorMessage: input.errorMessage,
+      })
+
+      recordRuntimeTraceSpan({
+        traceId,
+        parentSpanId: undefined,
+        name: `sync ${app.id} runtime snapshot`,
+        kind: 'runtime-snapshot',
+        status: input.errorMessage ? 'failed' : 'succeeded',
+        conversationId: currentSessionId,
+        sessionId: currentSessionId,
+        appSessionId: embeddedRuntime.appSessionId,
+        approvedAppId: app.id,
+        runtimeAppId,
+        actor: {
+          layer: 'host',
+          source: 'app-iframe-panel',
+        },
+        state: {
+          source: input.traceSource ?? 'runtime.snapshot-sync',
+          status: input.status,
+          summary: input.summary,
+          stateDigest: input.latestStateDigest,
+          fen: typeof input.latestStateDigest?.fen === 'string' ? input.latestStateDigest.fen : undefined,
+          moveCount:
+            typeof input.latestStateDigest?.moveCount === 'number' ? input.latestStateDigest.moveCount : undefined,
+          lastMove:
+            typeof input.latestStateDigest?.lastMove === 'string' ? input.latestStateDigest.lastMove : undefined,
+        },
+        error: input.errorMessage
+          ? {
+              message: input.errorMessage,
+            }
+          : undefined,
+        startedAt: traceStartedAt,
+        endedAt: new Date().toISOString(),
       })
 
       if (app.id !== 'chess-tutor') {
@@ -341,6 +385,37 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         latestStateDigest: input.latestStateDigest,
         availableToolNames: embeddedRuntime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
         observedAt: new Date().toISOString(),
+      })
+      recordRuntimeTraceSpan({
+        traceId,
+        name: `publish ${app.id} observed board-change event`,
+        kind: 'app-event',
+        status: 'succeeded',
+        conversationId: currentSessionId,
+        sessionId: currentSessionId,
+        appSessionId: embeddedRuntime.appSessionId,
+        approvedAppId: app.id,
+        runtimeAppId,
+        actor: {
+          layer: 'host',
+          source: 'app-iframe-panel',
+        },
+        state: {
+          source: 'approved-app.state-observed',
+          status: input.status,
+          summary: input.summary,
+          stateDigest: input.latestStateDigest,
+          fen: typeof input.latestStateDigest?.fen === 'string' ? input.latestStateDigest.fen : undefined,
+          moveCount:
+            typeof input.latestStateDigest?.moveCount === 'number' ? input.latestStateDigest.moveCount : undefined,
+          lastMove:
+            typeof input.latestStateDigest?.lastMove === 'string' ? input.latestStateDigest.lastMove : undefined,
+        },
+        metadata: {
+          eventId: `${currentSessionId}:${app.id}:${embeddedRuntime.appSessionId}:${observedStateKey}`,
+        },
+        startedAt: traceStartedAt,
+        endedAt: new Date().toISOString(),
       })
     },
     [app.experience, app.id, currentSessionId, embeddedRuntime, resolvedLaunchUrl, runtimeAppId]
@@ -442,6 +517,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       latestStateDigest:
         toJsonObject(embeddedRuntime.completion?.resultPayload) ?? embeddedRuntime.bootstrap?.initialState,
       errorMessage: embeddedRuntime.completion?.errorMessage,
+      traceSource: 'runtime.bootstrap.effect',
     })
   }, [app.experience, app.name, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot])
 
@@ -456,6 +532,8 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     }
 
     publishedOpenEventIdRef.current = eventId
+    const latestStateDigest =
+      toJsonObject(embeddedRuntime.completion?.resultPayload) ?? embeddedRuntime.bootstrap?.initialState
     publishApprovedAppOpenedEvent({
       eventId,
       sessionId: currentSessionId,
@@ -468,10 +546,54 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         (embeddedRuntime.pendingInvocation
           ? `${app.name} is preparing ${embeddedRuntime.pendingInvocation.toolName}.`
           : `${app.name} is open in the right sidebar.`),
-      latestStateDigest:
-        toJsonObject(embeddedRuntime.completion?.resultPayload) ?? embeddedRuntime.bootstrap?.initialState,
+      latestStateDigest,
       availableToolNames: embeddedRuntime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
       openedAt: new Date().toISOString(),
+    })
+    recordRuntimeTraceSpan({
+      traceId: buildRuntimeTraceId({
+        conversationId: currentSessionId,
+        appSessionId: embeddedRuntime.appSessionId,
+        runtimeAppId,
+      }),
+      name: `publish ${app.id} runtime opened event`,
+      kind: 'runtime-open',
+      status: 'succeeded',
+      conversationId: currentSessionId,
+      sessionId: currentSessionId,
+      appSessionId: embeddedRuntime.appSessionId,
+      approvedAppId: app.id,
+      runtimeAppId,
+      actor: {
+        layer: 'host',
+        source: 'app-iframe-panel',
+      },
+      state: {
+        source: 'approved-app.opened',
+        status:
+          embeddedRuntime.completion?.status === 'failed' || embeddedRuntime.completion?.status === 'timed-out'
+            ? 'failed'
+            : embeddedRuntime.completion
+              ? 'completed'
+              : embeddedRuntime.bootstrap?.authState === 'required' || embeddedRuntime.bootstrap?.authState === 'expired'
+                ? 'waiting-auth'
+                : embeddedRuntime.pendingInvocation
+                  ? 'pending'
+                  : 'waiting-user',
+        summary:
+          embeddedRuntime.completion?.summary ??
+          (embeddedRuntime.pendingInvocation
+            ? `${app.name} is preparing ${embeddedRuntime.pendingInvocation.toolName}.`
+            : `${app.name} is open in the right sidebar.`),
+        stateDigest: latestStateDigest,
+        fen: typeof latestStateDigest?.fen === 'string' ? latestStateDigest.fen : undefined,
+        moveCount: typeof latestStateDigest?.moveCount === 'number' ? latestStateDigest.moveCount : undefined,
+        lastMove: typeof latestStateDigest?.lastMove === 'string' ? latestStateDigest.lastMove : undefined,
+      },
+      metadata: {
+        eventId,
+        availableToolNames: embeddedRuntime.bootstrap?.availableTools?.map((tool) => tool.name).join(','),
+      },
     })
   }, [app.experience, app.id, app.name, currentSessionId, embeddedRuntime, launchSessionKey, reloadNonce, runtimeAppId])
 
@@ -699,6 +821,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         summary: errorMessage,
         latestStateDigest: existingSnapshot?.latestStateDigest ?? embeddedRuntime?.bootstrap?.initialState,
         errorMessage,
+        traceSource: 'runtime.command.timeout',
       })
       setLoadState(hasRuntimeResponseRef.current || hasRenderableIframeContent(iframeRef.current) ? 'ready' : 'blocked')
     },
@@ -735,6 +858,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           status: event.data.payload.status,
           summary: event.data.payload.summary,
           latestStateDigest: event.data.payload.state,
+          traceSource: 'runtime.direct-iframe-state',
         })
         return
       }
@@ -769,6 +893,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           status: message.payload.status,
           summary: message.payload.summary,
           latestStateDigest: message.payload.state,
+          traceSource: 'runtime.message.app.state',
         })
         embeddedRuntime.onStateUpdate?.(message)
         return
@@ -790,6 +915,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
             message.payload.status === 'failed' || message.payload.status === 'timed-out'
               ? message.payload.resultSummary
               : undefined,
+          traceSource: 'runtime.message.app.complete',
         })
         if (message.payload.toolCallId) {
           if (activeSidebarCommandRef.current?.toolCallId === message.payload.toolCallId) {
@@ -815,6 +941,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           summary: message.payload.message,
           latestStateDigest: existingSnapshot?.latestStateDigest ?? embeddedRuntime.bootstrap?.initialState,
           errorMessage: message.payload.message,
+          traceSource: message.payload.recoverable
+            ? 'runtime.message.app.error.recoverable'
+            : 'runtime.message.app.error',
         })
         const erroredToolCallId =
           typeof message.payload.details?.toolCallId === 'string' ? message.payload.details.toolCallId : null
