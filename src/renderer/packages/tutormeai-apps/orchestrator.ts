@@ -15,6 +15,10 @@ import type { JsonObject } from '@shared/contracts/v1/shared'
 import { createMessage, type Message, type MessageEmbeddedAppPart } from '@shared/types'
 import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
+import {
+  getChessSessionSnapshot,
+  getLatestChessSessionSnapshotForConversation,
+} from '@/stores/chessSessionStore'
 import { enqueueSidebarAppRuntimeCommand } from '@/stores/sidebarAppRuntimeCommandStore'
 import { getSidebarAppRuntimeSnapshot, type SidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
@@ -401,6 +405,72 @@ type ChessBoardStateSource = {
   availableToolNames?: string[]
 }
 
+function buildChessStateDigestFromSharedSession(input: {
+  fen: string
+  turn: 'w' | 'b'
+  moveCount: number
+  lastMove: string
+  mode?: string
+}): JsonObject {
+  return {
+    fen: input.fen,
+    turn: input.turn,
+    moveCount: input.moveCount,
+    ...(input.lastMove !== 'No moves yet' ? { lastMove: input.lastMove } : {}),
+    ...(input.mode ? { mode: input.mode } : {}),
+  }
+}
+
+function buildChessBoardStateSourceFromSharedSession(input: {
+  conversationId: string
+  appSessionId: string
+  availableToolNames?: string[]
+}): ChessBoardStateSource | null {
+  const sharedSnapshot =
+    getChessSessionSnapshot(input.conversationId, input.appSessionId) ??
+    getLatestChessSessionSnapshotForConversation(input.conversationId)
+
+  if (!sharedSnapshot) {
+    return null
+  }
+
+  return {
+    appSessionId: sharedSnapshot.appSessionId,
+    summary: sharedSnapshot.summary,
+    latestStateDigest: buildChessStateDigestFromSharedSession({
+      fen: sharedSnapshot.fen,
+      turn: sharedSnapshot.turn,
+      moveCount: sharedSnapshot.moveCount,
+      lastMove: sharedSnapshot.lastMove,
+      mode: sharedSnapshot.mode,
+    }),
+    availableToolNames: input.availableToolNames,
+  }
+}
+
+function buildLiveChessBoardStateResult(input: {
+  conversationId: string
+  appSessionId: string
+  summary?: string
+  latestStateDigest?: JsonObject
+  availableToolNames?: string[]
+}): ChessBoardStateToolResult | null {
+  const sharedSource = buildChessBoardStateSourceFromSharedSession({
+    conversationId: input.conversationId,
+    appSessionId: input.appSessionId,
+    availableToolNames: input.availableToolNames,
+  })
+
+  return buildChessBoardStateResult(
+    sharedSource ?? {
+      appSessionId: input.appSessionId,
+      summary: input.summary,
+      latestStateDigest: input.latestStateDigest,
+      availableToolNames: input.availableToolNames,
+    }
+  )
+}
+
 function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardStateToolResult | null {
   const stateDigest = source.latestStateDigest
   if (!isJsonObject(stateDigest)) {
@@ -511,6 +581,112 @@ function buildChessMoveResultText(result: ChessMoveToolResult) {
   return `${result.summary} ${result.explanation}${nextMoveHint}`
 }
 
+function selectRequestedChessMove(userRequest: string, boardState: ChessBoardStateToolResult) {
+  return extractRequestedChessMove(userRequest) ?? boardState.candidateMoves[0] ?? null
+}
+
+function validateRequestedChessMove(boardState: ChessBoardStateToolResult, requestedMove: string) {
+  const validationChess = new Chess(boardState.fen)
+  return applyRequestedChessMove(validationChess, requestedMove)
+}
+
+async function attemptSidebarChessMove(input: {
+  conversationId: string
+  appSessionId: string
+  boardState: ChessBoardStateToolResult
+  requestedMove: string
+}): Promise<
+  | {
+      ok: true
+      toolCallId: string
+      moveResult: ChessMoveToolResult
+    }
+  | {
+      ok: false
+      error: string
+    }
+> {
+  const toolCallId = `tool-call.chess.make-move.${uuidv4()}`
+  const commandResult = await enqueueSidebarAppRuntimeCommand({
+    hostSessionId: input.conversationId,
+    runtimeAppId: exampleInternalChessManifest.appId,
+    appSessionId: input.appSessionId,
+    toolCallId,
+    toolName: exampleChessMakeMoveToolSchema.name,
+    arguments: {
+      move: input.requestedMove,
+      expectedFen: input.boardState.fen,
+    },
+    timeoutMs: exampleChessMakeMoveToolSchema.timeoutMs,
+    createdAt: new Date().toISOString(),
+  })
+
+  if (!commandResult.ok) {
+    return {
+      ok: false,
+      error: commandResult.error,
+    }
+  }
+
+  if (commandResult.completion.status !== 'succeeded') {
+    return {
+      ok: false,
+      error: commandResult.completion.resultSummary,
+    }
+  }
+
+  const completionResult = toJsonObject(commandResult.completion.result)
+  if (!completionResult) {
+    return {
+      ok: false,
+      error: 'Chess Tutor responded, but the move result was not machine-readable.',
+    }
+  }
+
+  const moveResult = buildChessMoveToolResult(completionResult)
+  if (!moveResult) {
+    return {
+      ok: false,
+      error: 'Chess Tutor responded, but the move result was missing required board details.',
+    }
+  }
+
+  return {
+    ok: true,
+    toolCallId,
+    moveResult,
+  }
+}
+
+function buildChessMoveAssistantMessage(input: {
+  toolCallId: string
+  boardState: ChessBoardStateToolResult
+  requestedMove: string
+  moveResult: ChessMoveToolResult
+}) {
+  const message = createMessage('assistant')
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: input.toolCallId,
+      toolName: exampleChessMakeMoveToolSchema.name,
+      args: {
+        move: input.requestedMove,
+        expectedFen: input.boardState.fen,
+      },
+      result: input.moveResult,
+    },
+    {
+      type: 'text',
+      text: buildChessMoveResultText(input.moveResult),
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
 function buildChessMoveExplanation(moveSan: string) {
   if (moveSan.includes('#')) {
     return 'finishes the game'
@@ -541,13 +717,23 @@ function buildChessMoveExplanation(moveSan: string) {
 }
 
 function buildChessBoardStateMessage(reference: EmbeddedAppReference, userRequest: string): Message | null {
-  const result = buildChessBoardStateResult({
-    appSessionId: reference.appSessionId,
-    summary: reference.part.summary,
-    latestStateDigest:
-      toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
-    availableToolNames: reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
-  })
+  const conversationId = reference.part.bridge?.conversationId
+  const result = conversationId
+    ? buildLiveChessBoardStateResult({
+        conversationId,
+        appSessionId: reference.appSessionId,
+        summary: reference.part.summary,
+        latestStateDigest:
+          toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
+        availableToolNames: reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
+      })
+    : buildChessBoardStateResult({
+        appSessionId: reference.appSessionId,
+        summary: reference.part.summary,
+        latestStateDigest:
+          toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
+        availableToolNames: reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
+      })
   if (!result) {
     return null
   }
@@ -578,7 +764,8 @@ function buildChessBoardStateMessageFromSidebarSnapshot(
   snapshot: SidebarAppRuntimeSnapshot,
   userRequest: string
 ): Message | null {
-  const result = buildChessBoardStateResult({
+  const result = buildLiveChessBoardStateResult({
+    conversationId: snapshot.hostSessionId,
     appSessionId: snapshot.appSessionId,
     summary: snapshot.summary,
     latestStateDigest: snapshot.latestStateDigest,
@@ -617,7 +804,8 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     userRequest: string
   }
 ): Promise<Message | null> {
-  const boardState = buildChessBoardStateResult({
+  const boardState = buildLiveChessBoardStateResult({
+    conversationId: input.conversationId,
     appSessionId: snapshot.appSessionId,
     summary: snapshot.summary,
     latestStateDigest: snapshot.latestStateDigest,
@@ -627,71 +815,74 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     return null
   }
 
-  const requestedMove = extractRequestedChessMove(input.userRequest) ?? boardState.candidateMoves[0] ?? null
+  const requestedMove = selectRequestedChessMove(input.userRequest, boardState)
   if (!requestedMove) {
     return null
   }
 
-  const validationChess = new Chess(boardState.fen)
-  const previewMove = applyRequestedChessMove(validationChess, requestedMove)
+  const previewMove = validateRequestedChessMove(boardState, requestedMove)
   if (!previewMove) {
     return buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`)
   }
 
-  const toolCallId = `tool-call.chess.make-move.${uuidv4()}`
-  const commandResult = await enqueueSidebarAppRuntimeCommand({
-    hostSessionId: input.conversationId,
-    runtimeAppId: exampleInternalChessManifest.appId,
+  const commandResult = await attemptSidebarChessMove({
+    conversationId: input.conversationId,
     appSessionId: snapshot.appSessionId,
-    toolCallId,
-    toolName: exampleChessMakeMoveToolSchema.name,
-    arguments: {
-      move: requestedMove,
-      expectedFen: boardState.fen,
-    },
-    timeoutMs: exampleChessMakeMoveToolSchema.timeoutMs,
-    createdAt: new Date().toISOString(),
+    boardState,
+    requestedMove,
   })
 
-  if (!commandResult.ok) {
-    return buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`)
+  if (commandResult.ok) {
+    return buildChessMoveAssistantMessage({
+      toolCallId: commandResult.toolCallId,
+      boardState,
+      requestedMove,
+      moveResult: commandResult.moveResult,
+    })
   }
 
-  if (commandResult.completion.status !== 'succeeded') {
-    return buildClarificationMessage(commandResult.completion.resultSummary)
+  if (commandResult.error.includes('The chess board changed before the requested move could be applied.')) {
+    const refreshedSnapshot = getSidebarAppRuntimeSnapshot(input.conversationId, exampleInternalChessManifest.appId)
+    const refreshedBoardState = buildLiveChessBoardStateResult({
+      conversationId: input.conversationId,
+      appSessionId: refreshedSnapshot?.appSessionId ?? snapshot.appSessionId,
+      summary: refreshedSnapshot?.summary ?? snapshot.summary,
+      latestStateDigest: refreshedSnapshot?.latestStateDigest ?? snapshot.latestStateDigest,
+      availableToolNames: refreshedSnapshot?.availableToolNames ?? snapshot.availableToolNames,
+    })
+
+    if (
+      refreshedBoardState &&
+      refreshedBoardState.moveExecutionAvailable &&
+      refreshedBoardState.fen !== boardState.fen
+    ) {
+      const refreshedRequestedMove = selectRequestedChessMove(input.userRequest, refreshedBoardState)
+      if (refreshedRequestedMove) {
+        const refreshedPreviewMove = validateRequestedChessMove(refreshedBoardState, refreshedRequestedMove)
+        if (refreshedPreviewMove) {
+          const retryResult = await attemptSidebarChessMove({
+            conversationId: input.conversationId,
+            appSessionId: refreshedSnapshot.appSessionId,
+            boardState: refreshedBoardState,
+            requestedMove: refreshedRequestedMove,
+          })
+
+          if (retryResult.ok) {
+            return buildChessMoveAssistantMessage({
+              toolCallId: retryResult.toolCallId,
+              boardState: refreshedBoardState,
+              requestedMove: refreshedRequestedMove,
+              moveResult: retryResult.moveResult,
+            })
+          }
+
+          return buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${retryResult.error}`)
+        }
+      }
+    }
   }
 
-  const completionResult = toJsonObject(commandResult.completion.result)
-  if (!completionResult) {
-    return buildClarificationMessage('Chess Tutor responded, but the move result was not machine-readable.')
-  }
-
-  const moveResult = buildChessMoveToolResult(completionResult)
-  if (!moveResult) {
-    return buildClarificationMessage('Chess Tutor responded, but the move result was missing required board details.')
-  }
-
-  const message = createMessage('assistant')
-  message.contentParts = [
-    {
-      type: 'tool-call',
-      state: 'result',
-      toolCallId,
-      toolName: exampleChessMakeMoveToolSchema.name,
-      args: {
-        move: requestedMove,
-        expectedFen: boardState.fen,
-      },
-      result: moveResult,
-    },
-    {
-      type: 'text',
-      text: buildChessMoveResultText(moveResult),
-    },
-  ]
-  message.generating = false
-  message.status = []
-  return message
+  return buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`)
 }
 
 function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
