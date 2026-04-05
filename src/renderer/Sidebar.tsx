@@ -156,7 +156,9 @@ export default function Sidebar() {
       }}
       sx={{
         '& .MuiDrawer-paper': {
-          backgroundImage: 'none',
+          background: 'var(--chatbox-surface-elevated)',
+          borderRight: '1px solid color-mix(in srgb, var(--chatbox-border-primary), transparent 12%)',
+          boxShadow: 'var(--chatbox-shadow-floating)',
           boxSizing: 'border-box',
           width: isSmallScreen ? '75vw' : sidebarWidth,
           maxWidth: '75vw',
@@ -174,11 +176,11 @@ export default function Sidebar() {
         gap={0}
         pt="var(--mobile-safe-area-inset-top, 0px)"
         pb="var(--mobile-safe-area-inset-bottom, 0px)"
-        className="relative"
+        className="relative bg-transparent"
       >
         {needRoomForMacWindowControls && <Box className="title-bar flex-[0_0_44px]" />}
 
-        <Flex align="center" justify="space-between" px="md" py="sm">
+        <Flex align="center" justify="space-between" px="md" py="sm" className="cb-neumo-topbar">
           <Flex align="center" gap="sm">
             <Flex
               align="center"
@@ -202,7 +204,7 @@ export default function Sidebar() {
         </Flex>
 
         <Box flex={1} className="overflow-y-auto">
-          <Stack gap="xs" px="xs" pb="md">
+          <Stack gap="xs" px="xs" pb="md" pt="xs">
             <SidebarPrimaryAction
               icon={IconSearch}
               label={t('Search chats')}
@@ -279,7 +281,7 @@ export default function Sidebar() {
         </Box>
 
         <Stack gap={0} px="xs" pb="xs">
-          <Divider />
+          <Divider className="cb-neumo-divider" />
           <NavLink
             c="chatbox-secondary"
             className="rounded"
@@ -357,9 +359,10 @@ export default function Sidebar() {
           <Box
             onMouseDown={handleResizeStart}
             className={clsx(
-              'sidebar-resizer absolute top-0 bottom-0 w-1 cursor-col-resize z-[1] bg-chatbox-border-primary opacity-0 hover:opacity-70 transition-opacity duration-200',
+              'sidebar-resizer absolute top-0 bottom-0 w-1 cursor-col-resize z-[1] opacity-0 hover:opacity-70 transition-opacity duration-200',
               language === 'ar' ? '-left-1' : '-right-1'
             )}
+            style={{ background: 'linear-gradient(180deg, transparent, var(--chatbox-divider), transparent)' }}
           />
         )}
       </Stack>
@@ -384,10 +387,10 @@ function SidebarPrimaryAction({
     <UnstyledButton
       onClick={onClick}
       className={clsx(
-        'w-full transition-colors',
+        'cb-neumo-card-soft w-full transition-all duration-200',
         compact ? 'rounded-lg px-3 py-2.5' : 'rounded-xl px-3 py-3',
         emphasized
-          ? 'bg-chatbox-background-gray-secondary hover:bg-chatbox-background-brand-secondary'
+          ? 'border-chatbox-border-brand/60 bg-chatbox-background-brand-secondary hover:bg-chatbox-background-brand-secondary-hover'
           : 'hover:bg-chatbox-background-gray-secondary'
       )}
     >
@@ -405,7 +408,7 @@ function SidebarDisclosure({ label, expanded, onClick }: { label: string; expand
   return (
     <UnstyledButton
       onClick={onClick}
-      className="w-full rounded-xl px-3 py-2 text-left hover:bg-chatbox-background-gray-secondary transition-colors"
+      className="w-full rounded-xl px-3 py-2 text-left transition-all duration-200 hover:bg-chatbox-background-gray-secondary hover:shadow-[var(--chatbox-shadow-raised-sm)]"
     >
       <Flex align="center" justify="space-between">
         <Text fw={600} c="chatbox-secondary">
@@ -438,8 +441,10 @@ function SidebarProjectDisclosure({
     <UnstyledButton
       onClick={onClick}
       className={clsx(
-        'w-full rounded-lg px-3 py-2 text-left transition-colors',
-        selected ? 'bg-chatbox-background-brand-secondary' : 'hover:bg-chatbox-background-gray-secondary'
+        'w-full rounded-lg px-3 py-2 text-left transition-all duration-200',
+        selected
+          ? 'cb-neumo-card-soft border-chatbox-border-brand/60 bg-chatbox-background-brand-secondary'
+          : 'hover:bg-chatbox-background-gray-secondary hover:shadow-[var(--chatbox-shadow-raised-sm)]'
       )}
     >
       <Flex align="center" justify="space-between" gap="sm">

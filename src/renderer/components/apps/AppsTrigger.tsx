@@ -41,7 +41,7 @@ export default function AppsTrigger({ className }: AppsTriggerProps) {
           px={isSmallScreen ? 'xs' : 'sm'}
           h={32}
           className={cn(
-            'group rounded-full border border-chatbox-border-primary/70 bg-chatbox-background-secondary/72 text-chatbox-tint-secondary transition-all duration-200',
+            'cb-neumo-card group rounded-full px-1 text-chatbox-tint-secondary transition-all duration-200',
             'hover:border-chatbox-tint-brand/35 hover:bg-chatbox-background-brand-secondary/18 hover:text-chatbox-tint-primary',
             'focus-within:border-chatbox-tint-brand/45 focus-within:bg-chatbox-background-brand-secondary/18 focus-within:text-chatbox-tint-primary'
           )}

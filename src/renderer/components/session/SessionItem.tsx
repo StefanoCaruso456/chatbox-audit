@@ -102,12 +102,12 @@ function SessionItem(props: Props) {
     <Flex
       align="center"
       className={clsx(
-        'cursor-pointer rounded-sm group/session-item',
+        'group/session-item cursor-pointer rounded-2xl border border-transparent transition-all duration-200',
         isSmallScreen
           ? ''
           : selected
-            ? 'bg-chatbox-background-brand-secondary'
-            : 'hover:bg-chatbox-background-gray-secondary'
+            ? 'cb-neumo-card-soft border-chatbox-border-brand/60 bg-chatbox-background-brand-secondary'
+            : 'hover:border-chatbox-border-primary hover:bg-chatbox-background-gray-secondary hover:shadow-[var(--chatbox-shadow-raised-sm)]'
       )}
       mx="xs"
       px="xs"

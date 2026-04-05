@@ -1,7 +1,6 @@
 import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Avatar, Box, Button, Divider, Flex, Paper, ScrollArea, Space, Stack, Text } from '@mantine/core'
 import type { CopilotDetail, Session } from '@shared/types'
-import { ModelProviderEnum } from '@shared/types'
 import { IconChevronLeft, IconChevronRight, IconX } from '@tabler/icons-react'
 import { createFileRoute, useRouterState } from '@tanstack/react-router'
 import { zodValidator } from '@tanstack/zod-adapter'
@@ -119,7 +118,7 @@ function Index() {
       }
 
       // Transfer web browsing setting from "new" session to the actual session
-      const newSessionWebBrowsing = sessionWebBrowsingMap['new']
+      const newSessionWebBrowsing = sessionWebBrowsingMap.new
       if (newSessionWebBrowsing !== undefined) {
         setSessionWebBrowsing(newSession.id, newSessionWebBrowsing)
         clearSessionWebBrowsing('new')
@@ -172,11 +171,19 @@ function Index() {
   return (
     <Page title="" right={<AppsTrigger />}>
       <AppsWorkspace>
-        <div className="p-0 flex flex-col h-full">
-          <Stack align="center" justify="center" gap="sm" flex={1}>
-            <HomepageIcon className="h-8" />
-            <Text fw="600" size={isSmallScreen ? 'sm' : 'md'}>
+        <div className="relative flex h-full flex-col overflow-hidden p-0">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-chatbox-background-brand-secondary/25 to-transparent" />
+          <Stack align="center" justify="center" gap="sm" flex={1} className="relative px-md">
+            <div className="cb-neumo-card flex h-20 w-20 items-center justify-center rounded-[28px]">
+              <HomepageIcon className="h-9" />
+            </div>
+            <Text fw="700" size={isSmallScreen ? 'sm' : 'md'}>
               {t('What can I help you with today?')}
+            </Text>
+            <Text size="sm" c="chatbox-secondary" ta="center" maw={520}>
+              {t(
+                'Start with a prompt, launch an app, or pick a copilot. The workspace is now tuned for a softer, more focused chat flow.'
+              )}
             </Text>
           </Stack>
 
@@ -189,7 +196,7 @@ function Index() {
                 py="md"
                 px="sm"
                 mb="md"
-                className={widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto'}
+                className={clsx('cb-neumo-card rounded-[28px]', widthFull ? 'w-full' : 'mx-auto w-full max-w-4xl')}
               >
                 <Stack gap="sm">
                   <Stack gap="xxs" align="center">
@@ -207,7 +214,7 @@ function Index() {
                   <Flex gap="xs" justify="center" align="center">
                     <Button
                       size="xs"
-                      variant="light"
+                      variant="default"
                       h={32}
                       miw={160}
                       fw={600}
@@ -229,14 +236,20 @@ function Index() {
           <Stack gap="sm">
             {session.copilotId ? (
               <Box px="md">
-                <Stack gap="sm" className={widthFull ? 'w-full' : 'w-full max-w-4xl mx-auto'}>
+                <Stack
+                  gap="sm"
+                  className={clsx(
+                    'cb-neumo-card rounded-[28px] px-4 py-4',
+                    widthFull ? 'w-full' : 'mx-auto w-full max-w-4xl'
+                  )}
+                >
                   <Flex align="center" gap="sm">
                     <CopilotItem name={session.name} picUrl={session.picUrl} selected />
                     <ActionIcon
                       size={32}
                       radius={16}
                       c="chatbox-tertiary"
-                      bg="#F1F3F5"
+                      variant="default"
                       onClick={() => setSession((old) => ({ ...old, copilotId: undefined }))}
                     >
                       <ScalableIcon icon={IconX} size={24} />
@@ -244,8 +257,9 @@ function Index() {
                   </Flex>
 
                   <Text c="chatbox-secondary" className="line-clamp-5">
-                    {session.messages[0]?.contentParts?.map((part) => (part.type === 'text' ? part.text : '')).join('') ||
-                      ''}
+                    {session.messages[0]?.contentParts
+                      ?.map((part) => (part.type === 'text' ? part.text : ''))
+                      .join('') || ''}
                   </Text>
                 </Stack>
               </Box>
@@ -425,9 +439,9 @@ const CopilotItem = ({
       py="xs"
       px={isSmallScreen ? 'xs' : 'md'}
       bd={selected ? 'none' : '1px solid var(--chatbox-border-primary)'}
-      bg={selected ? 'var(--chatbox-background-brand-secondary)' : 'transparent'}
+      bg={selected ? 'var(--chatbox-background-brand-secondary)' : 'var(--chatbox-surface-elevated)'}
       className={clsx(
-        'cursor-pointer shrink-0 shadow-[0px_2px_12px_0px_rgba(0,0,0,0.04)]',
+        'cursor-pointer shrink-0 border border-chatbox-border-primary/70 shadow-[var(--chatbox-shadow-raised-sm)] transition-all duration-200',
         isSmallScreen ? 'rounded-full' : 'rounded-md'
       )}
       onClick={onClick}

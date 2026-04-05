@@ -18,14 +18,8 @@ export default function AppSearch({ value, onChange }: AppSearchProps) {
       leftSection={<ScalableIcon icon={IconSearch} size={16} />}
       placeholder={t('Search by app, category, or tag') || ''}
       aria-label={t('Search apps') || ''}
-      radius="md"
+      radius="xl"
       size="md"
-      styles={{
-        input: {
-          background: 'var(--chatbox-background-primary)',
-          borderColor: 'rgba(255, 255, 255, 0.08)',
-        },
-      }}
     />
   )
 }

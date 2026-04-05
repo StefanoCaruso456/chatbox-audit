@@ -102,8 +102,9 @@ export default function AppsModal() {
       styles={{
         content: {
           background:
-            'radial-gradient(circle at top, rgba(59,130,246,0.08), transparent 28%), var(--chatbox-background-secondary)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+            'radial-gradient(circle at top, rgba(59,130,246,0.1), transparent 26%), var(--chatbox-surface-elevated)',
+          border: '1px solid color-mix(in srgb, var(--chatbox-border-primary), transparent 12%)',
+          boxShadow: 'var(--chatbox-shadow-floating)',
         },
         header: {
           background: 'transparent',
@@ -114,7 +115,7 @@ export default function AppsModal() {
       }}
     >
       <Stack gap="lg">
-        <div className="rounded-2xl border border-chatbox-border-primary/70 bg-chatbox-background-primary/80 p-4">
+        <div className="cb-neumo-card rounded-[24px] p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Badge radius="xl" variant="light" color="chatbox-brand">
               {t('TutorMeAI App Library')}
@@ -157,7 +158,7 @@ export default function AppsModal() {
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-chatbox-border-primary/80 bg-chatbox-background-primary/70 px-6 py-12 text-center">
+          <div className="cb-neumo-card-soft rounded-[24px] border-dashed px-6 py-12 text-center">
             <Stack gap="xs" align="center">
               <Title order={4}>{t('No apps matched')}</Title>
               <Text size="sm" c="chatbox-secondary" maw={420}>

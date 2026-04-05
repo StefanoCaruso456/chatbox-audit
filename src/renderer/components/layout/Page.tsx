@@ -21,8 +21,8 @@ export const Page: FC<PageProps> = ({ children, title, left, right }) => {
   const isSmallScreen = useIsSmallScreen()
   const { needRoomForMacWindowControls } = useNeedRoomForWinControls()
   return (
-    <div className="flex flex-col h-full">
-      <Flex h={54} align="center" px="sm" className={clsx('title-bar')}>
+    <div className="flex h-full flex-col">
+      <Flex h={54} align="center" px="sm" className={clsx('title-bar cb-neumo-topbar')}>
         {left ||
           ((!showSidebar || isSmallScreen) && (
             <Flex align="center" className={needRoomForMacWindowControls ? 'pl-20' : ''}>
@@ -53,7 +53,7 @@ export const Page: FC<PageProps> = ({ children, title, left, right }) => {
         {isSmallScreen && !right && <Box w={28} />}
       </Flex>
 
-      <Divider />
+      <Divider className="cb-neumo-divider" />
 
       <div className="flex-1 overflow-auto">{children}</div>
     </div>
