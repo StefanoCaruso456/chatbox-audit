@@ -13,6 +13,7 @@ import {
   enqueueSidebarAppRuntimeCommand,
   resetSidebarAppRuntimeCommands,
 } from '@/stores/sidebarAppRuntimeCommandStore'
+import { getRuntimeTraceSpans, resetRuntimeTraceStore } from '@/stores/runtimeTraceStore'
 import { getSidebarAppRuntimeSnapshot, resetSidebarAppRuntimeSnapshots } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
@@ -152,6 +153,7 @@ beforeEach(() => {
   resetApprovedAppOpenedEvents()
   resetSidebarAppRuntimeSnapshots()
   resetSidebarAppRuntimeCommands()
+  resetRuntimeTraceStore()
   uiStore.setState({
     approvedAppsModalOpen: false,
     activeApprovedAppId: null,
@@ -163,6 +165,7 @@ afterEach(() => {
   resetApprovedAppOpenedEvents()
   resetSidebarAppRuntimeSnapshots()
   resetSidebarAppRuntimeCommands()
+  resetRuntimeTraceStore()
   uiStore.setState(initialUiState)
 })
 
@@ -324,6 +327,14 @@ describe('AppIframePanel', () => {
       appSessionId: 'app-session.sidebar.chess-tutor',
       conversationId: 'conversation.sidebar.chess-tutor',
     })
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'runtime-open' &&
+          span.approvedAppId === 'chess-tutor' &&
+          span.state?.source === 'approved-app.opened'
+      )
+    ).toBe(true)
   })
 
   it('publishes a chess board-changed event when a manual board move updates the live runtime state', async () => {
@@ -383,6 +394,22 @@ describe('AppIframePanel', () => {
         lastUpdateSource: 'manual-board-move',
       }),
     })
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'runtime-snapshot' &&
+          span.state?.source === 'runtime.message.app.state' &&
+          span.state?.lastMove === 'c6'
+      )
+    ).toBe(true)
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'app-event' &&
+          span.state?.source === 'approved-app.state-observed' &&
+          span.state?.lastMove === 'c6'
+      )
+    ).toBe(true)
   })
 
   it('preserves the live chess board snapshot after a recoverable move error instead of blocking the panel', () => {

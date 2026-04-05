@@ -10,6 +10,7 @@ import {
   initializeChessSession,
   resetChessSessions,
 } from '@/stores/chessSessionStore'
+import { getRuntimeTraceSpans, resetRuntimeTraceStore } from '@/stores/runtimeTraceStore'
 import { resetSidebarAppRuntimeSnapshots, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
 import { deriveConversationAppContext, routeTutorMeAiAppRequest } from './orchestrator'
@@ -45,6 +46,7 @@ describe('routeTutorMeAiAppRequest', () => {
   beforeEach(() => {
     resetSidebarAppRuntimeSnapshots()
     resetChessSessions()
+    resetRuntimeTraceStore()
     mockEnqueueSidebarAppRuntimeCommand.mockReset()
     uiStore.setState({ activeApprovedAppId: null })
     mockEnqueueSidebarAppRuntimeCommand.mockResolvedValue({
@@ -904,6 +906,33 @@ describe('routeTutorMeAiAppRequest', () => {
         expectedFen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
       },
     })
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'state-selection' &&
+          span.appSessionId === 'app-session.sidebar.chess.8.fresh-sidebar-move' &&
+          span.state?.source === 'sidebar-runtime-snapshot' &&
+          span.state?.lastMove === 'c6'
+      )
+    ).toBe(true)
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'runtime-command' &&
+          span.appSessionId === 'app-session.sidebar.chess.8.fresh-sidebar-move' &&
+          span.state?.requestedMove === 'd5' &&
+          span.state?.expectedFen === 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2'
+      )
+    ).toBe(true)
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'agent-return' &&
+          span.appSessionId === 'app-session.sidebar.chess.8.fresh-sidebar-move' &&
+          span.agentReturn?.kind === 'invoke-tool' &&
+          span.agentReturn?.toolName === 'chess.make-move'
+      )
+    ).toBe(true)
   })
 
   it('reads the current live chess position from the shared session when the sidebar snapshot is stale', async () => {

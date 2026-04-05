@@ -13,6 +13,7 @@ import {
   publishApprovedAppStateObservedEvent,
   resetApprovedAppOpenedEvents,
 } from '@/stores/approvedAppEventStore'
+import { getRuntimeTraceSpans, resetRuntimeTraceStore } from '@/stores/runtimeTraceStore'
 import ApprovedAppCoachController from './ApprovedAppCoachController'
 
 const { mockInsertMessage, mockScrollToBottom } = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ vi.mock('@/stores/scrollActions', () => ({
 describe('ApprovedAppCoachController', () => {
   beforeEach(() => {
     resetApprovedAppOpenedEvents()
+    resetRuntimeTraceStore()
     mockInsertMessage.mockReset()
     mockInsertMessage.mockResolvedValue(undefined)
     mockScrollToBottom.mockReset()
@@ -81,6 +83,14 @@ describe('ApprovedAppCoachController', () => {
       'Ready to play some chess?'
     )
     expect(mockScrollToBottom).toHaveBeenCalledWith('smooth')
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'coach-message' &&
+          span.state?.source === 'approved-app.opened' &&
+          span.agentReturn?.toolCallId === buildChessApprovedAppKickoffToolCallId('app-session.sidebar.chess-tutor')
+      )
+    ).toBe(true)
   })
 
   it('does not insert a duplicate kickoff when the session already has one for that open event', async () => {
@@ -304,6 +314,14 @@ describe('ApprovedAppCoachController', () => {
     expect(observedMessage?.contentParts?.find((part: { type: string }) => part.type === 'text')?.text).toContain(
       'I saw d4 on the board.'
     )
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'coach-message' &&
+          span.state?.source === 'approved-app.state-observed' &&
+          span.agentReturn?.toolCallId === buildChessObservedBoardStateToolCallId('app-session.sidebar.chess-tutor', 1)
+      )
+    ).toBe(true)
   })
 
   it('does not insert a proactive coach message for chat-executed tool moves', async () => {
