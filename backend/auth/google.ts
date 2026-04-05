@@ -3,6 +3,7 @@ import type { AuthTokenCipher, OAuthProviderAdapter, OAuthProviderConfig, OAuthP
 
 const GOOGLE_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo'
 const DEFAULT_GOOGLE_SCOPES = ['openid', 'email', 'profile']
 
 export interface GoogleOAuthRuntimeConfig {
@@ -14,6 +15,16 @@ export interface GoogleOAuthAdapterOptions {
   clientSecret: string
   fetchImpl?: typeof fetch
   now?: () => number
+}
+
+export interface GoogleUserProfile {
+  sub: string
+  email: string | null
+  emailVerified: boolean
+  name: string | null
+  givenName: string | null
+  familyName: string | null
+  picture: string | null
 }
 
 export function loadGoogleOAuthRuntimeConfig(
@@ -118,6 +129,60 @@ export function createHashedTokenCipher(secret: string): AuthTokenCipher {
       decipher.setAuthTag(Buffer.from(authTag))
 
       return Buffer.concat([Buffer.from(decipher.update(ciphertext)), Buffer.from(decipher.final())]).toString('utf8')
+    },
+  }
+}
+
+export async function fetchGoogleUserProfile(input: {
+  accessToken: string
+  fetchImpl?: typeof fetch
+}): Promise<OAuthProviderResult<GoogleUserProfile>> {
+  let response: Response
+  try {
+    response = await (input.fetchImpl ?? fetch)(GOOGLE_USERINFO_URL, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${input.accessToken}`,
+      },
+    })
+  } catch (error) {
+    return {
+      ok: false,
+      message: 'Google user profile request failed.',
+      details: [error instanceof Error ? error.message : String(error)],
+      retryable: true,
+    }
+  }
+
+  const payload = await parseJsonPayload(response)
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: buildGoogleErrorMessage(payload) ?? 'Google user profile request failed.',
+      details: payload ? [JSON.stringify(payload)] : undefined,
+      retryable: response.status >= 500,
+    }
+  }
+
+  const sub = normalizeNonEmptyString(readString(payload, 'sub'))
+  if (!sub) {
+    return {
+      ok: false,
+      message: 'Google user profile response is missing the user identifier.',
+    }
+  }
+
+  return {
+    ok: true,
+    value: {
+      sub,
+      email: normalizeNonEmptyString(readString(payload, 'email')) ?? null,
+      emailVerified: readBoolean(payload, 'email_verified') ?? false,
+      name: normalizeNonEmptyString(readString(payload, 'name')) ?? null,
+      givenName: normalizeNonEmptyString(readString(payload, 'given_name')) ?? null,
+      familyName: normalizeNonEmptyString(readString(payload, 'family_name')) ?? null,
+      picture: normalizeNonEmptyString(readString(payload, 'picture')) ?? null,
     },
   }
 }
@@ -253,6 +318,11 @@ function readString(payload: Record<string, unknown> | null, key: string): strin
 function readNumber(payload: Record<string, unknown> | null, key: string): number | null {
   const value = payload?.[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function readBoolean(payload: Record<string, unknown> | null, key: string): boolean | null {
+  const value = payload?.[key]
+  return typeof value === 'boolean' ? value : null
 }
 
 function normalizeNonEmptyString(value: string | undefined | null) {

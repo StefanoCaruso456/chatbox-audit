@@ -1,5 +1,6 @@
 import { type RemoteConfig, Theme } from '@shared/types'
 import AppsModal from '@/components/apps/AppsModal'
+import { TutorMeAIAuthGate } from '@/components/auth/TutorMeAIAuthGate'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import Toasts from '@/components/common/Toasts'
 import ExitFullscreenButton from '@/components/layout/ExitFullscreenButton'
@@ -180,24 +181,36 @@ function Root() {
   return (
     <Box className="box-border App" spellCheck={spellCheck} dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {platform.type === 'desktop' && (getOS() === 'Windows' || getOS() === 'Linux') && <ExitFullscreenButton />}
-      <Grid container className="h-full">
-        {!isEmbeddedAppRoute && <Sidebar />}
-        <Box
-          className="h-full w-full"
-          sx={{
-            flexGrow: 1,
-            ...(!isEmbeddedAppRoute && showSidebar
-              ? language === 'ar'
-                ? { paddingRight: { sm: `${sidebarWidth}px` } }
-                : { paddingLeft: { sm: `${sidebarWidth}px` } }
-              : {}),
-          }}
-        >
-          <ErrorBoundary name="main">
-            <Outlet />
-          </ErrorBoundary>
-        </Box>
-      </Grid>
+      {isEmbeddedAppRoute ? (
+        <Grid container className="h-full">
+          <Box className="h-full w-full" sx={{ flexGrow: 1 }}>
+            <ErrorBoundary name="main">
+              <Outlet />
+            </ErrorBoundary>
+          </Box>
+        </Grid>
+      ) : (
+        <TutorMeAIAuthGate>
+          <Grid container className="h-full">
+            <Sidebar />
+            <Box
+              className="h-full w-full"
+              sx={{
+                flexGrow: 1,
+                ...(showSidebar
+                  ? language === 'ar'
+                    ? { paddingRight: { sm: `${sidebarWidth}px` } }
+                    : { paddingLeft: { sm: `${sidebarWidth}px` } }
+                  : {}),
+              }}
+            >
+              <ErrorBoundary name="main">
+                <Outlet />
+              </ErrorBoundary>
+            </Box>
+          </Grid>
+        </TutorMeAIAuthGate>
+      )}
       {/* 对话设置 */}
       {/* <AppStoreRatingDialog /> */}
       {/* 代码预览 */}

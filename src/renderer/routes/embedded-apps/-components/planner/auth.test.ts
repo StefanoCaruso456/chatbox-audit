@@ -5,6 +5,7 @@ import {
   derivePlannerOAuthAuthState,
   fetchPlannerOAuthConnection,
   isPlannerOAuthCallbackMessage,
+  requestPlannerOAuthAuthorizationUrl,
   resolvePlannerBackendOrigin,
 } from './auth'
 
@@ -90,6 +91,34 @@ describe('planner auth helpers', () => {
 
     expect(connection?.status).toBe('connected')
     expect(derivePlannerOAuthAuthState(connection)).toBe('connected')
+  })
+
+  it('requests an authorization URL through the authenticated planner OAuth start endpoint', async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=client-id',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        }
+      )
+    })
+
+    const authorizationUrl = await requestPlannerOAuthAuthorizationUrl({
+      backendOrigin: 'https://planner-backend.up.railway.app',
+      clientOrigin: 'https://chatbox-audit.vercel.app',
+      accessToken: 'platform-access-token',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+
+    expect(authorizationUrl).toContain('https://accounts.google.com')
   })
 
   it('recognizes callback messages only from the configured backend origin', () => {
