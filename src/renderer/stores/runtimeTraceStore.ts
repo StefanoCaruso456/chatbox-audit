@@ -9,7 +9,10 @@ import {
 import { v4 as uuidv4 } from 'uuid'
 import { createStore, useStore } from 'zustand'
 
-type RecordRuntimeTraceSpanInput = Omit<RuntimeTraceSpan, 'version' | 'spanId' | 'recordedAt' | 'startedAt' | 'endedAt' | 'latencyMs'> & {
+type RecordRuntimeTraceSpanInput = Omit<
+  RuntimeTraceSpan,
+  'version' | 'spanId' | 'recordedAt' | 'startedAt' | 'endedAt' | 'latencyMs'
+> & {
   spanId?: string
   recordedAt?: string
   startedAt?: string
@@ -18,7 +21,9 @@ type RecordRuntimeTraceSpanInput = Omit<RuntimeTraceSpan, 'version' | 'spanId' |
 
 type RuntimeTraceState = {
   spans: RuntimeTraceSpan[]
+  exportedSpanIds: string[]
   recordSpan: (input: RecordRuntimeTraceSpanInput) => RuntimeTraceSpan
+  markSpansExported: (spanIds: string[]) => void
   reset: () => void
 }
 
@@ -41,9 +46,7 @@ export function buildRuntimeTraceId(input: {
   appSessionId?: string | null
   runtimeAppId?: string | null
 }) {
-  return normalizeTraceIdentifier(
-    `trace.${input.conversationId}.${input.appSessionId ?? input.runtimeAppId ?? 'host'}`
-  )
+  return normalizeTraceIdentifier(`trace.${input.conversationId}.${input.appSessionId ?? input.runtimeAppId ?? 'host'}`)
 }
 
 export function buildRuntimeTraceRootSpanId(traceId: string) {
@@ -87,6 +90,7 @@ function createRootTraceSpan(input: {
 
 export const runtimeTraceStore = createStore<RuntimeTraceState>()((set) => ({
   spans: [],
+  exportedSpanIds: [],
   recordSpan: (input) => {
     const startedAt = input.startedAt ?? new Date().toISOString()
     const endedAt = input.endedAt ?? startedAt
@@ -120,13 +124,33 @@ export const runtimeTraceStore = createStore<RuntimeTraceState>()((set) => ({
       const nextSpans = [...state.spans, ...rootSpan, nextSpan].slice(-MAX_TRACE_SPANS)
       return {
         spans: nextSpans,
+        exportedSpanIds: state.exportedSpanIds.filter((spanId) => nextSpans.some((span) => span.spanId === spanId)),
       }
     })
 
     return nextSpan
   },
+  markSpansExported: (spanIds) => {
+    if (!spanIds.length) {
+      return
+    }
+
+    set((state) => {
+      const knownSpanIds = new Set(state.spans.map((span) => span.spanId))
+      const nextExportedIds = new Set(state.exportedSpanIds)
+      for (const spanId of spanIds) {
+        if (knownSpanIds.has(spanId)) {
+          nextExportedIds.add(spanId)
+        }
+      }
+
+      return {
+        exportedSpanIds: [...nextExportedIds],
+      }
+    })
+  },
   reset: () => {
-    set({ spans: [] })
+    set({ spans: [], exportedSpanIds: [] })
   },
 }))
 
@@ -140,6 +164,16 @@ export function resetRuntimeTraceStore() {
 
 export function getRuntimeTraceSpans() {
   return runtimeTraceStore.getState().spans
+}
+
+export function markRuntimeTraceSpansExported(spanIds: string[]) {
+  runtimeTraceStore.getState().markSpansExported(spanIds)
+}
+
+export function getPendingRuntimeTraceSpans() {
+  const state = runtimeTraceStore.getState()
+  const exportedSpanIds = new Set(state.exportedSpanIds)
+  return state.spans.filter((span) => !exportedSpanIds.has(span.spanId))
 }
 
 export function getRuntimeTraceTree(traceId: string): RuntimeTraceTree | null {

@@ -216,7 +216,12 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
     async handleRequest(request) {
       const url = new URL(request.url)
 
-      if (request.method === 'OPTIONS' && (url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/api/telemetry/'))) {
+      if (
+        request.method === 'OPTIONS' &&
+        (url.pathname.startsWith('/api/auth/') ||
+          url.pathname.startsWith('/api/telemetry/') ||
+          url.pathname.startsWith('/api/app-access/'))
+      ) {
         return withCors(request, new Response(null, { status: 204 }), env)
       }
 
@@ -287,7 +292,6 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
       if (url.pathname === RUNTIME_TRACE_EXPORT_PATH && request.method === 'POST') {
         return withCors(request, await handleExportRuntimeTelemetry(request, { env, fetchImpl }), env)
       }
-
       if (url.pathname === APP_ACCESS_REQUESTS_PATH && request.method === 'POST') {
         return withCors(
           request,
@@ -335,7 +339,6 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
           env
         )
       }
-
       if (url.pathname === GOOGLE_START_PATH && request.method === 'GET') {
         return await handleGoogleOAuthStart(request, {
           env,
@@ -384,6 +387,62 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
         indexFile,
       })
     },
+  }
+}
+
+async function handleBootstrapRuntimeTelemetry(input: {
+  env: Record<string, string | undefined>
+  fetchImpl: typeof fetch
+}): Promise<Response> {
+  try {
+    const result = await ensureBraintrustRuntimeProject(input)
+    return jsonResponse(200, {
+      ok: true,
+      data: {
+        projectName: result.projectName,
+      },
+    })
+  } catch (error) {
+    if (error instanceof BraintrustTelemetryConfigError) {
+      return jsonResponse(503, toApiErrorBody(failureResult('api', 'service-unavailable', error.message)))
+    }
+
+    return jsonResponse(502, toApiErrorBody(failureResult('api', 'service-unavailable', 'Braintrust telemetry bootstrap failed.')))
+  }
+}
+
+async function handleExportRuntimeTelemetry(
+  request: Request,
+  input: {
+    env: Record<string, string | undefined>
+    fetchImpl: typeof fetch
+  }
+): Promise<Response> {
+  const parsedBody = await parseJsonBody(request, RuntimeTraceExportBodySchema)
+  if (!parsedBody.ok) {
+    return parsedBody.response
+  }
+
+  try {
+    const result = await exportRuntimeTraceSpansToBraintrust({
+      spans: parsedBody.data.spans,
+      env: input.env,
+      fetchImpl: input.fetchImpl,
+    })
+
+    return jsonResponse(202, {
+      ok: true,
+      data: {
+        exportedSpanIds: result.exportedSpanIds,
+        projectName: result.projectName,
+      },
+    })
+  } catch (error) {
+    if (error instanceof BraintrustTelemetryConfigError) {
+      return jsonResponse(503, toApiErrorBody(failureResult('api', 'service-unavailable', error.message)))
+    }
+
+    return jsonResponse(502, toApiErrorBody(failureResult('api', 'service-unavailable', 'Braintrust telemetry export failed.')))
   }
 }
 
@@ -965,62 +1024,6 @@ async function handleDecideAppAccessRequest(
       request: decided.value,
     },
   })
-}
-
-async function handleBootstrapRuntimeTelemetry(input: {
-  env: Record<string, string | undefined>
-  fetchImpl: typeof fetch
-}): Promise<Response> {
-  try {
-    const result = await ensureBraintrustRuntimeProject(input)
-    return jsonResponse(200, {
-      ok: true,
-      data: {
-        projectName: result.projectName,
-      },
-    })
-  } catch (error) {
-    if (error instanceof BraintrustTelemetryConfigError) {
-      return jsonResponse(503, toApiErrorBody(failureResult('api', 'service-unavailable', error.message)))
-    }
-
-    return jsonResponse(502, toApiErrorBody(failureResult('api', 'service-unavailable', 'Braintrust telemetry bootstrap failed.')))
-  }
-}
-
-async function handleExportRuntimeTelemetry(
-  request: Request,
-  input: {
-    env: Record<string, string | undefined>
-    fetchImpl: typeof fetch
-  }
-): Promise<Response> {
-  const parsedBody = await parseJsonBody(request, RuntimeTraceExportBodySchema)
-  if (!parsedBody.ok) {
-    return parsedBody.response
-  }
-
-  try {
-    const result = await exportRuntimeTraceSpansToBraintrust({
-      spans: parsedBody.data.spans,
-      env: input.env,
-      fetchImpl: input.fetchImpl,
-    })
-
-    return jsonResponse(202, {
-      ok: true,
-      data: {
-        exportedSpanIds: result.exportedSpanIds,
-        projectName: result.projectName,
-      },
-    })
-  } catch (error) {
-    if (error instanceof BraintrustTelemetryConfigError) {
-      return jsonResponse(503, toApiErrorBody(failureResult('api', 'service-unavailable', error.message)))
-    }
-
-    return jsonResponse(502, toApiErrorBody(failureResult('api', 'service-unavailable', 'Braintrust telemetry export failed.')))
-  }
 }
 
 async function handleGoogleOAuthStart(
