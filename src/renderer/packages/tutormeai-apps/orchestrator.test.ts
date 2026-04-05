@@ -953,6 +953,121 @@ describe('routeTutorMeAiAppRequest', () => {
     ).toBe(true)
   })
 
+  it('uses the bound chess coach action snapshot when the clicked move recommendation is newer than the sidebar snapshot', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8.bound-coach-action',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8.bound-coach-action',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Move played: d4. Black to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+        turn: 'b',
+        moveCount: 1,
+        lastMove: 'd4',
+      },
+      updatedAt: '2026-04-05T05:07:00.000Z',
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+    mockEnqueueSidebarAppRuntimeCommand.mockClear()
+    mockEnqueueSidebarAppRuntimeCommand.mockResolvedValueOnce({
+      ok: true,
+      command: {
+        hostSessionId: 'conversation.8.bound-coach-action',
+        runtimeAppId: 'chess.internal',
+        appSessionId: 'app-session.sidebar.chess.8.bound-coach-action',
+        toolCallId: 'tool-call.chess.make-move.bound-coach-action',
+        toolName: 'chess.make-move',
+        arguments: {
+          move: 'd5',
+          expectedFen: 'rnbqkbnr/p1pppppp/1p6/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+        },
+        createdAt: '2026-04-05T05:07:04.000Z',
+      },
+      completion: {
+        version: 'v1',
+        conversationId: 'conversation.8.bound-coach-action',
+        appSessionId: 'app-session.sidebar.chess.8.bound-coach-action',
+        appId: 'chess.internal',
+        toolCallId: 'tool-call.chess.make-move.bound-coach-action',
+        status: 'succeeded',
+        resultSummary: 'Move played: d5. Black to move.',
+        result: {
+          appSessionId: 'app-session.sidebar.chess.8.bound-coach-action',
+          requestedMove: 'd5',
+          appliedMove: 'd5',
+          fen: 'rnbqkbnr/p1pppppp/1p6/3P4/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 2',
+          turn: 'black',
+          moveCount: 3,
+          lastMove: 'd5',
+          legalMoveCount: 20,
+          candidateMoves: ['d6', 'Nf6'],
+          summary: 'Move played: d5. Black to move.',
+          explanation: 'It claims central space and opens lines for your pieces.',
+          moveExecutionAvailable: true,
+        },
+        completedAt: '2026-04-05T05:07:05.000Z',
+        followUpContext: {
+          summary: 'Use the updated live chess board to recommend the best next move from this position.',
+        },
+      },
+    })
+
+    const requestMessage = createMessage('user', 'play d5', {
+      type: 'chess-coach-action',
+      action: 'play-recommended-move',
+      appSessionId: 'app-session.sidebar.chess.8.bound-coach-action',
+      requestedMove: 'd5',
+      boardState: {
+        fen: 'rnbqkbnr/p1pppppp/1p6/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+        turn: 'white',
+        moveCount: 2,
+        lastMove: 'b6',
+        moveExecutionAvailable: true,
+        summary: 'I saw b6 on the board. White to move now.',
+      },
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.bound-coach-action',
+      userId: 'user.8.bound-coach-action',
+      userRequest: 'play d5',
+      requestMessage: requestMessage,
+      requestMessageId: 'message.8.bound-coach-action',
+      previousMessages: [createMessage('assistant', 'I saw b6 on the board. White to move now, and I’d recommend d5.')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueSidebarAppRuntimeCommand.mock.calls[0]?.[0]).toMatchObject({
+      appSessionId: 'app-session.sidebar.chess.8.bound-coach-action',
+      arguments: {
+        move: 'd5',
+        expectedFen: 'rnbqkbnr/p1pppppp/1p6/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+      },
+    })
+    expect(
+      getRuntimeTraceSpans().some(
+        (span) =>
+          span.kind === 'state-selection' &&
+          span.appSessionId === 'app-session.sidebar.chess.8.bound-coach-action' &&
+          span.state?.source === 'bound-chess-coach-action' &&
+          span.state?.lastMove === 'b6'
+      )
+    ).toBe(true)
+  })
+
   it('reads the current live chess position from the shared session when the sidebar snapshot is stale', async () => {
     upsertSidebarAppRuntimeSnapshot({
       hostSessionId: 'conversation.shared.live-board',

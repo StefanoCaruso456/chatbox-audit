@@ -94,6 +94,24 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
       'Keep Desmos open while we work through a function problem.',
     ],
   },
+  miro: {
+    helpUrl: 'https://developers.miro.com/docs/miro-live-embed-with-boardspicker-registered',
+    helpLabel: 'Miro Live Embed docs',
+    authModel: 'vendor-session',
+    capabilities: ['Official live embed path', 'BoardsPicker-based board selection', 'Collaborative whiteboard beside chat'],
+    setupChecklist: [
+      'Create a Miro developer app and request BoardsPicker enablement for your app.',
+      'Allowlist the ChatBridge domain in the Miro app settings for BoardsPicker.',
+      'Save a Miro live-embed URL that includes usePostAuth=true for our Electron-style shell.',
+    ],
+    samplePrompts: [
+      'Open our Miro board beside chat.',
+      'Launch the Miro workspace and keep the whiteboard visible while we brainstorm.',
+      'Use Miro in the panel while we review the board together.',
+    ],
+    statusNote:
+      'Miro works best through Live Embed plus BoardsPicker selection. For ChatBridge, prefer a saved live-embed board URL with usePostAuth=true over the generic Miro homepage.',
+  },
   newsela: {
     helpUrl: 'https://newsela.com/',
     helpLabel: 'Newsela product site',
@@ -452,6 +470,32 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
     },
   },
   {
+    id: 'miro',
+    name: 'Miro',
+    icon: '/icons/apps/miro.png',
+    shortSummary:
+      'A collaborative digital whiteboard for brainstorming, diagramming, planning, and project work that can stay beside chat.',
+    category: 'Creativity, Coding & Projects',
+    gradeRanges: ['Multi-level'],
+    launchUrl: 'https://miro.com/',
+    launchMode: 'iframe',
+    integrationMode: 'partner-embed',
+    isApproved: true,
+    tags: ['whiteboard', 'collaboration', 'brainstorming', 'diagramming'],
+    integrationConfig: {
+      defaultLaunchUrl: '',
+      configurableLaunchUrl: true,
+      launchUrlLabel: 'Miro board or live embed URL',
+      launchUrlPlaceholder: 'https://miro.com/app/board/{board_id}/ or https://miro.com/app/live-embed/{board_id}/',
+      helpUrl: 'https://developers.miro.com/docs/miro-live-embed-with-boardspicker-registered',
+      helpLabel: 'Miro Live Embed docs',
+    },
+    loadingFallback: {
+      title: 'Miro needs a live-embed board URL',
+      body: 'Use Miro Live Embed or BoardsPicker to generate a board-specific embed link, then save that URL here so the whiteboard can render beside chat.',
+    },
+  },
+  {
     id: 'newsela',
     name: 'Newsela',
     icon: '/icons/apps/newsela.png',
@@ -747,6 +791,7 @@ export const APP_MILESTONE_ORDER = [
   'planner-connect',
   'desmos',
   'padlet',
+  'miro',
   'google-classroom',
   'canvas-student',
   'schoology',

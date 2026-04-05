@@ -360,6 +360,118 @@ describe('createRailwayWebApp', () => {
     expect(lookupBody.data.connection.externalAccountId).toBe('google-user-123')
   })
 
+  it('lists registered students for reviewer assignment and persists assigned students on the platform profile', async () => {
+    const staticRootDir = await createStaticRoot()
+    const repository = new InMemoryAuthRepository()
+    const authService = new PlatformAuthService(repository, {
+      now: () => '2026-04-05T05:00:00.000Z',
+    })
+
+    await repository.saveUser({
+      userId: 'student.alpha',
+      email: 'alpha@example.com',
+      username: 'alpha.student',
+      displayName: 'Alpha Student',
+      role: 'student',
+      onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      metadata: {},
+      createdAt: '2026-04-05T05:00:00.000Z',
+      updatedAt: '2026-04-05T05:00:00.000Z',
+      deletedAt: null,
+    })
+    await repository.saveUser({
+      userId: 'student.beta',
+      email: 'beta@example.com',
+      username: 'beta.student',
+      displayName: 'Beta Student',
+      role: 'student',
+      onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      metadata: {},
+      createdAt: '2026-04-05T05:00:00.000Z',
+      updatedAt: '2026-04-05T05:00:00.000Z',
+      deletedAt: null,
+    })
+    await repository.saveUser({
+      userId: 'teacher.user',
+      email: 'teacher@example.com',
+      username: 'teacher.demo',
+      displayName: 'Teacher Demo',
+      role: 'teacher',
+      onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      metadata: {},
+      createdAt: '2026-04-05T05:00:00.000Z',
+      updatedAt: '2026-04-05T05:00:00.000Z',
+      deletedAt: null,
+    })
+
+    const teacherSession = await authService.issuePlatformSession({ userId: 'teacher.user' })
+    expect(teacherSession.ok).toBe(true)
+    if (!teacherSession.ok) {
+      return
+    }
+
+    const app = createRailwayWebApp({
+      staticRootDir,
+      repository,
+    })
+
+    const studentsResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/auth/students', {
+        headers: {
+          authorization: `Bearer ${teacherSession.value.sessionToken}`,
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+      })
+    )
+
+    expect(studentsResponse.status).toBe(200)
+    const studentsBody = (await studentsResponse.json()) as {
+      ok: true
+      data: {
+        students: Array<{
+          userId: string
+          displayName: string
+        }>
+      }
+    }
+    expect(studentsBody.data.students.map((student) => student.userId)).toEqual(['student.alpha', 'student.beta'])
+
+    const profileResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/auth/profile', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${teacherSession.value.sessionToken}`,
+          'content-type': 'application/json',
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+        body: JSON.stringify({
+          displayName: 'Teacher Demo',
+          username: 'teacher.demo',
+          role: 'teacher',
+          students: ['student.beta'],
+        }),
+      })
+    )
+
+    expect(profileResponse.status).toBe(200)
+    const profileBody = (await profileResponse.json()) as {
+      ok: true
+      data: {
+        user: {
+          role: string | null
+          students: string[]
+        }
+      }
+    }
+    expect(profileBody.data.user.role).toBe('teacher')
+    expect(profileBody.data.user.students).toEqual(['student.beta'])
+
+    const savedTeacher = await repository.getUserById('teacher.user')
+    expect(savedTeacher?.metadata).toMatchObject({
+      students: ['student.beta'],
+    })
+  })
+
   it('lets a teacher approve a student app request and makes the updated request visible to the student immediately', async () => {
     const staticRootDir = await createStaticRoot()
     const repository = new InMemoryAuthRepository()
@@ -387,7 +499,23 @@ describe('createRailwayWebApp', () => {
       displayName: 'Teacher Demo',
       role: 'teacher',
       onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
-      metadata: {},
+      metadata: {
+        students: ['student.user'],
+      },
+      createdAt: '2026-04-05T05:00:00.000Z',
+      updatedAt: '2026-04-05T05:00:00.000Z',
+      deletedAt: null,
+    })
+    await repository.saveUser({
+      userId: 'other.teacher',
+      email: 'other-teacher@example.com',
+      username: 'other.teacher',
+      displayName: 'Other Teacher',
+      role: 'teacher',
+      onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      metadata: {
+        students: ['student.other'],
+      },
       createdAt: '2026-04-05T05:00:00.000Z',
       updatedAt: '2026-04-05T05:00:00.000Z',
       deletedAt: null,
@@ -395,9 +523,11 @@ describe('createRailwayWebApp', () => {
 
     const studentSession = await authService.issuePlatformSession({ userId: 'student.user' })
     const teacherSession = await authService.issuePlatformSession({ userId: 'teacher.user' })
+    const otherTeacherSession = await authService.issuePlatformSession({ userId: 'other.teacher' })
     expect(studentSession.ok).toBe(true)
     expect(teacherSession.ok).toBe(true)
-    if (!studentSession.ok || !teacherSession.ok) {
+    expect(otherTeacherSession.ok).toBe(true)
+    if (!studentSession.ok || !teacherSession.ok || !otherTeacherSession.ok) {
       return
     }
 
@@ -462,6 +592,43 @@ describe('createRailwayWebApp', () => {
     expect(pendingBody.data.requests[0].studentDisplayName).toBe('Student Demo')
     expect(pendingBody.data.requests[0].appName).toBe('Chess Tutor')
 
+    const otherPendingResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/app-access/requests/pending', {
+        headers: {
+          authorization: `Bearer ${otherTeacherSession.value.sessionToken}`,
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+      })
+    )
+
+    expect(otherPendingResponse.status).toBe(200)
+    const otherPendingBody = (await otherPendingResponse.json()) as {
+      ok: true
+      data: {
+        requests: Array<unknown>
+      }
+    }
+    expect(otherPendingBody.data.requests).toHaveLength(0)
+
+    const unauthorizedDecisionResponse = await app.handleRequest(
+      new Request(
+        `https://chatbox-audit-production.up.railway.app/api/app-access/requests/${requestBody.data.request.appAccessRequestId}/decision`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${otherTeacherSession.value.sessionToken}`,
+            'content-type': 'application/json',
+            origin: 'https://chatbox-audit.vercel.app',
+          },
+          body: JSON.stringify({
+            status: 'approved',
+          }),
+        }
+      )
+    )
+
+    expect(unauthorizedDecisionResponse.status).toBe(403)
+
     const approveResponse = await app.handleRequest(
       new Request(
         `https://chatbox-audit-production.up.railway.app/api/app-access/requests/${requestBody.data.request.appAccessRequestId}/decision`,
@@ -518,6 +685,64 @@ describe('createRailwayWebApp', () => {
     }
     expect(myRequestBody.data.request?.status).toBe('approved')
     expect(myRequestBody.data.request?.decidedByUserId).toBe('teacher.user')
+  })
+
+  it('blocks student app requests until an assigned teacher or administrator exists', async () => {
+    const staticRootDir = await createStaticRoot()
+    const repository = new InMemoryAuthRepository()
+    const appAccessRepository = new InMemoryAppAccessRepository()
+    const authService = new PlatformAuthService(repository, {
+      now: () => '2026-04-05T05:00:00.000Z',
+    })
+
+    await repository.saveUser({
+      userId: 'student.user',
+      email: 'student@example.com',
+      username: 'student.demo',
+      displayName: 'Student Demo',
+      role: 'student',
+      onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      metadata: {},
+      createdAt: '2026-04-05T05:00:00.000Z',
+      updatedAt: '2026-04-05T05:00:00.000Z',
+      deletedAt: null,
+    })
+
+    const studentSession = await authService.issuePlatformSession({ userId: 'student.user' })
+    expect(studentSession.ok).toBe(true)
+    if (!studentSession.ok) {
+      return
+    }
+
+    const app = createRailwayWebApp({
+      staticRootDir,
+      repository,
+      appAccessRepository,
+    })
+
+    const requestResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/app-access/requests', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${studentSession.value.sessionToken}`,
+          'content-type': 'application/json',
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+        body: JSON.stringify({
+          appId: 'chess-tutor',
+          appName: 'Chess Tutor',
+        }),
+      })
+    )
+
+    expect(requestResponse.status).toBe(403)
+    const requestBody = (await requestResponse.json()) as {
+      ok: false
+      error: {
+        message: string
+      }
+    }
+    expect(requestBody.error.message).toContain('No assigned teacher or administrator')
   })
 })
 

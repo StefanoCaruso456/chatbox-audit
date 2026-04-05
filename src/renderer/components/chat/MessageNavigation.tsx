@@ -52,7 +52,7 @@ export const MessageNavigation: FC<MessageNavigationProps> = ({
       <Stack
         gap={6}
         p={'xxs'}
-        className="rounded border border-solid border-chatbox-border-primary bg-chatbox-background-primary [&>.mantine-Divider-root]:border-chatbox-border-primary"
+        className="cb-neumo-card rounded-full [&>.mantine-Divider-root]:border-chatbox-border-primary"
       >
         <MessageNavigationButton icon={<IconChevronsUp />} onClick={onScrollToTop} />
         <Divider />
@@ -73,8 +73,8 @@ const MessageNavigationButton = ({ icon, ...others }: { icon: React.ReactElement
   return (
     <button
       className={clsx(
-        'flex border-0 outline-none [-webkit-tap-highlight-color:transparent] p-0 cursor-pointer text-chatbox-tint-tertiary active:translate-y-px',
-        'bg-transparent hover:text-chatbox-tint-secondary'
+        'cb-neumo-toolbar-button flex cursor-pointer border-0 bg-transparent p-1 outline-none [-webkit-tap-highlight-color:transparent] text-chatbox-tint-tertiary active:translate-y-px',
+        'hover:text-chatbox-tint-secondary'
       )}
       {...others}
     >
@@ -93,9 +93,9 @@ export const ScrollToBottomButton = ({ onClick, style }: { onClick?(): void; sty
         h={38}
         radius={19}
         p={0}
-        bg="var(--chatbox-background-primary)"
+        variant="default"
         c="chatbox-primary"
-        className="shadow-xl border-chatbox-border-primary"
+        className="shadow-xl"
         onClick={onClick}
         style={style}
       >

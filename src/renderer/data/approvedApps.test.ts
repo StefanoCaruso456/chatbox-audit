@@ -3,7 +3,7 @@ import { approvedApps, getApprovedAppById } from './approvedApps'
 
 describe('approvedApps', () => {
   it('includes the TutorMeAI runtime apps in the shared library', () => {
-    expect(approvedApps).toHaveLength(28)
+    expect(approvedApps).toHaveLength(29)
 
     expect(getApprovedAppById('chess-tutor')).toMatchObject({
       experience: 'tutormeai-runtime',
@@ -70,12 +70,25 @@ describe('approvedApps', () => {
         defaultLaunchUrl: 'https://www.desmos.com/calculator',
       },
     })
+
+    expect(getApprovedAppById('miro')).toMatchObject({
+      integrationMode: 'partner-embed',
+      integrationConfig: {
+        defaultLaunchUrl: '',
+        launchUrlLabel: 'Miro board or live embed URL',
+        launchUrlPlaceholder: 'https://miro.com/app/board/{board_id}/ or https://miro.com/app/live-embed/{board_id}/',
+        authModel: 'vendor-session',
+      },
+      loadingFallback: {
+        title: 'Miro needs a live-embed board URL',
+      },
+    })
   })
 
   it('gives every approved library app an integration workspace config', () => {
     const approvedLibraryApps = approvedApps.filter((app) => app.experience === 'approved-library')
 
-    expect(approvedLibraryApps).toHaveLength(25)
+    expect(approvedLibraryApps).toHaveLength(26)
     approvedLibraryApps.forEach((app) => {
       expect(app.launchUrl).toBe(`/embedded-apps/catalog/${app.id}`)
       expect(app.integrationConfig?.capabilities?.length).toBeGreaterThan(0)

@@ -11,6 +11,14 @@ export interface TutorMeAIPlatformUser {
   role: TutorMeAIUserRole | null
   pictureUrl: string | null
   onboardingCompletedAt: string | null
+  students: string[]
+}
+
+export interface TutorMeAIPlatformStudent {
+  userId: string
+  email: string | null
+  username: string | null
+  displayName: string
 }
 
 export interface TutorMeAIPlatformSessionSummary {
@@ -166,6 +174,7 @@ export async function updateTutorMeAIPlatformProfile(input: {
   displayName: string
   username: string
   role: TutorMeAIUserRole
+  students?: string[]
   fetchImpl?: typeof fetch
   signal?: AbortSignal
 }): Promise<{
@@ -182,6 +191,7 @@ export async function updateTutorMeAIPlatformProfile(input: {
       displayName: input.displayName,
       username: input.username,
       role: input.role,
+      students: input.students ?? [],
     }),
     mode: 'cors',
     signal: input.signal,
@@ -208,6 +218,48 @@ export async function updateTutorMeAIPlatformProfile(input: {
   return {
     user: normalizeTutorMeAIPlatformUser(payload.data.user),
   }
+}
+
+export async function listTutorMeAIPlatformStudents(input: {
+  backendOrigin: string
+  accessToken: string
+  fetchImpl?: typeof fetch
+  signal?: AbortSignal
+}): Promise<TutorMeAIPlatformStudent[]> {
+  const response = await (input.fetchImpl ?? fetch)(new URL('/api/auth/students', input.backendOrigin).toString(), {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${input.accessToken}`,
+    },
+    mode: 'cors',
+    signal: input.signal,
+  })
+
+  const payload = (await response.json()) as
+    | {
+        ok: true
+        data: {
+          students: TutorMeAIPlatformStudent[]
+        }
+      }
+    | {
+        ok: false
+        error?: {
+          message?: string
+        }
+      }
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(readApiErrorMessage(payload, response.status, 'TutorMeAI student directory lookup failed.'))
+  }
+
+  return payload.data.students.map((student) => ({
+    userId: student.userId,
+    email: student.email ?? null,
+    username: student.username ?? null,
+    displayName: student.displayName,
+  }))
 }
 
 export async function logoutTutorMeAIPlatformSession(input: {
@@ -266,7 +318,17 @@ export function isTutorMeAIPlatformCallbackMessage(
 }
 
 export function isTutorMeAIProfileComplete(user: TutorMeAIPlatformUser | null | undefined) {
-  return Boolean(user?.username && user?.role && user?.onboardingCompletedAt)
+  const assignedStudents = Array.isArray(user?.students) ? user.students : []
+  return Boolean(
+    user?.username &&
+      user?.role &&
+      user?.onboardingCompletedAt &&
+      (!isTutorMeAIReviewerRole(user.role) || assignedStudents.length > 0)
+  )
+}
+
+export function isTutorMeAIReviewerRole(role: TutorMeAIUserRole | null | undefined): role is TutorMeAIUserRole {
+  return role === 'teacher' || role === 'school_admin' || role === 'district_Director'
 }
 
 export function deriveTutorMeAIUsernameCandidate(user: Pick<TutorMeAIPlatformUser, 'email' | 'displayName' | 'username'>) {
@@ -314,5 +376,8 @@ function normalizeTutorMeAIPlatformUser(user: TutorMeAIPlatformUser): TutorMeAIP
     role: user.role ?? null,
     pictureUrl: user.pictureUrl ?? null,
     onboardingCompletedAt: user.onboardingCompletedAt ?? null,
+    students: Array.isArray(user.students)
+      ? [...new Set(user.students.filter((studentId): studentId is string => typeof studentId === 'string' && studentId.trim().length > 0))]
+      : [],
   }
 }

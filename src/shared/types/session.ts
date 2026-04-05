@@ -288,6 +288,7 @@ export const MessageSchema = z.object({
   id: z.string(),
   role: z.nativeEnum(MessageRoleEnum),
   name: z.string().optional(),
+  clientData: JsonObjectSchema.optional(),
   cancel: CancelFunctionSchema.optional(),
   generating: z.boolean().optional(),
   aiProvider: z.union([ModelProviderSchema, z.string()]).optional(),

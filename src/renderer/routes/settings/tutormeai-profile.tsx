@@ -1,11 +1,13 @@
-import { Alert, Button, Group, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Alert, Button, Group, MultiSelect, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
 import type { TutorMeAIUserRole } from '@shared/types'
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useTutorMeAIStudentDirectory } from '@/hooks/useTutorMeAIStudentDirectory'
 import { closeSettings } from '@/modals/Settings'
 import {
   deriveTutorMeAIUsernameCandidate,
+  isTutorMeAIReviewerRole,
   isTutorMeAIProfileComplete,
   logoutTutorMeAIPlatformSession,
   resolveTutorMeAIBackendOrigin,
@@ -39,8 +41,21 @@ export function RouteComponent() {
   const [displayName, setDisplayName] = useState(tutorMeAIProfile.name)
   const [username, setUsername] = useState('')
   const [role, setRole] = useState<TutorMeAIUserRole>(tutorMeAIProfile.role)
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
   const signedInName = (platformUser?.displayName ?? tutorMeAIProfile.name) || t('TutorMeAI user')
   const signedInEmail = (platformUser?.email ?? tutorMeAIProfile.email) || t('Google account email unavailable')
+  const reviewerRoleSelected = isTutorMeAIReviewerRole(role)
+  const studentDirectory = useTutorMeAIStudentDirectory(Boolean(platformUser && accessToken && reviewerRoleSelected))
+  const studentOptions = useMemo(() => {
+    const known = new Set(studentDirectory.options.map((student) => student.value))
+    const preservedSelections = selectedStudentIds
+      .filter((studentId) => !known.has(studentId))
+      .map((studentId) => ({
+        value: studentId,
+        label: `Unknown student (${studentId})`,
+      }))
+    return [...studentDirectory.options, ...preservedSelections]
+  }, [selectedStudentIds, studentDirectory.options])
 
   useEffect(() => {
     setDisplayName(platformUser?.displayName ?? tutorMeAIProfile.name)
@@ -54,10 +69,12 @@ export function RouteComponent() {
           })
     )
     setRole(platformUser?.role ?? tutorMeAIProfile.role)
+    setSelectedStudentIds(platformUser?.students ?? [])
   }, [
     platformUser?.displayName,
     platformUser?.email,
     platformUser?.role,
+    platformUser?.students,
     platformUser?.userId,
     platformUser?.username,
     tutorMeAIProfile.email,
@@ -85,6 +102,12 @@ export function RouteComponent() {
       return
     }
 
+    if (reviewerRoleSelected && selectedStudentIds.length === 0) {
+      setSaveError('Select at least one student for this teacher or administrator profile.')
+      setSaveSuccess(null)
+      return
+    }
+
     try {
       setSaveError(null)
       setSaveSuccess(null)
@@ -95,8 +118,10 @@ export function RouteComponent() {
         displayName: displayName.trim(),
         username: username.trim().toLowerCase(),
         role,
+        students: reviewerRoleSelected ? selectedStudentIds : [],
       })
       updateUser(updated.user)
+      setSelectedStudentIds(updated.user.students)
       setSettings((draft) => {
         draft.tutorMeAIProfile.name = updated.user.displayName
         draft.tutorMeAIProfile.email = updated.user.email ?? ''
@@ -129,6 +154,11 @@ export function RouteComponent() {
               <Text size="sm" c="chatbox-tertiary">
                 {t('Current role')}: {platformUser?.role ?? role}
               </Text>
+              {isTutorMeAIReviewerRole(platformUser?.role) ? (
+                <Text size="sm" c="chatbox-tertiary">
+                  {t('Assigned students')}: {platformUser?.students?.length ?? 0}
+                </Text>
+              ) : null}
             </Stack>
 
             <Button variant="default" onClick={handleLogout}>
@@ -182,6 +212,35 @@ export function RouteComponent() {
             setRole(value as TutorMeAIUserRole)
           }}
         />
+
+        {reviewerRoleSelected ? (
+          <>
+            {studentDirectory.error ? (
+              <Alert color="red" variant="light">
+                {studentDirectory.error}
+              </Alert>
+            ) : null}
+
+            {!studentDirectory.loading && studentOptions.length === 0 ? (
+              <Alert color="yellow" variant="light">
+                No TutorMeAI student profiles are registered yet. Student accounts need to finish onboarding before
+                you can assign them.
+              </Alert>
+            ) : null}
+
+            <MultiSelect
+              label={t('Students')}
+              value={selectedStudentIds}
+              data={studentOptions}
+              searchable
+              clearable
+              disabled={studentDirectory.loading}
+              onChange={setSelectedStudentIds}
+              description={t('Select the students this teacher or administrator is responsible for approving.')}
+              placeholder={studentDirectory.loading ? 'Loading students...' : 'Choose one or more students'}
+            />
+          </>
+        ) : null}
 
         {platformUser && !isTutorMeAIProfileComplete(platformUser) && (
           <Alert color="blue" variant="light">

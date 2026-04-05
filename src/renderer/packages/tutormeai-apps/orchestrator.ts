@@ -1,6 +1,8 @@
 import {
   type AppManifest,
   type AppSessionAuthState,
+  type ChessCoachActionClientData,
+  ChessCoachActionClientDataSchema,
   type ConversationAppContext,
   exampleAuthenticatedPlannerManifest,
   exampleChessGetBoardStateToolSchema,
@@ -86,6 +88,7 @@ type RouteTutorMeAiAppRequestInput = {
   conversationId: string
   userId: string
   userRequest: string
+  requestMessage?: Message
   requestMessageId: string
   previousMessages: Message[]
 }
@@ -547,6 +550,15 @@ function isJsonObject(value: unknown): value is JsonObject {
 
 function toJsonObject(value: unknown): JsonObject | undefined {
   return isJsonObject(value) ? value : undefined
+}
+
+function extractBoundChessCoachAction(message?: Message): ChessCoachActionClientData | null {
+  if (!message?.clientData) {
+    return null
+  }
+
+  const parsedAction = ChessCoachActionClientDataSchema.safeParse(message.clientData)
+  return parsedAction.success ? parsedAction.data : null
 }
 
 function isChessMoveHistoryIntent(userRequest: string) {
@@ -1768,6 +1780,47 @@ async function buildChessMoveMessageFromBoardState(input: {
   }
 }
 
+async function buildChessMoveMessageFromBoundCoachAction(input: {
+  conversationId: string
+  userRequest: string
+  action: ChessCoachActionClientData
+}): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+  const boardState = buildChessBoardStateResult({
+    appSessionId: input.action.appSessionId,
+    summary: input.action.boardState.summary,
+    latestStateDigest: buildChessStateDigestFromSharedSession({
+      fen: input.action.boardState.fen,
+      turn: input.action.boardState.turn === 'white' ? 'w' : 'b',
+      moveCount: input.action.boardState.moveCount,
+      lastMove: input.action.boardState.lastMove,
+      mode: input.action.boardState.mode,
+    }),
+    availableToolNames: input.action.boardState.moveExecutionAvailable ? [exampleChessMakeMoveToolSchema.name] : [],
+  })
+
+  if (!boardState) {
+    return null
+  }
+
+  recordChessStateSelectionSpan({
+    conversationId: input.conversationId,
+    appSessionId: input.action.appSessionId,
+    selectedSource: 'bound-chess-coach-action',
+    selectedResult: boardState,
+    sidebarResult: null,
+    sharedResult: null,
+    selectionReason: 'used the exact board snapshot attached to the clicked chess coach action',
+  })
+
+  return buildChessMoveMessageFromBoardState({
+    conversationId: input.conversationId,
+    appSessionId: input.action.appSessionId,
+    boardState,
+    userRequest: input.userRequest,
+    requestedMoveOverride: input.action.requestedMove,
+  })
+}
+
 async function buildChessMoveMessageFromSidebarSnapshot(
   snapshot: SidebarAppRuntimeSnapshot,
   input: {
@@ -2432,6 +2485,7 @@ export async function routeTutorMeAiAppRequest(
   )
   const chessSidebarIsOpen = uiStore.getState().activeApprovedAppId === 'chess-tutor'
   const chessSuggestedMoveFollowUpIntent = isChessSuggestedMoveFollowUpIntent(input.userRequest)
+  const boundChessCoachAction = extractBoundChessCoachAction(input.requestMessage)
   const hasActiveChessContext =
     Boolean(activeSidebarChessSnapshot) ||
     chessSidebarIsOpen ||
@@ -2442,6 +2496,25 @@ export async function routeTutorMeAiAppRequest(
 
   if (shouldUseChessBoardStateTool(input.userRequest) || (chessSuggestedMoveFollowUpIntent && hasActiveChessContext)) {
     if (isChessMoveIntent(input.userRequest) || chessSuggestedMoveFollowUpIntent) {
+      if (boundChessCoachAction) {
+        const moveMessage = await buildChessMoveMessageFromBoundCoachAction({
+          conversationId: input.conversationId,
+          userRequest: input.userRequest,
+          action: boundChessCoachAction,
+        })
+        if (moveMessage) {
+          return finalizeTutorMeAiInterceptionResult({
+            conversationId: input.conversationId,
+            userRequest: input.userRequest,
+            source: 'chess.move.from-bound-coach-action',
+            appSessionId: boundChessCoachAction.appSessionId,
+            runtimeAppId: exampleInternalChessManifest.appId,
+            approvedAppId: CHESS_APPROVED_APP_ID,
+            result: moveMessage,
+          })
+        }
+      }
+
       if (chessSuggestedMoveFollowUpIntent && !suggestedChessMove) {
         return finalizeTutorMeAiInterceptionResult({
           conversationId: input.conversationId,

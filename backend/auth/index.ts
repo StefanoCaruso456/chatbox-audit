@@ -1,3 +1,4 @@
+export * from './assignments'
 export * from './api'
 export * from './google'
 export * from './postgres-repository'

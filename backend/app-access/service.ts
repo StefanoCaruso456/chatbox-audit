@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { TutorMeAIUserRole } from '@shared/types/settings'
 import { failureResult } from '../errors'
-import type { UserRecord } from '../auth'
+import { isTutorMeAIReviewerRole, readAssignedStudentIds, type AuthRepository, type UserRecord } from '../auth'
 import type { AppAccessRepository } from './repository'
 import type {
   AppAccessRequestRecord,
@@ -14,6 +14,7 @@ const REVIEWER_ROLES = new Set<TutorMeAIUserRole>(['teacher', 'school_admin', 'd
 export class AppAccessService {
   constructor(
     private readonly repository: AppAccessRepository,
+    private readonly authRepository: Pick<AuthRepository, 'listUsersByRole'>,
     private readonly now: () => string = () => new Date().toISOString()
   ) {}
 
@@ -34,6 +35,13 @@ export class AppAccessService {
 
     const latest = await this.repository.getLatestAppAccessRequestForStudentApp(input.student.userId, appId)
     const now = this.now()
+
+    if (!(await this.hasAssignedReviewer(input.student.userId))) {
+      return this.failure(
+        'app-access-forbidden',
+        'No assigned teacher or administrator can approve this app yet. Ask your teacher to add you to their student list.'
+      )
+    }
 
     if (latest?.status === 'approved') {
       return {
@@ -110,10 +118,20 @@ export class AppAccessService {
       return this.failure('app-access-forbidden', 'Only teacher or administrator profiles can review app access requests.')
     }
 
+    const assignedStudentIds = new Set(readAssignedStudentIds(input.reviewer))
+    if (assignedStudentIds.size === 0) {
+      return {
+        ok: true,
+        value: [],
+      }
+    }
+
     const requests = await this.repository.listAppAccessRequestsByStatus('pending')
     return {
       ok: true,
-      value: requests.map((request) => this.toPublicRequest(request)),
+      value: requests
+        .filter((request) => assignedStudentIds.has(request.studentUserId))
+        .map((request) => this.toPublicRequest(request)),
     }
   }
 
@@ -135,6 +153,13 @@ export class AppAccessService {
     const current = await this.repository.getAppAccessRequestById(appAccessRequestId)
     if (!current) {
       return this.failure('app-access-request-not-found', 'The requested app approval record was not found.')
+    }
+
+    if (!this.isReviewerAssignedToStudent(input.reviewer, current.studentUserId)) {
+      return this.failure(
+        'app-access-forbidden',
+        'You are not assigned to review app access requests for this student.'
+      )
     }
 
     if (current.status !== 'pending') {
@@ -177,7 +202,22 @@ export class AppAccessService {
   }
 
   private isReviewerRole(role: TutorMeAIUserRole | null) {
-    return Boolean(role && REVIEWER_ROLES.has(role))
+    return Boolean(role && REVIEWER_ROLES.has(role) && isTutorMeAIReviewerRole(role))
+  }
+
+  private isReviewerAssignedToStudent(reviewer: UserRecord, studentUserId: string) {
+    return readAssignedStudentIds(reviewer).includes(studentUserId)
+  }
+
+  private async hasAssignedReviewer(studentUserId: string) {
+    for (const reviewerRole of REVIEWER_ROLES) {
+      const reviewers = await this.authRepository.listUsersByRole(reviewerRole)
+      if (reviewers.some((reviewer) => this.isReviewerAssignedToStudent(reviewer, studentUserId))) {
+        return true
+      }
+    }
+
+    return false
   }
 
   private normalizeRequired(value: string | null | undefined) {

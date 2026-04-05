@@ -13,15 +13,13 @@ const sendCompletion = vi.fn()
 const sendError = vi.fn()
 const sendState = vi.fn()
 let runtimeContext: { conversationId: string; appSessionId: string } | null = null
-let invocationMessage:
-  | {
-      payload: {
-        toolName: string
-        toolCallId: string
-        arguments: Record<string, string>
-      }
-    }
-  | null = null
+let invocationMessage: {
+  payload: {
+    toolName: string
+    toolCallId: string
+    arguments: Record<string, string>
+  }
+} | null = null
 
 vi.mock('../useEmbeddedAppBridge', () => ({
   useEmbeddedAppBridge: () => ({
@@ -113,10 +111,7 @@ describe('ChessAppPage', () => {
     expect(screen.getByText('Played e4. Black to move.')).toBeTruthy()
     expect(
       sendState.mock.calls.some(
-        ([payload]) =>
-          payload.status === 'active' &&
-          payload.state?.lastMove === 'e4' &&
-          payload.state?.turn === 'b'
+        ([payload]) => payload.status === 'active' && payload.state?.lastMove === 'e4' && payload.state?.turn === 'b'
       )
     ).toBe(true)
   })
@@ -151,10 +146,7 @@ describe('ChessAppPage', () => {
     expect(screen.getByTestId('chess-piece-e2').textContent).toBe('')
     expect(
       sendState.mock.calls.some(
-        ([payload]) =>
-          payload.status === 'active' &&
-          payload.state?.lastMove === 'e4' &&
-          payload.state?.turn === 'b'
+        ([payload]) => payload.status === 'active' && payload.state?.lastMove === 'e4' && payload.state?.turn === 'b'
       )
     ).toBe(true)
   })
@@ -284,27 +276,28 @@ describe('ChessAppPage', () => {
     expect(legalDestinations.textContent).toContain('H3')
   })
 
-  it('uses high-contrast coordinate chips and piece styling for sidebar readability', () => {
+  it('renders white pieces lighter than black pieces for sidebar readability', () => {
     renderChess(<ChessAppPage />)
 
     const lightSquareCoordinate = screen.getByTestId('chess-coordinate-b8')
     const darkSquareCoordinate = screen.getByTestId('chess-coordinate-a8')
     const whitePiece = screen.getByTestId('chess-piece-b1')
-    const whitePieceSquare = screen.getByTestId('chess-square-b1')
-    const blackPieceSquare = screen.getByTestId('chess-square-a8')
+    const blackPiece = screen.getByTestId('chess-piece-b8')
     const lightCoordinateStyle = lightSquareCoordinate.getAttribute('style') ?? ''
     const darkCoordinateStyle = darkSquareCoordinate.getAttribute('style') ?? ''
     const whitePieceStyle = whitePiece.getAttribute('style') ?? ''
-    const whitePieceSquareStyle = whitePieceSquare.getAttribute('style') ?? ''
-    const blackPieceSquareStyle = blackPieceSquare.getAttribute('style') ?? ''
+    const blackPieceStyle = blackPiece.getAttribute('style') ?? ''
 
     expect(lightCoordinateStyle).toContain('background: rgba(15, 23, 42, 0.96)')
     expect(lightCoordinateStyle).toContain('color: rgb(248, 250, 252)')
     expect(darkCoordinateStyle).toContain('background: rgba(15, 23, 42, 0.96)')
     expect(darkCoordinateStyle).toContain('color: rgb(248, 250, 252)')
     expect(darkCoordinateStyle).toContain('box-shadow: 0 2px 6px rgba(2,6,23,0.32)')
-    expect(whitePieceStyle).toContain('1.35px rgba(15, 23, 42, 0.92)')
-    expect(whitePieceSquareStyle).toContain('color: rgb(255, 253, 248)')
-    expect(blackPieceSquareStyle).toContain('color: rgb(17, 24, 39)')
+    expect(whitePiece.textContent).toBe('♘')
+    expect(blackPiece.textContent).toBe('♞')
+    expect(whitePieceStyle).toContain('color: rgb(248, 250, 252)')
+    expect(whitePieceStyle).toContain('0.8px rgba(15, 23, 42, 0.58)')
+    expect(blackPieceStyle).toContain('color: rgb(15, 23, 42)')
+    expect(blackPieceStyle).toContain('text-shadow: 0 1px 0 rgba(248,250,252,0.18), 0 2px 4px rgba(15,23,42,0.2)')
   })
 })

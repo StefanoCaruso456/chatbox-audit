@@ -1,12 +1,14 @@
-import { Alert, Box, Button, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Alert, Box, Button, MultiSelect, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
 import type { TutorMeAIUserRole } from '@shared/types/settings'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTutorMeAIStudentDirectory } from '@/hooks/useTutorMeAIStudentDirectory'
 import {
   buildTutorMeAIPlatformGoogleStartUrl,
   deriveTutorMeAIUsernameCandidate,
   fetchTutorMeAIPlatformProfile,
   isTutorMeAIPlatformCallbackMessage,
   isTutorMeAIProfileComplete,
+  isTutorMeAIReviewerRole,
   refreshTutorMeAIPlatformSession,
   resolveTutorMeAIBackendOrigin,
   updateTutorMeAIPlatformProfile,
@@ -39,8 +41,21 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
   const [displayName, setDisplayName] = useState('')
   const [username, setUsername] = useState('')
   const [role, setRole] = useState<TutorMeAIUserRole>('student')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
   const [profileError, setProfileError] = useState<string | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
+  const reviewerRoleSelected = isTutorMeAIReviewerRole(role)
+  const studentDirectory = useTutorMeAIStudentDirectory(Boolean(accessToken && reviewerRoleSelected))
+  const studentOptions = useMemo(() => {
+    const known = new Set(studentDirectory.options.map((student) => student.value))
+    const preservedSelections = selectedStudentIds
+      .filter((studentId) => !known.has(studentId))
+      .map((studentId) => ({
+        value: studentId,
+        label: `Unknown student (${studentId})`,
+      }))
+    return [...studentDirectory.options, ...preservedSelections]
+  }, [selectedStudentIds, studentDirectory.options])
 
   const clearConnectPolling = useCallback(() => {
     if (pollTimerRef.current !== null) {
@@ -147,8 +162,9 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
     setDisplayName(user.displayName)
     setUsername(deriveTutorMeAIUsernameCandidate(user))
     setRole(user.role ?? 'student')
+    setSelectedStudentIds(user.students ?? [])
     setProfileError(null)
-  }, [user?.displayName, user?.email, user?.role, user?.userId, user?.username])
+  }, [user?.displayName, user?.email, user?.role, user?.students, user?.userId, user?.username])
 
   const handleSignIn = useCallback(() => {
     clearConnectPolling()
@@ -185,6 +201,11 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
       return
     }
 
+    if (reviewerRoleSelected && selectedStudentIds.length === 0) {
+      setProfileError('Select at least one student for this teacher or administrator profile.')
+      return
+    }
+
     setSavingProfile(true)
     setProfileError(null)
 
@@ -195,6 +216,7 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
         displayName: displayName.trim(),
         username: username.trim().toLowerCase(),
         role,
+        students: reviewerRoleSelected ? selectedStudentIds : [],
       })
       updateUser(updated.user)
     } catch (updateError) {
@@ -202,14 +224,14 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
     } finally {
       setSavingProfile(false)
     }
-  }, [accessToken, backendOrigin, displayName, role, updateUser, user, username])
+  }, [accessToken, backendOrigin, displayName, reviewerRoleSelected, role, selectedStudentIds, updateUser, user, username])
 
   if (!hasHydrated || status === 'checking') {
     return (
       <Box p="xl" mih="100vh" bg="linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)">
         <Stack align="center" justify="center" mih="100vh" gap="sm">
           <Title order={2}>TutorMeAI</Title>
-          <Text c="dimmed">Checking your account…</Text>
+          <Text c="dimmed">Checking your account...</Text>
         </Stack>
       </Box>
     )
@@ -269,6 +291,34 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
                   setRole(value as TutorMeAIUserRole)
                 }}
               />
+
+              {reviewerRoleSelected ? (
+                <>
+                  {studentDirectory.error ? (
+                    <Alert color="red" variant="light">
+                      {studentDirectory.error}
+                    </Alert>
+                  ) : null}
+
+                  {!studentDirectory.loading && studentOptions.length === 0 ? (
+                    <Alert color="yellow" variant="light">
+                      No TutorMeAI student profiles are registered yet. Ask a student to finish onboarding first.
+                    </Alert>
+                  ) : null}
+
+                  <MultiSelect
+                    label="Students"
+                    value={selectedStudentIds}
+                    data={studentOptions}
+                    searchable
+                    clearable
+                    disabled={studentDirectory.loading}
+                    onChange={setSelectedStudentIds}
+                    description="Select the students this teacher or administrator will approve apps for."
+                    placeholder={studentDirectory.loading ? 'Loading students...' : 'Choose one or more students'}
+                  />
+                </>
+              ) : null}
 
               <Button loading={savingProfile} onClick={() => void handleCompleteProfile()}>
                 Continue to TutorMeAI

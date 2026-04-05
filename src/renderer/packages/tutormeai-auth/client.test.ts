@@ -5,6 +5,7 @@ import {
   fetchTutorMeAIPlatformProfile,
   isTutorMeAIPlatformCallbackMessage,
   isTutorMeAIProfileComplete,
+  listTutorMeAIPlatformStudents,
   logoutTutorMeAIPlatformSession,
   refreshTutorMeAIPlatformSession,
   resolveTutorMeAIBackendOrigin,
@@ -52,6 +53,7 @@ describe('TutorMeAI auth client helpers', () => {
                 role: null,
                 pictureUrl: null,
                 onboardingCompletedAt: null,
+                students: [],
               },
               session: {
                 platformSessionId: 'platform-session.demo',
@@ -85,6 +87,7 @@ describe('TutorMeAI auth client helpers', () => {
                 role: 'student',
                 pictureUrl: null,
                 onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+                students: [],
               },
               session: {
                 platformSessionId: 'platform-session.demo',
@@ -138,6 +141,7 @@ describe('TutorMeAI auth client helpers', () => {
               role: 'student',
               pictureUrl: null,
               onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+              students: [],
             },
           },
         }),
@@ -162,6 +166,86 @@ describe('TutorMeAI auth client helpers', () => {
     expect(updated.user.username).toBe('student.demo')
     expect(updated.user.role).toBe('student')
     expect(deriveTutorMeAIUsernameCandidate(updated.user)).toBe('student.demo')
+  })
+
+  it('loads the registered student directory and requires reviewer assignments for completion', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            students: [
+              {
+                userId: 'student.user',
+                email: 'student@example.com',
+                username: 'student.demo',
+                displayName: 'Student Demo',
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        }
+      )
+    )
+
+    const students = await listTutorMeAIPlatformStudents({
+      backendOrigin: 'https://chatbox-audit-production.up.railway.app',
+      accessToken: 'access-token',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+
+    expect(students).toEqual([
+      {
+        userId: 'student.user',
+        email: 'student@example.com',
+        username: 'student.demo',
+        displayName: 'Student Demo',
+      },
+    ])
+
+    expect(
+      isTutorMeAIProfileComplete({
+        userId: 'teacher.user',
+        email: 'teacher@example.com',
+        username: 'teacher.demo',
+        displayName: 'Teacher Demo',
+        role: 'teacher',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+        students: [],
+      })
+    ).toBe(false)
+
+    expect(
+      isTutorMeAIProfileComplete({
+        userId: 'teacher.user',
+        email: 'teacher@example.com',
+        username: 'teacher.demo',
+        displayName: 'Teacher Demo',
+        role: 'teacher',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+        students: ['student.user'],
+      })
+    ).toBe(true)
+
+    expect(
+      isTutorMeAIProfileComplete({
+        userId: 'teacher.user',
+        email: 'teacher@example.com',
+        username: 'teacher.demo',
+        displayName: 'Teacher Demo',
+        role: 'teacher',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+        students: undefined as unknown as string[],
+      })
+    ).toBe(false)
   })
 
   it('revokes the TutorMeAI platform session during logout', async () => {
@@ -248,6 +332,7 @@ describe('TutorMeAI auth client helpers', () => {
           role: null,
           pictureUrl: null,
           onboardingCompletedAt: null,
+          students: [],
         },
       },
     })

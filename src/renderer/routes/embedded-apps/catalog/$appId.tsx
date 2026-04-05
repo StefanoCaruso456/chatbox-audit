@@ -5,6 +5,7 @@ import AppCategoryBadge from '@/components/apps/AppCategoryBadge'
 import AppGradeBadge from '@/components/apps/AppGradeBadge'
 import AppIcon from '@/components/apps/AppIcon'
 import { getApprovedAppById } from '@/data/approvedApps'
+import { getLaunchUrlValidationMessage, getPreviewReferrerPolicy, normalizeLaunchUrl } from '@/lib/approvedAppLaunchConfig'
 import { appIntegrationModeMeta, type ApprovedApp } from '@/types/apps'
 
 const APP_LAUNCH_OVERRIDES_STORAGE_KEY = 'approved-app-launch-overrides:v1'
@@ -39,23 +40,6 @@ function persistLaunchOverride(appId: string, value: string | null) {
     delete next[appId]
   }
   window.localStorage.setItem(APP_LAUNCH_OVERRIDES_STORAGE_KEY, JSON.stringify(next))
-}
-
-function sanitizeAbsoluteUrl(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return ''
-  }
-
-  try {
-    const parsed = new URL(trimmed)
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return ''
-    }
-    return parsed.toString()
-  } catch {
-    return ''
-  }
 }
 
 function getModeCopy(app: ApprovedApp) {
@@ -94,7 +78,7 @@ function getModeCopy(app: ApprovedApp) {
 }
 
 function getDefaultLaunchUrl(app: ApprovedApp) {
-  return sanitizeAbsoluteUrl(app.integrationConfig?.defaultLaunchUrl ?? '')
+  return normalizeLaunchUrl(app, app.integrationConfig?.defaultLaunchUrl ?? '')
 }
 
 function getLaunchInputLabel(app: ApprovedApp) {
@@ -127,7 +111,7 @@ function getLaunchInputPlaceholder(app: ApprovedApp) {
 }
 
 function getResolvedPreviewUrl(app: ApprovedApp, savedUrl: string) {
-  const sanitizedSavedUrl = sanitizeAbsoluteUrl(savedUrl)
+  const sanitizedSavedUrl = normalizeLaunchUrl(app, savedUrl)
   if (sanitizedSavedUrl) {
     return sanitizedSavedUrl
   }
@@ -152,11 +136,13 @@ function canPreviewUrl(app: ApprovedApp) {
 }
 
 function EmbeddedPreviewFrame({
+  app,
   appName,
   url,
   blockedCopy,
   onStatusChange,
 }: {
+  app: ApprovedApp
   appName: string
   url: string
   blockedCopy: string
@@ -186,7 +172,7 @@ function EmbeddedPreviewFrame({
         className={`h-[30rem] w-full border-0 bg-white transition-opacity duration-200 ${status === 'blocked' ? 'opacity-0' : 'opacity-100'}`}
         sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
         allow="clipboard-read; clipboard-write; fullscreen"
-        referrerPolicy="strict-origin-when-cross-origin"
+        referrerPolicy={getPreviewReferrerPolicy(app)}
         onLoad={() => {
           setStatus('ready')
           onStatusChange?.('ready')
@@ -333,6 +319,7 @@ function ApprovedAppPlaceholderRoute() {
   const app = getApprovedAppById(appId)
   const [savedUrl, setSavedUrl] = useState('')
   const [draftUrl, setDraftUrl] = useState('')
+  const [launchConfigError, setLaunchConfigError] = useState<string | null>(null)
   const [previewStatus, setPreviewStatus] = useState<'loading' | 'ready' | 'blocked'>('blocked')
   const resolvedPreviewUrl = useMemo(() => (app ? getResolvedPreviewUrl(app, savedUrl) : ''), [app, savedUrl])
   const launchConfigEnabled = app ? supportsLaunchConfig(app) : false
@@ -346,6 +333,7 @@ function ApprovedAppPlaceholderRoute() {
     const savedValue = readLaunchOverrides()[app.id] ?? ''
     setSavedUrl(savedValue)
     setDraftUrl(savedValue || getDefaultLaunchUrl(app))
+    setLaunchConfigError(null)
   }, [appId, app])
 
   useEffect(() => {
@@ -369,13 +357,21 @@ function ApprovedAppPlaceholderRoute() {
   const modeCopy = getModeCopy(app)
 
   const handleSaveLaunchUrl = () => {
-    const sanitized = sanitizeAbsoluteUrl(draftUrl)
+    const sanitized = normalizeLaunchUrl(app, draftUrl)
+    const validationMessage = getLaunchUrlValidationMessage(app, draftUrl)
+    if (validationMessage) {
+      setLaunchConfigError(validationMessage)
+      return
+    }
+
+    setLaunchConfigError(null)
     persistLaunchOverride(app.id, sanitized || null)
     setSavedUrl(sanitized)
     setDraftUrl(sanitized)
   }
 
   const handleClearLaunchUrl = () => {
+    setLaunchConfigError(null)
     persistLaunchOverride(app.id, null)
     setSavedUrl('')
     setDraftUrl(getDefaultLaunchUrl(app))
@@ -426,6 +422,7 @@ function ApprovedAppPlaceholderRoute() {
 
           {showPreview ? (
             <EmbeddedPreviewFrame
+              app={app}
               appName={app.name}
               url={resolvedPreviewUrl}
               blockedCopy={
@@ -446,11 +443,17 @@ function ApprovedAppPlaceholderRoute() {
                 <Text c="rgba(255,255,255,0.72)">
                   Save an app-specific launch URL here to keep testing this integration inside ChatBridge without editing the catalog data each time.
                 </Text>
+                {app.id === 'miro' ? (
+                  <Text size="sm" c="rgba(255,255,255,0.68)">
+                    Paste a Miro board URL, a Miro live-embed URL, or the iframe snippet returned by BoardsPicker. ChatBridge will normalize it into the official live-embed format with <code>usePostAuth=true</code>.
+                  </Text>
+                ) : null}
                 <TextInput
                   label={getLaunchInputLabel(app)}
                   placeholder={getLaunchInputPlaceholder(app)}
                   value={draftUrl}
                   onChange={(event) => setDraftUrl(event.currentTarget.value)}
+                  error={launchConfigError}
                 />
                 <Group>
                   <Button onClick={handleSaveLaunchUrl}>Save launch URL</Button>

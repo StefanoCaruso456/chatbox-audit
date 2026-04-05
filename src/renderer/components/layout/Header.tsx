@@ -56,12 +56,12 @@ export default function Header(props: { session: Session }) {
     if (!currentSession) {
       return
     }
-    NiceModal.show('session-settings', { session: currentSession })
+    void NiceModal.show('session-settings', { session: currentSession })
   }
 
   return (
     <>
-      <Flex h={54} align="center" px="sm" className={'flex-none title-bar'}>
+      <Flex h={54} align="center" px="sm" className="title-bar cb-neumo-topbar flex-none">
         {(!showSidebar || isSmallScreen) && (
           <Flex align="center" className={needRoomForMacWindowControls ? 'pl-20' : ''}>
             <ActionIcon
@@ -132,7 +132,7 @@ export default function Header(props: { session: Session }) {
         <WindowControls className="-mr-3 ml-2" />
       </Flex>
 
-      <Divider />
+      <Divider className="cb-neumo-divider" />
     </>
   )
 }
