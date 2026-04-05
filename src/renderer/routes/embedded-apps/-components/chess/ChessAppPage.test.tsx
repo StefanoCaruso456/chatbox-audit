@@ -121,6 +121,44 @@ describe('ChessAppPage', () => {
     ).toBe(true)
   })
 
+  it('reuses the live session when chess.launch-game replays for the same app session', async () => {
+    const view = renderChess(<ChessAppPage />)
+
+    fireEvent.click(screen.getByTestId('chess-square-e2'))
+    fireEvent.click(screen.getByTestId('chess-square-e4'))
+
+    expect(screen.getByText('Played e4. Black to move.')).toBeTruthy()
+    expect(screen.getByTestId('chess-piece-e4').textContent).toContain('♙')
+
+    invocationMessage = {
+      payload: {
+        toolName: 'chess.launch-game',
+        toolCallId: 'tool-call.sidebar.chess.replay',
+        arguments: {
+          mode: 'practice',
+        },
+      },
+    }
+
+    view.rerender(
+      <MantineProvider>
+        <ChessAppPage />
+      </MantineProvider>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('chess-piece-e4').textContent).toContain('♙'))
+
+    expect(screen.getByTestId('chess-piece-e2').textContent).toBe('')
+    expect(
+      sendState.mock.calls.some(
+        ([payload]) =>
+          payload.status === 'active' &&
+          payload.state?.lastMove === 'e4' &&
+          payload.state?.turn === 'b'
+      )
+    ).toBe(true)
+  })
+
   it('applies chess.make-move invocations from the sidebar host and completes with updated board state', async () => {
     invocationMessage = {
       payload: {
