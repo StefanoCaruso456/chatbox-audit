@@ -5,10 +5,11 @@
 import { MantineProvider } from '@mantine/core'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import AppAccessApprovalRuntime from './AppAccessApprovalRuntime'
+import * as approvedAppsModule from '@/data/approvedApps'
 import { appAccessStore } from '@/stores/appAccessStore'
 import { tutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
 import { uiStore } from '@/stores/uiStore'
+import AppAccessApprovalRuntime from './AppAccessApprovalRuntime'
 
 const {
   submitTutorMeAIAppAccessRequest,
@@ -32,6 +33,26 @@ vi.mock('@/packages/app-access/client', async () => {
     decideTutorMeAIAppAccessRequest,
   }
 })
+
+function mockTeacherApprovalForApp(appId: string) {
+  return vi.spyOn(approvedAppsModule, 'getApprovedAppById').mockImplementation((requestedAppId: string) => {
+    const app = approvedAppsModule.approvedAppsById.get(requestedAppId)
+    if (!app) {
+      return undefined
+    }
+
+    if (requestedAppId !== appId) {
+      return app
+    }
+
+    return {
+      ...app,
+      accessPolicy: {
+        requiresTeacherApproval: true,
+      },
+    }
+  })
+}
 
 describe('AppAccessApprovalRuntime', () => {
   if (!window.matchMedia) {
@@ -91,6 +112,7 @@ describe('AppAccessApprovalRuntime', () => {
   })
 
   it('blocks a student behind a waiting-for-teacher modal until approval exists', async () => {
+    mockTeacherApprovalForApp('chess-tutor')
     submitTutorMeAIAppAccessRequest.mockResolvedValueOnce({
       access: 'pending',
       request: {
@@ -152,7 +174,44 @@ describe('AppAccessApprovalRuntime', () => {
     expect(appAccessStore.getState().studentSubmittingAppId).toBeNull()
   })
 
+  it('opens an ungated app immediately for a student profile', async () => {
+    tutorMeAIAuthStore.setState({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        userId: 'student.user',
+        email: 'student@example.com',
+        username: 'student.demo',
+        displayName: 'Student Demo',
+        role: 'student',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+        students: [],
+      },
+      status: 'authenticated',
+      error: null,
+      hasHydrated: true,
+    })
+    uiStore.setState({
+      requestedApprovedAppId: 'chess-tutor',
+    })
+
+    render(
+      <MantineProvider>
+        <AppAccessApprovalRuntime />
+      </MantineProvider>
+    )
+
+    await waitFor(() => {
+      expect(uiStore.getState().activeApprovedAppId).toBe('chess-tutor')
+    })
+
+    expect(submitTutorMeAIAppAccessRequest).not.toHaveBeenCalled()
+    expect(screen.queryByText(/waiting for teacher approval/i)).toBeNull()
+  })
+
   it('shows a teacher popup and lets the teacher approve the pending student request', async () => {
+    mockTeacherApprovalForApp('chess-tutor')
     listTutorMeAIPendingAppAccessRequests.mockResolvedValueOnce([
       {
         appAccessRequestId: 'request-1',
@@ -228,6 +287,7 @@ describe('AppAccessApprovalRuntime', () => {
   })
 
   it('clears the student requesting overlay once a pending request is approved and the app opens', async () => {
+    mockTeacherApprovalForApp('chess-tutor')
     fetchTutorMeAIMyAppAccessRequest.mockResolvedValueOnce({
       appAccessRequestId: 'request-1',
       appId: 'chess-tutor',

@@ -10,11 +10,16 @@ import {
 import { useAppAccessStore } from '@/stores/appAccessStore'
 import { useTutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
 import { useUIStore } from '@/stores/uiStore'
+import type { ApprovedApp } from '@/types/apps'
 
 const POLL_INTERVAL_MS = 2000
 
 function isReviewerRole(role: string | null | undefined) {
   return role === 'teacher' || role === 'school_admin' || role === 'district_Director'
+}
+
+function requiresTeacherApproval(app: ApprovedApp | null | undefined) {
+  return app?.accessPolicy?.requiresTeacherApproval === true
 }
 
 export default function AppAccessApprovalRuntime() {
@@ -49,7 +54,12 @@ export default function AppAccessApprovalRuntime() {
       return
     }
 
-    if (user.role !== 'student') {
+    if (user.role !== 'student' || !requiresTeacherApproval(app)) {
+      if (studentRequest?.appId === app.id) {
+        setStudentRequest(null)
+      }
+      setStudentSubmittingAppId(null)
+      setAppAccessError(null)
       completeApprovedAppOpen(app.id)
       return
     }
@@ -101,6 +111,7 @@ export default function AppAccessApprovalRuntime() {
     setAppAccessError,
     setStudentRequest,
     setStudentSubmittingAppId,
+    studentRequest?.appId,
     status,
     user,
   ])
@@ -117,6 +128,11 @@ export default function AppAccessApprovalRuntime() {
 
   useEffect(() => {
     if (!accessToken || user?.role !== 'student' || studentRequest?.status !== 'pending') {
+      return
+    }
+
+    const app = getApprovedAppById(studentRequest.appId)
+    if (!requiresTeacherApproval(app)) {
       return
     }
 
@@ -210,9 +226,7 @@ export default function AppAccessApprovalRuntime() {
           appAccessRequestId: requestId,
           status: nextStatus,
         })
-        setTeacherPendingRequests(
-          teacherPendingRequests.filter((request) => request.appAccessRequestId !== requestId)
-        )
+        setTeacherPendingRequests(teacherPendingRequests.filter((request) => request.appAccessRequestId !== requestId))
       } catch (decisionError) {
         setAppAccessError(decisionError instanceof Error ? decisionError.message : String(decisionError))
       } finally {
@@ -222,8 +236,18 @@ export default function AppAccessApprovalRuntime() {
     [accessToken, setAppAccessError, setReviewerBusyRequestId, setTeacherPendingRequests, teacherPendingRequests]
   )
 
-  const activeTeacherRequest = teacherPendingRequests[0] ?? null
+  const activeTeacherRequest =
+    teacherPendingRequests.find((request) => requiresTeacherApproval(getApprovedAppById(request.appId))) ?? null
+  const studentRequestRequiresApproval = requiresTeacherApproval(
+    studentRequest ? getApprovedAppById(studentRequest.appId) : undefined
+  )
+  const studentSubmittingRequiresApproval = requiresTeacherApproval(
+    studentSubmittingAppId ? getApprovedAppById(studentSubmittingAppId) : undefined
+  )
   const studentWaitingTitle = useMemo(() => {
+    if (!studentRequestRequiresApproval && !studentSubmittingRequiresApproval) {
+      return ''
+    }
     if (studentRequest?.status === 'declined') {
       return `${studentRequest.appName} was declined`
     }
@@ -235,12 +259,15 @@ export default function AppAccessApprovalRuntime() {
       return app ? `Requesting ${app.name}` : 'Requesting app approval'
     }
     return ''
-  }, [studentRequest, studentSubmittingAppId])
+  }, [studentRequest, studentRequestRequiresApproval, studentSubmittingAppId, studentSubmittingRequiresApproval])
 
   return (
     <>
       <Modal
-        opened={Boolean(studentRequest) || Boolean(studentSubmittingAppId)}
+        opened={
+          (Boolean(studentRequest) && studentRequestRequiresApproval) ||
+          (Boolean(studentSubmittingAppId) && studentSubmittingRequiresApproval)
+        }
         onClose={() => {
           if (studentRequest?.status === 'declined') {
             setStudentRequest(null)
