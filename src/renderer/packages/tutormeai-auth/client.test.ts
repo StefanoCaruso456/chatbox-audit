@@ -5,6 +5,7 @@ import {
   fetchTutorMeAIPlatformProfile,
   isTutorMeAIPlatformCallbackMessage,
   isTutorMeAIProfileComplete,
+  logoutTutorMeAIPlatformSession,
   refreshTutorMeAIPlatformSession,
   resolveTutorMeAIBackendOrigin,
   updateTutorMeAIPlatformProfile,
@@ -161,6 +162,46 @@ describe('TutorMeAI auth client helpers', () => {
     expect(updated.user.username).toBe('student.demo')
     expect(updated.user.role).toBe('student')
     expect(deriveTutorMeAIUsernameCandidate(updated.user)).toBe('student.demo')
+  })
+
+  it('revokes the TutorMeAI platform session during logout', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            revoked: true,
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        }
+      )
+    )
+
+    await logoutTutorMeAIPlatformSession({
+      backendOrigin: 'https://chatbox-audit-production.up.railway.app',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://chatbox-audit-production.up.railway.app/api/auth/platform/logout',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: 'Bearer access-token',
+          'content-type': 'application/json',
+        }),
+        body: JSON.stringify({
+          refreshToken: 'refresh-token',
+        }),
+      })
+    )
   })
 
   it('recognizes platform callback messages only from the configured backend origin', () => {

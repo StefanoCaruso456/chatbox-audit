@@ -1,4 +1,4 @@
-import { Alert, Button, Select, Stack, Text, TextInput, Title } from '@mantine/core'
+import { Alert, Button, Group, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
 import type { TutorMeAIUserRole } from '@shared/types'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
@@ -39,6 +39,8 @@ export function RouteComponent() {
   const [displayName, setDisplayName] = useState(tutorMeAIProfile.name)
   const [username, setUsername] = useState('')
   const [role, setRole] = useState<TutorMeAIUserRole>(tutorMeAIProfile.role)
+  const signedInName = (platformUser?.displayName ?? tutorMeAIProfile.name) || t('TutorMeAI user')
+  const signedInEmail = (platformUser?.email ?? tutorMeAIProfile.email) || t('Google account email unavailable')
 
   useEffect(() => {
     setDisplayName(platformUser?.displayName ?? tutorMeAIProfile.name)
@@ -118,6 +120,23 @@ export function RouteComponent() {
       </Stack>
 
       <Stack gap="md" maw={420}>
+        <Paper withBorder p="md">
+          <Group justify="space-between" align="flex-start" gap="md">
+            <Stack gap={4} flex={1}>
+              <Text fw={600}>{t('Signed in to TutorMeAI')}</Text>
+              <Text>{signedInName}</Text>
+              <Text size="sm" c="chatbox-tertiary">{signedInEmail}</Text>
+              <Text size="sm" c="chatbox-tertiary">
+                {t('Current role')}: {platformUser?.role ?? role}
+              </Text>
+            </Stack>
+
+            <Button variant="default" onClick={handleLogout}>
+              {t('Sign out')}
+            </Button>
+          </Group>
+        </Paper>
+
         {logoutError && (
           <Alert color="red" variant="light">
             {logoutError}
@@ -178,10 +197,6 @@ export function RouteComponent() {
 
         <Button onClick={() => void handleSaveProfile()} loading={saving} disabled={!platformUser || !accessToken}>
           {t('Save profile')}
-        </Button>
-
-        <Button variant="default" onClick={handleLogout}>
-          {t('Sign out')}
         </Button>
       </Stack>
     </Stack>
