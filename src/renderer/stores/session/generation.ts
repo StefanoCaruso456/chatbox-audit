@@ -205,6 +205,7 @@ export async function generate(
                 conversationId: session.id,
                 userId: configs.uuid || 'local-user',
                 userRequest: getMessageText(latestUserMessage, true, true),
+                requestMessage: latestUserMessage,
                 requestMessageId: latestUserMessage.id,
                 previousMessages,
               })

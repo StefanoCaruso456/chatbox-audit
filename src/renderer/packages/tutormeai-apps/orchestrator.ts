@@ -1,6 +1,8 @@
 import {
   type AppManifest,
   type AppSessionAuthState,
+  type ChessCoachActionClientData,
+  ChessCoachActionClientDataSchema,
   type ConversationAppContext,
   exampleAuthenticatedPlannerManifest,
   exampleChessGetBoardStateToolSchema,
@@ -86,6 +88,7 @@ type RouteTutorMeAiAppRequestInput = {
   conversationId: string
   userId: string
   userRequest: string
+  requestMessage?: Message
   requestMessageId: string
   previousMessages: Message[]
 }
@@ -95,7 +98,8 @@ const CHESS_APPROVED_APP_ID = 'chess-tutor'
 
 function getMessageTraceContext(message: Message) {
   const embeddedAppPart = message.contentParts.find(
-    (part): part is Extract<(typeof message.contentParts)[number], { type: 'embedded-app' }> => part.type === 'embedded-app'
+    (part): part is Extract<(typeof message.contentParts)[number], { type: 'embedded-app' }> =>
+      part.type === 'embedded-app'
   )
   if (!embeddedAppPart) {
     return {}
@@ -117,7 +121,8 @@ function inferToolNameFromMessage(message: Message) {
   }
 
   const embeddedAppPart = message.contentParts.find(
-    (part): part is Extract<(typeof message.contentParts)[number], { type: 'embedded-app' }> => part.type === 'embedded-app'
+    (part): part is Extract<(typeof message.contentParts)[number], { type: 'embedded-app' }> =>
+      part.type === 'embedded-app'
   )
   return embeddedAppPart?.bridge?.pendingInvocation?.toolName
 }
@@ -139,8 +144,7 @@ function finalizeTutorMeAiInterceptionResult(input: {
   approvedAppId?: string
   metadata?: JsonObject
 }) {
-  const messageContext =
-    input.result.kind === 'pass-through' ? {} : getMessageTraceContext(input.result.message)
+  const messageContext = input.result.kind === 'pass-through' ? {} : getMessageTraceContext(input.result.message)
   const appSessionId = input.appSessionId ?? messageContext.appSessionId
   const runtimeAppId = input.runtimeAppId ?? messageContext.runtimeAppId
   const approvedAppId = input.approvedAppId ?? messageContext.approvedAppId
@@ -222,7 +226,9 @@ function recordChessStateSelectionSpan(input: {
         },
     metadata: {
       selectionReason: input.selectionReason,
-      ...(typeof input.sidebarResult?.moveCount === 'number' ? { sidebarMoveCount: input.sidebarResult.moveCount } : {}),
+      ...(typeof input.sidebarResult?.moveCount === 'number'
+        ? { sidebarMoveCount: input.sidebarResult.moveCount }
+        : {}),
       ...(typeof input.sharedResult?.moveCount === 'number' ? { sharedMoveCount: input.sharedResult.moveCount } : {}),
       ...(input.sidebarUpdatedAt ? { sidebarUpdatedAt: input.sidebarUpdatedAt } : {}),
       ...(input.sharedUpdatedAt ? { sharedUpdatedAt: input.sharedUpdatedAt } : {}),
@@ -514,6 +520,15 @@ function isJsonObject(value: unknown): value is JsonObject {
 
 function toJsonObject(value: unknown): JsonObject | undefined {
   return isJsonObject(value) ? value : undefined
+}
+
+function extractBoundChessCoachAction(message?: Message): ChessCoachActionClientData | null {
+  if (!message?.clientData) {
+    return null
+  }
+
+  const parsedAction = ChessCoachActionClientDataSchema.safeParse(message.clientData)
+  return parsedAction.success ? parsedAction.data : null
 }
 
 function isChessMoveHistoryIntent(userRequest: string) {
@@ -835,7 +850,8 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
       typeof stateDigest.lastMove === 'string' && stateDigest.lastMove.trim().length > 0
         ? stateDigest.lastMove
         : 'No moves yet',
-    moveHistory: source.moveHistory?.filter((move): move is string => typeof move === 'string' && move.trim().length > 0) ?? [],
+    moveHistory:
+      source.moveHistory?.filter((move): move is string => typeof move === 'string' && move.trim().length > 0) ?? [],
     legalMoveCount: legalMoves.length,
     legalMoves: legalMoves.slice(0, 20),
     candidateMoves,
@@ -933,7 +949,9 @@ function buildChessHistoryText(result: ChessBoardStateToolResult, userRequest: s
   }
 
   const requestedMoveCount =
-    normalized.includes('last five moves') || normalized.includes('last 5 moves') || normalized.includes('last few moves')
+    normalized.includes('last five moves') ||
+    normalized.includes('last 5 moves') ||
+    normalized.includes('last few moves')
       ? 5
       : Math.min(5, result.moveHistory.length)
   const recentMoves = result.moveHistory.slice(-requestedMoveCount)
@@ -962,7 +980,16 @@ function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest
 }
 
 function buildChessMoveToolResult(completionResult: JsonObject): ChessMoveToolResult | null {
-  const requiredStringFields = ['appSessionId', 'requestedMove', 'appliedMove', 'fen', 'turn', 'lastMove', 'summary', 'explanation']
+  const requiredStringFields = [
+    'appSessionId',
+    'requestedMove',
+    'appliedMove',
+    'fen',
+    'turn',
+    'lastMove',
+    'summary',
+    'explanation',
+  ]
   for (const field of requiredStringFields) {
     if (typeof completionResult[field] !== 'string' || completionResult[field].trim().length === 0) {
       return null
@@ -1085,7 +1112,11 @@ function extractLastSuggestedChessMove(previousMessages: Message[]) {
     }
 
     for (const part of message.contentParts) {
-      if (part.type !== 'tool-call' || part.toolName !== exampleChessGetBoardStateToolSchema.name || part.state !== 'result') {
+      if (
+        part.type !== 'tool-call' ||
+        part.toolName !== exampleChessGetBoardStateToolSchema.name ||
+        part.state !== 'result'
+      ) {
         continue
       }
 
@@ -1382,7 +1413,8 @@ function buildChessBoardStateMessage(input: {
     appSessionId: input.reference.appSessionId,
     summary: input.reference.part.summary,
     latestStateDigest:
-      toJsonObject(input.reference.part.bridge?.completion?.result) ?? input.reference.part.bridge?.bootstrap?.initialState,
+      toJsonObject(input.reference.part.bridge?.completion?.result) ??
+      input.reference.part.bridge?.bootstrap?.initialState,
     availableToolNames: input.reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
   })
   if (!result) {
@@ -1499,7 +1531,9 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
       sharedResult,
       sidebarUpdatedAt: snapshot.updatedAt,
       sharedUpdatedAt: sharedSnapshot?.updatedAt,
-      selectionReason: sharedResult ? 'sidebar snapshot was unreadable' : 'no sidebar or shared chess state was readable',
+      selectionReason: sharedResult
+        ? 'sidebar snapshot was unreadable'
+        : 'no sidebar or shared chess state was readable',
     })
     return sharedResult
   }
@@ -1514,7 +1548,9 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
       sharedResult,
       sidebarUpdatedAt: snapshot.updatedAt,
       sharedUpdatedAt: sharedSnapshot?.updatedAt,
-      selectionReason: sharedResult ? 'shared snapshot was unavailable for comparison' : 'shared chess session unavailable',
+      selectionReason: sharedResult
+        ? 'shared snapshot was unavailable for comparison'
+        : 'shared chess session unavailable',
     })
     return sidebarResult
   }
@@ -1524,8 +1560,7 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
     recordChessStateSelectionSpan({
       conversationId: snapshot.hostSessionId,
       appSessionId: snapshot.appSessionId,
-      selectedSource:
-        selectedResult === sidebarResult ? 'sidebar-runtime-snapshot' : 'shared-chess-session',
+      selectedSource: selectedResult === sidebarResult ? 'sidebar-runtime-snapshot' : 'shared-chess-session',
       selectedResult,
       sidebarResult,
       sharedResult,
@@ -1538,13 +1573,16 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
 
   const sidebarUpdatedAtMs = Date.parse(snapshot.updatedAt)
   const sharedUpdatedAtMs = Date.parse(sharedSnapshot.updatedAt)
-  if (Number.isFinite(sidebarUpdatedAtMs) && Number.isFinite(sharedUpdatedAtMs) && sidebarUpdatedAtMs !== sharedUpdatedAtMs) {
+  if (
+    Number.isFinite(sidebarUpdatedAtMs) &&
+    Number.isFinite(sharedUpdatedAtMs) &&
+    sidebarUpdatedAtMs !== sharedUpdatedAtMs
+  ) {
     const selectedResult = sidebarUpdatedAtMs > sharedUpdatedAtMs ? sidebarResult : sharedResult
     recordChessStateSelectionSpan({
       conversationId: snapshot.hostSessionId,
       appSessionId: snapshot.appSessionId,
-      selectedSource:
-        selectedResult === sidebarResult ? 'sidebar-runtime-snapshot' : 'shared-chess-session',
+      selectedSource: selectedResult === sidebarResult ? 'sidebar-runtime-snapshot' : 'shared-chess-session',
       selectedResult,
       sidebarResult,
       sharedResult,
@@ -1620,7 +1658,9 @@ async function buildChessMoveMessageFromBoardState(input: {
   if (!previewMove) {
     return {
       kind: 'clarify',
-      message: buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`),
+      message: buildClarificationMessage(
+        `"${requestedMove}" is not a legal move from the current live Chess position.`
+      ),
     }
   }
 
@@ -1649,13 +1689,15 @@ async function buildChessMoveMessageFromBoardState(input: {
       conversationId: input.conversationId,
       appSessionId: refreshedSnapshot?.appSessionId ?? input.appSessionId,
       summary: refreshedSnapshot?.summary ?? input.boardState.summary,
-      latestStateDigest: refreshedSnapshot?.latestStateDigest ?? buildChessStateDigestFromSharedSession({
-        fen: input.boardState.fen,
-        turn: input.boardState.turn === 'white' ? 'w' : 'b',
-        moveCount: input.boardState.moveCount,
-        lastMove: input.boardState.lastMove,
-        mode: input.boardState.mode,
-      }),
+      latestStateDigest:
+        refreshedSnapshot?.latestStateDigest ??
+        buildChessStateDigestFromSharedSession({
+          fen: input.boardState.fen,
+          turn: input.boardState.turn === 'white' ? 'w' : 'b',
+          moveCount: input.boardState.moveCount,
+          lastMove: input.boardState.lastMove,
+          mode: input.boardState.mode,
+        }),
       availableToolNames: refreshedSnapshot?.availableToolNames ?? [exampleChessMakeMoveToolSchema.name],
     })
 
@@ -1664,7 +1706,11 @@ async function buildChessMoveMessageFromBoardState(input: {
       refreshedBoardState.moveExecutionAvailable &&
       refreshedBoardState.fen !== input.boardState.fen
     ) {
-      const refreshedRequestedMove = selectRequestedChessMove(input.userRequest, refreshedBoardState, input.requestedMoveOverride)
+      const refreshedRequestedMove = selectRequestedChessMove(
+        input.userRequest,
+        refreshedBoardState,
+        input.requestedMoveOverride
+      )
       if (refreshedRequestedMove) {
         const refreshedPreviewMove = validateRequestedChessMove(refreshedBoardState, refreshedRequestedMove)
         if (refreshedPreviewMove) {
@@ -1704,6 +1750,47 @@ async function buildChessMoveMessageFromBoardState(input: {
   }
 }
 
+async function buildChessMoveMessageFromBoundCoachAction(input: {
+  conversationId: string
+  userRequest: string
+  action: ChessCoachActionClientData
+}): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+  const boardState = buildChessBoardStateResult({
+    appSessionId: input.action.appSessionId,
+    summary: input.action.boardState.summary,
+    latestStateDigest: buildChessStateDigestFromSharedSession({
+      fen: input.action.boardState.fen,
+      turn: input.action.boardState.turn === 'white' ? 'w' : 'b',
+      moveCount: input.action.boardState.moveCount,
+      lastMove: input.action.boardState.lastMove,
+      mode: input.action.boardState.mode,
+    }),
+    availableToolNames: input.action.boardState.moveExecutionAvailable ? [exampleChessMakeMoveToolSchema.name] : [],
+  })
+
+  if (!boardState) {
+    return null
+  }
+
+  recordChessStateSelectionSpan({
+    conversationId: input.conversationId,
+    appSessionId: input.action.appSessionId,
+    selectedSource: 'bound-chess-coach-action',
+    selectedResult: boardState,
+    sidebarResult: null,
+    sharedResult: null,
+    selectionReason: 'used the exact board snapshot attached to the clicked chess coach action',
+  })
+
+  return buildChessMoveMessageFromBoardState({
+    conversationId: input.conversationId,
+    appSessionId: input.action.appSessionId,
+    boardState,
+    userRequest: input.userRequest,
+    requestedMoveOverride: input.action.requestedMove,
+  })
+}
+
 async function buildChessMoveMessageFromSidebarSnapshot(
   snapshot: SidebarAppRuntimeSnapshot,
   input: {
@@ -1740,8 +1827,9 @@ async function buildChessMoveMessageFromReference(
     summary: reference.part.summary,
     latestStateDigest:
       toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
-    availableToolNames:
-      reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name) ?? [exampleChessMakeMoveToolSchema.name],
+    availableToolNames: reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name) ?? [
+      exampleChessMakeMoveToolSchema.name,
+    ],
   })
   if (!boardState) {
     return null
@@ -2367,6 +2455,7 @@ export async function routeTutorMeAiAppRequest(
   )
   const chessSidebarIsOpen = uiStore.getState().activeApprovedAppId === 'chess-tutor'
   const chessSuggestedMoveFollowUpIntent = isChessSuggestedMoveFollowUpIntent(input.userRequest)
+  const boundChessCoachAction = extractBoundChessCoachAction(input.requestMessage)
   const hasActiveChessContext =
     Boolean(activeSidebarChessSnapshot) ||
     chessSidebarIsOpen ||
@@ -2377,6 +2466,25 @@ export async function routeTutorMeAiAppRequest(
 
   if (shouldUseChessBoardStateTool(input.userRequest) || (chessSuggestedMoveFollowUpIntent && hasActiveChessContext)) {
     if (isChessMoveIntent(input.userRequest) || chessSuggestedMoveFollowUpIntent) {
+      if (boundChessCoachAction) {
+        const moveMessage = await buildChessMoveMessageFromBoundCoachAction({
+          conversationId: input.conversationId,
+          userRequest: input.userRequest,
+          action: boundChessCoachAction,
+        })
+        if (moveMessage) {
+          return finalizeTutorMeAiInterceptionResult({
+            conversationId: input.conversationId,
+            userRequest: input.userRequest,
+            source: 'chess.move.from-bound-coach-action',
+            appSessionId: boundChessCoachAction.appSessionId,
+            runtimeAppId: exampleInternalChessManifest.appId,
+            approvedAppId: CHESS_APPROVED_APP_ID,
+            result: moveMessage,
+          })
+        }
+      }
+
       if (chessSuggestedMoveFollowUpIntent && !suggestedChessMove) {
         return finalizeTutorMeAiInterceptionResult({
           conversationId: input.conversationId,
@@ -2486,7 +2594,11 @@ export async function routeTutorMeAiAppRequest(
       })
     }
 
-    if (activeSidebarChessSnapshot || chessSidebarIsOpen || selectedReference?.appId === exampleInternalChessManifest.appId) {
+    if (
+      activeSidebarChessSnapshot ||
+      chessSidebarIsOpen ||
+      selectedReference?.appId === exampleInternalChessManifest.appId
+    ) {
       return finalizeTutorMeAiInterceptionResult({
         conversationId: input.conversationId,
         userRequest: input.userRequest,
