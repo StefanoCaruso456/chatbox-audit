@@ -11,7 +11,7 @@ describe('getMessageLayoutMeta', () => {
     expect(layout.contentAlign).toBe('flex-end')
     expect(layout.contentMaxWidth).toEqual({
       xs: '85%',
-      sm: '75%',
+      sm: '70%',
     })
     expect(layout.bubbleClassName).toContain('bg-chatbox-background-secondary')
     expect(layout.attachmentWrapperClassName).toContain('justify-end')

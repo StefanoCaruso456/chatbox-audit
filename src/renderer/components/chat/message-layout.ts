@@ -11,7 +11,7 @@ export function getMessageLayoutMeta(message: Pick<Message, 'role'>) {
     contentMaxWidth: isUserMessage
       ? {
           xs: '85%',
-          sm: '75%',
+          sm: '70%',
         }
       : undefined,
     bubbleClassName: isUserMessage
