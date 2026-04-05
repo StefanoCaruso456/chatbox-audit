@@ -18,6 +18,31 @@ type ApprovedAppCoachControllerProps = {
   session: Session
 }
 
+type ChessFamilyApp = {
+  approvedAppId: 'chess-tutor' | 'chess-com'
+  runtimeAppId: string
+  appLabel: string
+}
+
+const chessFamilyApps = new Map<string, ChessFamilyApp>([
+  [
+    'chess-tutor',
+    {
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appLabel: 'Chess Tutor',
+    },
+  ],
+  [
+    'chess-com',
+    {
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appLabel: 'Chess.com Workspace',
+    },
+  ],
+])
+
 function recordCoachTraceSpan(input: {
   sessionId: string
   appSessionId: string
@@ -28,12 +53,14 @@ function recordCoachTraceSpan(input: {
   latestStateDigest?: JsonObject
   toolCallId: string
   errorMessage?: string
+  approvedAppId: string
+  runtimeAppId: string
 }) {
   recordRuntimeTraceSpan({
     traceId: buildRuntimeTraceId({
       conversationId: input.sessionId,
       appSessionId: input.appSessionId,
-      runtimeAppId: 'chess.internal',
+      runtimeAppId: input.runtimeAppId,
     }),
     name: `${input.traceSource} chess coach message`,
     kind: 'coach-message',
@@ -41,15 +68,15 @@ function recordCoachTraceSpan(input: {
     conversationId: input.sessionId,
     sessionId: input.sessionId,
     appSessionId: input.appSessionId,
-    approvedAppId: 'chess-tutor',
-    runtimeAppId: 'chess.internal',
+    approvedAppId: input.approvedAppId,
+    runtimeAppId: input.runtimeAppId,
     actor: {
       layer: 'host',
       source: 'approved-app-coach-controller',
     },
     input: `Create chess coach message from ${input.traceSource}`,
     output: input.summary,
-    tags: ['coach-message', 'host', 'chess-tutor', 'chess.internal', input.traceSource],
+    tags: ['coach-message', 'host', input.approvedAppId, input.runtimeAppId, input.traceSource],
     state: {
       source: input.traceSource,
       summary: input.summary,
@@ -90,12 +117,12 @@ function sessionAlreadyHasObservedBoardMessage(session: Session, appSessionId: s
   )
 }
 
-function sessionHasActiveChessRuntimeMessage(session: Session) {
+function sessionHasActiveChessRuntimeMessage(session: Session, runtimeAppId: string) {
   return getAllMessageList(session).some((message) =>
     (message.contentParts ?? []).some(
       (part) =>
         part.type === 'embedded-app' &&
-        part.appId === 'chess.internal' &&
+        part.appId === runtimeAppId &&
         !part.bridge?.completion &&
         part.status !== 'error'
     )
@@ -108,18 +135,25 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
   const handledKickoffAppSessionIdsRef = useRef<Set<string>>(new Set())
   const handledObservedBoardKeysRef = useRef<Set<string>>(new Set())
   const activeChessEvent =
-    latestOpenedEvent && latestOpenedEvent.sessionId === sessionId && latestOpenedEvent.approvedAppId === 'chess-tutor'
+    latestOpenedEvent &&
+    latestOpenedEvent.sessionId === sessionId &&
+    chessFamilyApps.has(latestOpenedEvent.approvedAppId)
       ? latestOpenedEvent
       : null
   const activeChessObservedStateEvent =
     latestObservedStateEvent &&
     latestObservedStateEvent.sessionId === sessionId &&
-    latestObservedStateEvent.approvedAppId === 'chess-tutor'
+    chessFamilyApps.has(latestObservedStateEvent.approvedAppId)
       ? latestObservedStateEvent
       : null
 
   useEffect(() => {
     if (!activeChessEvent) {
+      return
+    }
+
+    const chessFamilyApp = chessFamilyApps.get(activeChessEvent.approvedAppId)
+    if (!chessFamilyApp) {
       return
     }
 
@@ -132,7 +166,7 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
       return
     }
 
-    if (sessionHasActiveChessRuntimeMessage(session)) {
+    if (sessionHasActiveChessRuntimeMessage(session, chessFamilyApp.runtimeAppId)) {
       return
     }
 
@@ -143,6 +177,7 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
       summary: activeChessEvent.summary,
       latestStateDigest: activeChessEvent.latestStateDigest,
       availableToolNames: activeChessEvent.availableToolNames,
+      appLabel: chessFamilyApp.appLabel,
     })
     if (!kickoffMessage) {
       handledKickoffAppSessionIdsRef.current.delete(activeChessEvent.appSessionId)
@@ -160,6 +195,8 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
           summary: activeChessEvent.summary,
           latestStateDigest: activeChessEvent.latestStateDigest,
           toolCallId: buildChessApprovedAppKickoffToolCallId(activeChessEvent.appSessionId),
+          approvedAppId: chessFamilyApp.approvedAppId,
+          runtimeAppId: chessFamilyApp.runtimeAppId,
         })
         scrollActions.scrollToBottom('smooth')
       })
@@ -174,6 +211,8 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
           latestStateDigest: activeChessEvent.latestStateDigest,
           toolCallId: buildChessApprovedAppKickoffToolCallId(activeChessEvent.appSessionId),
           errorMessage: error instanceof Error ? error.message : 'Failed to insert kickoff coach message.',
+          approvedAppId: chessFamilyApp.approvedAppId,
+          runtimeAppId: chessFamilyApp.runtimeAppId,
         })
         handledKickoffAppSessionIdsRef.current.delete(activeChessEvent.appSessionId)
       })
@@ -181,6 +220,11 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
 
   useEffect(() => {
     if (!activeChessObservedStateEvent) {
+      return
+    }
+
+    const chessFamilyApp = chessFamilyApps.get(activeChessObservedStateEvent.approvedAppId)
+    if (!chessFamilyApp) {
       return
     }
 
@@ -227,6 +271,8 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
           summary: activeChessObservedStateEvent.summary,
           latestStateDigest: observedStateDigest,
           toolCallId: buildChessObservedBoardStateToolCallId(activeChessObservedStateEvent.appSessionId, moveCount),
+          approvedAppId: chessFamilyApp.approvedAppId,
+          runtimeAppId: chessFamilyApp.runtimeAppId,
         })
         scrollActions.scrollToBottom('smooth')
       })
@@ -241,6 +287,8 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
           latestStateDigest: observedStateDigest,
           toolCallId: buildChessObservedBoardStateToolCallId(activeChessObservedStateEvent.appSessionId, moveCount),
           errorMessage: error instanceof Error ? error.message : 'Failed to insert observed-board coach message.',
+          approvedAppId: chessFamilyApp.approvedAppId,
+          runtimeAppId: chessFamilyApp.runtimeAppId,
         })
         handledObservedBoardKeysRef.current.delete(observedKey)
       })

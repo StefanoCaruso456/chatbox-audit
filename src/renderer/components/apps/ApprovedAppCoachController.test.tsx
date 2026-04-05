@@ -42,12 +42,14 @@ describe('ApprovedAppCoachController', () => {
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
-        session={{
-          id: 'session.test',
-          messages: [],
-          threads: [],
-          type: 'chat',
-        } as never}
+        session={
+          {
+            id: 'session.test',
+            messages: [],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
       />
     )
 
@@ -93,33 +95,78 @@ describe('ApprovedAppCoachController', () => {
     ).toBe(true)
   })
 
+  it('inserts a kickoff coach message when the Chess.com workspace is manually opened', async () => {
+    render(
+      <ApprovedAppCoachController
+        sessionId="session.test"
+        session={
+          {
+            id: 'session.test',
+            messages: [],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
+      />
+    )
+
+    publishApprovedAppOpenedEvent({
+      eventId: 'open.chesscom.1',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appSessionId: 'app-session.sidebar.chess-com',
+      conversationId: 'conversation.sidebar.chess-com',
+      summary: 'Chess.com workspace is open in the right sidebar.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+        lastMove: 'No moves yet',
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      openedAt: '2026-04-05T03:00:30.000Z',
+    })
+
+    await waitFor(() => {
+      expect(mockInsertMessage).toHaveBeenCalledTimes(1)
+    })
+
+    const kickoffMessage = mockInsertMessage.mock.calls[0]?.[1]
+    expect(kickoffMessage?.contentParts?.find((part: { type: string }) => part.type === 'text')?.text).toContain(
+      'Chess.com Workspace is on the board.'
+    )
+  })
+
   it('does not insert a duplicate kickoff when the session already has one for that open event', async () => {
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
-        session={{
-          id: 'session.test',
-          messages: [
-            {
-              id: 'message.kickoff',
-              role: 'assistant',
-              contentParts: [
-                {
-                  type: 'tool-call',
-                  state: 'result',
-                  toolCallId: buildChessApprovedAppKickoffToolCallId('app-session.sidebar.chess-tutor'),
-                  toolName: 'chess.get-board-state',
-                  args: {
-                    scope: 'current-position',
+        session={
+          {
+            id: 'session.test',
+            messages: [
+              {
+                id: 'message.kickoff',
+                role: 'assistant',
+                contentParts: [
+                  {
+                    type: 'tool-call',
+                    state: 'result',
+                    toolCallId: buildChessApprovedAppKickoffToolCallId('app-session.sidebar.chess-tutor'),
+                    toolName: 'chess.get-board-state',
+                    args: {
+                      scope: 'current-position',
+                    },
+                    result: {},
                   },
-                  result: {},
-                },
-              ],
-            },
-          ],
-          threads: [],
-          type: 'chat',
-        } as never}
+                ],
+              },
+            ],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
       />
     )
 
@@ -148,32 +195,34 @@ describe('ApprovedAppCoachController', () => {
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
-        session={{
-          id: 'session.test',
-          messages: [
-            {
-              id: 'message.runtime',
-              role: 'assistant',
-              contentParts: [
-                {
-                  type: 'embedded-app',
-                  appId: 'chess.internal',
-                  appName: 'Chess Tutor',
-                  appSessionId: 'app-session.active',
-                  sourceUrl: 'http://localhost:3000/embedded-apps/chess',
-                  status: 'ready',
-                  bridge: {
-                    conversationId: 'session.test',
-                    expectedOrigin: 'http://localhost:3000',
+        session={
+          {
+            id: 'session.test',
+            messages: [
+              {
+                id: 'message.runtime',
+                role: 'assistant',
+                contentParts: [
+                  {
+                    type: 'embedded-app',
+                    appId: 'chess.internal',
+                    appName: 'Chess Tutor',
                     appSessionId: 'app-session.active',
+                    sourceUrl: 'http://localhost:3000/embedded-apps/chess',
+                    status: 'ready',
+                    bridge: {
+                      conversationId: 'session.test',
+                      expectedOrigin: 'http://localhost:3000',
+                      appSessionId: 'app-session.active',
+                    },
                   },
-                },
-              ],
-            },
-          ],
-          threads: [],
-          type: 'chat',
-        } as never}
+                ],
+              },
+            ],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
       />
     )
 
@@ -202,12 +251,14 @@ describe('ApprovedAppCoachController', () => {
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
-        session={{
-          id: 'session.test',
-          messages: [],
-          threads: [],
-          type: 'chat',
-        } as never}
+        session={
+          {
+            id: 'session.test',
+            messages: [],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
       />
     )
 
@@ -253,12 +304,14 @@ describe('ApprovedAppCoachController', () => {
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
-        session={{
-          id: 'session.test',
-          messages: [],
-          threads: [],
-          type: 'chat',
-        } as never}
+        session={
+          {
+            id: 'session.test',
+            messages: [],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
       />
     )
 
@@ -328,12 +381,14 @@ describe('ApprovedAppCoachController', () => {
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
-        session={{
-          id: 'session.test',
-          messages: [],
-          threads: [],
-          type: 'chat',
-        } as never}
+        session={
+          {
+            id: 'session.test',
+            messages: [],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
       />
     )
 

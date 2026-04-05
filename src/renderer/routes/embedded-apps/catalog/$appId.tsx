@@ -1,46 +1,37 @@
-import { Anchor, Badge, Box, Button, Container, Flex, Group, Loader, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
+import {
+  Anchor,
+  Badge,
+  Box,
+  Button,
+  Container,
+  Flex,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import AppCategoryBadge from '@/components/apps/AppCategoryBadge'
 import AppGradeBadge from '@/components/apps/AppGradeBadge'
 import AppIcon from '@/components/apps/AppIcon'
 import { getApprovedAppById } from '@/data/approvedApps'
-import { getLaunchUrlValidationMessage, getPreviewReferrerPolicy, normalizeLaunchUrl } from '@/lib/approvedAppLaunchConfig'
-import { appIntegrationModeMeta, type ApprovedApp } from '@/types/apps'
+import {
+  getLaunchUrlValidationMessage,
+  getPreviewReferrerPolicy,
+  normalizeLaunchUrl,
+} from '@/lib/approvedAppLaunchConfig'
+import { getApprovedAppLaunchOverride, persistApprovedAppLaunchOverride } from '@/lib/approvedAppLaunchOverrides'
+import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
 
-const APP_LAUNCH_OVERRIDES_STORAGE_KEY = 'approved-app-launch-overrides:v1'
 const PREVIEW_TIMEOUT_MS = 6000
 
 export const Route = createFileRoute('/embedded-apps/catalog/$appId')({
   component: ApprovedAppPlaceholderRoute,
 })
-
-function readLaunchOverrides() {
-  if (typeof window === 'undefined') {
-    return {}
-  }
-
-  try {
-    const raw = window.localStorage.getItem(APP_LAUNCH_OVERRIDES_STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as Record<string, string>) : {}
-  } catch {
-    return {}
-  }
-}
-
-function persistLaunchOverride(appId: string, value: string | null) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  const next = { ...readLaunchOverrides() }
-  if (value) {
-    next[appId] = value
-  } else {
-    delete next[appId]
-  }
-  window.localStorage.setItem(APP_LAUNCH_OVERRIDES_STORAGE_KEY, JSON.stringify(next))
-}
 
 function getModeCopy(app: ApprovedApp) {
   switch (app.integrationMode) {
@@ -162,7 +153,7 @@ function EmbeddedPreviewFrame({
     }, PREVIEW_TIMEOUT_MS)
 
     return () => window.clearTimeout(timeout)
-  }, [onStatusChange, url])
+  }, [onStatusChange])
 
   return (
     <Box className="relative min-h-[30rem] overflow-hidden rounded-[1.5rem] border border-white/12 bg-[#0f172a]">
@@ -228,9 +219,7 @@ function IntegrationDetailsPanel({ app }: { app: ApprovedApp }) {
           ) : null}
         </Group>
 
-        {integrationConfig.statusNote ? (
-          <Text c="rgba(255,255,255,0.74)">{integrationConfig.statusNote}</Text>
-        ) : null}
+        {integrationConfig.statusNote ? <Text c="rgba(255,255,255,0.74)">{integrationConfig.statusNote}</Text> : null}
 
         {integrationConfig.capabilities?.length ? (
           <Stack gap="xs">
@@ -289,7 +278,8 @@ function BrowserSessionWorkspace({ app, resolvedPreviewUrl }: { app: ApprovedApp
           Governed browser-session workspace
         </Title>
         <Text c="rgba(255,255,255,0.74)">
-          {app.name} stays inside the ChatBridge surface through a governed browser-session approach instead of a raw iframe. This keeps the app in-product even when the vendor blocks standard embed headers.
+          {app.name} stays inside the ChatBridge surface through a governed browser-session approach instead of a raw
+          iframe. This keeps the app in-product even when the vendor blocks standard embed headers.
         </Text>
         <Box className="overflow-hidden rounded-[1.25rem] border border-white/10 bg-[#0b1120]">
           <div className="flex items-center gap-2 border-b border-white/10 bg-white/5 px-4 py-3">
@@ -302,10 +292,12 @@ function BrowserSessionWorkspace({ app, resolvedPreviewUrl }: { app: ApprovedApp
           </div>
           <Stack gap="sm" p="lg">
             <Text size="sm" c="rgba(255,255,255,0.8)">
-              Browser-session mode keeps the vendor flow visible inside ChatBridge while preserving policy and trust boundaries.
+              Browser-session mode keeps the vendor flow visible inside ChatBridge while preserving policy and trust
+              boundaries.
             </Text>
             <Text size="sm" c="rgba(255,255,255,0.7)">
-              This workspace is ready for the next browser-session transport layer instead of dropping the user into a blocked iframe.
+              This workspace is ready for the next browser-session transport layer instead of dropping the user into a
+              blocked iframe.
             </Text>
           </Stack>
         </Box>
@@ -330,15 +322,15 @@ function ApprovedAppPlaceholderRoute() {
     if (!app) {
       return
     }
-    const savedValue = readLaunchOverrides()[app.id] ?? ''
+    const savedValue = getApprovedAppLaunchOverride(app.id)
     setSavedUrl(savedValue)
     setDraftUrl(savedValue || getDefaultLaunchUrl(app))
     setLaunchConfigError(null)
-  }, [appId, app])
+  }, [app])
 
   useEffect(() => {
     setPreviewStatus(showPreview ? 'loading' : 'blocked')
-  }, [showPreview, resolvedPreviewUrl])
+  }, [showPreview])
 
   if (!app) {
     return (
@@ -365,14 +357,14 @@ function ApprovedAppPlaceholderRoute() {
     }
 
     setLaunchConfigError(null)
-    persistLaunchOverride(app.id, sanitized || null)
+    persistApprovedAppLaunchOverride(app.id, sanitized || null)
     setSavedUrl(sanitized)
     setDraftUrl(sanitized)
   }
 
   const handleClearLaunchUrl = () => {
     setLaunchConfigError(null)
-    persistLaunchOverride(app.id, null)
+    persistApprovedAppLaunchOverride(app.id, null)
     setSavedUrl('')
     setDraftUrl(getDefaultLaunchUrl(app))
   }
@@ -435,17 +427,23 @@ function ApprovedAppPlaceholderRoute() {
           ) : null}
 
           {launchConfigEnabled ? (
-            <Paper radius="xl" p="xl" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}>
+            <Paper
+              radius="xl"
+              p="xl"
+              style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
               <Stack gap="md">
                 <Title order={3} c="white">
                   Launch configuration
                 </Title>
                 <Text c="rgba(255,255,255,0.72)">
-                  Save an app-specific launch URL here to keep testing this integration inside ChatBridge without editing the catalog data each time.
+                  Save an app-specific launch URL here to keep testing this integration inside ChatBridge without
+                  editing the catalog data each time.
                 </Text>
                 {app.id === 'miro' ? (
                   <Text size="sm" c="rgba(255,255,255,0.68)">
-                    Paste a Miro board URL, a Miro live-embed URL, or the iframe snippet returned by BoardsPicker. ChatBridge will normalize it into the official live-embed format with <code>usePostAuth=true</code>.
+                    Paste a Miro board URL, a Miro live-embed URL, or the iframe snippet returned by BoardsPicker.
+                    ChatBridge will normalize it into the official live-embed format with <code>usePostAuth=true</code>.
                   </Text>
                 ) : null}
                 <TextInput
@@ -469,7 +467,11 @@ function ApprovedAppPlaceholderRoute() {
           ) : null}
 
           {showWorkspaceNotes ? (
-            <Paper radius="xl" p="lg" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}>
+            <Paper
+              radius="xl"
+              p="lg"
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
               <Stack gap="xs">
                 <Group gap="xs" wrap="wrap">
                   <Badge radius="xl" variant="light" color="blue">
@@ -491,7 +493,13 @@ function ApprovedAppPlaceholderRoute() {
                 {app.integrationConfig?.helpUrl ? (
                   <Text c="rgba(255,255,255,0.72)">
                     Reference:{' '}
-                    <Anchor href={app.integrationConfig.helpUrl} target="_blank" rel="noreferrer" c="white" underline="always">
+                    <Anchor
+                      href={app.integrationConfig.helpUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      c="white"
+                      underline="always"
+                    >
                       {app.integrationConfig.helpLabel ?? app.integrationConfig.helpUrl}
                     </Anchor>
                   </Text>
@@ -507,7 +515,11 @@ function ApprovedAppPlaceholderRoute() {
           ) : null}
 
           {app.integrationMode === 'api-adapter' ? (
-            <Paper radius="xl" p="xl" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}>
+            <Paper
+              radius="xl"
+              p="xl"
+              style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
               <Stack gap="sm">
                 <Title order={3} c="white">
                   Adapter implementation path
@@ -524,7 +536,11 @@ function ApprovedAppPlaceholderRoute() {
           ) : null}
 
           {app.integrationMode === 'native-replacement' ? (
-            <Paper radius="xl" p="xl" style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}>
+            <Paper
+              radius="xl"
+              p="xl"
+              style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
               <Stack gap="sm">
                 <Title order={3} c="white">
                   Native replacement path

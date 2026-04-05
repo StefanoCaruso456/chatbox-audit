@@ -3,7 +3,7 @@ import { Chess } from 'chess.js'
 import { applyRequestedChessMove } from '@/routes/embedded-apps/-components/chess/chessMove'
 
 export type ChessMode = 'practice' | 'analysis'
-export type ChessSessionUpdateSource = 'initialize' | 'launch' | 'tool-move' | 'manual-board-move'
+export type ChessSessionUpdateSource = 'initialize' | 'launch' | 'tool-move' | 'manual-board-move' | 'imported-position'
 
 export interface ChessSessionSnapshot {
   conversationId: string
@@ -213,6 +213,31 @@ export function resetChessSession(input: {
       lastMove: 'No moves yet',
       mode: input.mode,
       status: input.status ?? 'active',
+    })
+  )
+}
+
+export function loadChessSessionPosition(input: {
+  conversationId: string
+  appSessionId: string
+  fen: string
+  historySan?: string[]
+  mode?: ChessMode
+  status?: RuntimeAppStatus
+  updatedAt?: string
+}) {
+  const chess = new Chess(input.fen)
+
+  return setChessSessionRecord(
+    buildChessSessionRecord({
+      conversationId: input.conversationId,
+      appSessionId: input.appSessionId,
+      chess,
+      updateSource: 'imported-position',
+      historySan: input.historySan,
+      mode: input.mode,
+      status: input.status ?? 'active',
+      updatedAt: input.updatedAt,
     })
   )
 }
