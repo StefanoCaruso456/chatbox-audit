@@ -28,6 +28,24 @@ interface TutorMeAIAuthActions {
 
 type PersistedTutorMeAIAuthState = Pick<TutorMeAIAuthState, 'accessToken' | 'refreshToken' | 'user'>
 
+function normalizeTutorMeAIAuthUser(user: TutorMeAIPlatformUser): TutorMeAIPlatformUser {
+  return {
+    ...user,
+    username: user.username ?? null,
+    role: user.role ?? null,
+    onboardingCompletedAt: user.onboardingCompletedAt ?? null,
+    students: Array.isArray(user.students)
+      ? [
+          ...new Set(
+            user.students.filter(
+              (studentId): studentId is string => typeof studentId === 'string' && studentId.trim().length > 0
+            )
+          ),
+        ]
+      : [],
+  }
+}
+
 const initialState: TutorMeAIAuthState = {
   accessToken: null,
   refreshToken: null,
@@ -46,14 +64,14 @@ export const tutorMeAIAuthStore = createStore<TutorMeAIAuthState & TutorMeAIAuth
           set((state) => {
             state.accessToken = accessToken
             state.refreshToken = refreshToken
-            state.user = user
+            state.user = normalizeTutorMeAIAuthUser(user)
             state.status = 'authenticated'
             state.error = null
           })
         },
         updateUser: (user) => {
           set((state) => {
-            state.user = user
+            state.user = normalizeTutorMeAIAuthUser(user)
             state.status = state.accessToken && state.refreshToken ? 'authenticated' : state.status
             state.error = null
           })
@@ -81,7 +99,7 @@ export const tutorMeAIAuthStore = createStore<TutorMeAIAuthState & TutorMeAIAuth
       })),
       {
         name: 'tutormeai-platform-auth',
-        version: 2,
+        version: 3,
         partialize: (state) => ({
           accessToken: state.accessToken,
           refreshToken: state.refreshToken,
@@ -93,29 +111,15 @@ export const tutorMeAIAuthStore = createStore<TutorMeAIAuthState & TutorMeAIAuth
           return {
             accessToken: state?.accessToken ?? null,
             refreshToken: state?.refreshToken ?? null,
-            user: user
-              ? {
-                  ...user,
-                  username: user.username ?? null,
-                  role: user.role ?? null,
-                  onboardingCompletedAt: user.onboardingCompletedAt ?? null,
-                  students: Array.isArray(user.students)
-                    ? [
-                        ...new Set(
-                          user.students.filter(
-                            (studentId): studentId is string =>
-                              typeof studentId === 'string' && studentId.trim().length > 0
-                          )
-                        ),
-                      ]
-                    : [],
-                }
-              : null,
+            user: user ? normalizeTutorMeAIAuthUser(user as TutorMeAIPlatformUser) : null,
           }
         },
         onRehydrateStorage: () => {
           return (state, error) => {
             if (state) {
+              if (state.user) {
+                state.updateUser(normalizeTutorMeAIAuthUser(state.user))
+              }
               state.markHydrated()
               state.setStatus(state.accessToken && state.refreshToken && state.user ? 'authenticated' : 'required')
             }
