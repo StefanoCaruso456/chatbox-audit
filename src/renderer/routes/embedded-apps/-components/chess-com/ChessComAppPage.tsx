@@ -4,6 +4,7 @@ import {
   Box,
   Button,
   Group,
+  Loader,
   Paper,
   Stack,
   Text,
@@ -343,6 +344,7 @@ export function ChessComAppPage() {
       ? asChessMode(invocationMessage.payload.arguments.mode)
       : asChessMode(runtimeContext?.initialState?.mode)
   const embedUrl = savedEmbedUrl || defaultEmbedUrl
+
   const chess = useMemo(
     () => new Chess(sharedChessSnapshot?.fen ?? fallbackChess.fen()),
     [fallbackChess, sharedChessSnapshot?.fen]
@@ -744,7 +746,7 @@ export function ChessComAppPage() {
                     : 'Loading embed'}
               </Badge>
             </Group>
-            <Box className="overflow-hidden rounded-[1rem] border border-white/10 bg-[#0b1120]">
+            <Box className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[#0b1120]">
               <iframe
                 src={embedUrl}
                 title="Chess.com reference board"
@@ -754,6 +756,33 @@ export function ChessComAppPage() {
                 onLoad={() => setVendorFrameState('ready')}
                 onError={() => setVendorFrameState('blocked')}
               />
+              {vendorFrameState !== 'ready' ? (
+                <Box
+                  className="absolute inset-0 flex items-center justify-center px-4"
+                  style={{
+                    zIndex: 1,
+                    background:
+                      vendorFrameState === 'blocked'
+                        ? 'linear-gradient(180deg, rgba(127,29,29,0.22) 0%, rgba(11,17,32,0.94) 100%)'
+                        : 'linear-gradient(180deg, rgba(15,23,42,0.78) 0%, rgba(11,17,32,0.94) 100%)',
+                    backdropFilter: 'blur(3px)',
+                  }}
+                >
+                  <Stack gap="xs" align="center" maw={360}>
+                    {vendorFrameState === 'loading' ? <Loader size="sm" color="blue" /> : null}
+                    <Text size="sm" fw={700} c="white" ta="center">
+                      {vendorFrameState === 'blocked'
+                        ? 'Chess.com embed unavailable'
+                        : 'Loading Chess.com reference board'}
+                    </Text>
+                    <Text size="xs" c="rgba(226,232,240,0.78)" ta="center">
+                      {vendorFrameState === 'blocked'
+                        ? 'The vendor board did not finish loading in this browser context. The mirrored ChatBridge board below still works for chat-driven moves and analysis.'
+                        : 'The vendor board can take a moment to appear. The mirrored ChatBridge board below is still the source of truth for chat memory and move execution.'}
+                    </Text>
+                  </Stack>
+                </Box>
+              ) : null}
             </Box>
             {vendorFrameState === 'blocked' ? (
               <Text size="xs" c="rgba(248,113,113,0.88)">
