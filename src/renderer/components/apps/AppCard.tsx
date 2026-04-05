@@ -23,8 +23,8 @@ export default function AppCard({ app, isActive = false, onOpen }: AppCardProps)
       type="button"
       onClick={() => onOpen(app.id)}
       className={cn(
-        'group flex h-full flex-col rounded-2xl border p-4 text-left transition-all duration-200',
-        'border-chatbox-border-primary/70 bg-chatbox-background-primary hover:-translate-y-0.5 hover:border-chatbox-tint-brand/40 hover:shadow-[0_14px_36px_rgba(15,23,42,0.24)]',
+        'cb-neumo-card group flex h-full flex-col rounded-[24px] p-4 text-left transition-all duration-200',
+        'hover:-translate-y-0.5 hover:border-chatbox-tint-brand/40 hover:bg-[var(--chatbox-surface-elevated-hover)] hover:shadow-[var(--chatbox-shadow-floating)]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-chatbox-tint-brand/50',
         isActive &&
           'border-chatbox-tint-brand/55 bg-chatbox-background-brand-secondary/20 shadow-[0_16px_44px_rgba(59,130,246,0.18)]'
