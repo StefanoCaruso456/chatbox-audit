@@ -2,6 +2,7 @@ import { Alert, Badge, Box, Button, Group, List, Paper, Stack, Text, Title } fro
 import type { CompletionSignal } from '@shared/contracts/v1'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useTutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
 import {
   buildPlannerAuthUserId,
@@ -9,6 +10,7 @@ import {
   derivePlannerOAuthAuthState,
   fetchPlannerOAuthConnection,
   isPlannerOAuthCallbackMessage,
+  requestPlannerOAuthAuthorizationUrl,
   resolvePlannerBackendOrigin,
 } from './auth'
 
@@ -81,6 +83,8 @@ function buildPlannerCompletionSignal(input: {
 export function PlannerAppPage() {
   const { invocationMessage, runtimeContext, sendCompletion, sendState } = useEmbeddedAppBridge('planner.oauth')
   const tutorMeAIProfile = useSettingsStore((state) => state.tutorMeAIProfile)
+  const platformUser = useTutorMeAIAuthStore((state) => state.user)
+  const platformAccessToken = useTutorMeAIAuthStore((state) => state.accessToken)
   const [connected, setConnected] = useState(false)
   const [focus, setFocus] = useState<PlannerFocus>('today')
   const [authPhase, setAuthPhase] = useState<PlannerAuthPhase>('checking')
@@ -90,11 +94,12 @@ export function PlannerAppPage() {
 
   const authUserId = useMemo(
     () =>
+      platformUser?.userId ??
       buildPlannerAuthUserId({
         email: tutorMeAIProfile.email,
         name: tutorMeAIProfile.name,
       }),
-    [tutorMeAIProfile.email, tutorMeAIProfile.name]
+    [platformUser?.userId, tutorMeAIProfile.email, tutorMeAIProfile.name]
   )
 
   const backendOrigin = useMemo(() => resolvePlannerBackendOrigin(), [])
@@ -111,7 +116,8 @@ export function PlannerAppPage() {
     try {
       const connection = await fetchPlannerOAuthConnection({
         backendOrigin,
-        userId: authUserId,
+        userId: platformAccessToken ? undefined : authUserId,
+        accessToken: platformAccessToken ?? undefined,
       })
       const authState = derivePlannerOAuthAuthState(connection)
 
@@ -137,7 +143,7 @@ export function PlannerAppPage() {
         error: error instanceof Error ? error.message : String(error),
       }
     }
-  }, [authUserId, backendOrigin])
+  }, [authUserId, backendOrigin, platformAccessToken])
 
   const applyLookupResult = useCallback(
     (result: Awaited<ReturnType<typeof lookupConnection>>) => {
@@ -295,30 +301,45 @@ export function PlannerAppPage() {
       userId: authUserId,
     })
 
-    popupRef.current = window.open(startUrl, 'planner-google-oauth', 'popup=yes,width=640,height=760')
-    if (!popupRef.current) {
-      setAuthPhase('error')
-      setAuthError('The Google sign-in window was blocked. Allow pop-ups and try again.')
-      return
-    }
+    void (async () => {
+      try {
+        const authorizationUrl = platformAccessToken
+          ? await requestPlannerOAuthAuthorizationUrl({
+              backendOrigin,
+              clientOrigin: window.location.origin,
+              accessToken: platformAccessToken,
+            })
+          : startUrl
 
-    pollTimerRef.current = window.setInterval(() => {
-      const popupClosed = popupRef.current?.closed ?? false
-      void lookupConnection().then((result) => {
-        if (result.state === 'connected' || result.state === 'expired' || result.state === 'error') {
-          applyLookupResult(result)
+        popupRef.current = window.open(authorizationUrl, 'planner-google-oauth', 'popup=yes,width=640,height=760')
+        if (!popupRef.current) {
+          setAuthPhase('error')
+          setAuthError('The Google sign-in window was blocked. Allow pop-ups and try again.')
           return
         }
 
-        if (popupClosed) {
-          clearConnectPolling()
-          popupRef.current = null
-          setAuthPhase('required')
-          setAuthError('Google sign-in was closed before the planner account connected.')
-        }
-      })
-    }, 1000)
-  }, [applyLookupResult, authUserId, backendOrigin, clearConnectPolling, lookupConnection])
+        pollTimerRef.current = window.setInterval(() => {
+          const popupClosed = popupRef.current?.closed ?? false
+          void lookupConnection().then((result) => {
+            if (result.state === 'connected' || result.state === 'expired' || result.state === 'error') {
+              applyLookupResult(result)
+              return
+            }
+
+            if (popupClosed) {
+              clearConnectPolling()
+              popupRef.current = null
+              setAuthPhase('required')
+              setAuthError('Google sign-in was closed before the planner account connected.')
+            }
+          })
+        }, 1000)
+      } catch (error) {
+        setAuthPhase('error')
+        setAuthError(error instanceof Error ? error.message : String(error))
+      }
+    })()
+  }, [applyLookupResult, authUserId, backendOrigin, clearConnectPolling, lookupConnection, platformAccessToken])
 
   const handleShare = useCallback(() => {
     if (!runtimeContext) {

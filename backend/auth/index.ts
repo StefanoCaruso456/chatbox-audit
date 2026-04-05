@@ -1,5 +1,6 @@
 export * from './api'
 export * from './google'
+export * from './postgres-repository'
 export * from './public'
 export * from './repository'
 export * from './service'
