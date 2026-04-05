@@ -6,11 +6,13 @@ import { render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildChessApprovedAppKickoffToolCallId,
+  buildChessObservedBoardStateToolCallId,
 } from '@/packages/tutormeai-apps/orchestrator'
 import {
   publishApprovedAppOpenedEvent,
   resetApprovedAppOpenedEvents,
 } from '@/stores/approvedAppEventStore'
+import { applyChessSessionMove, initializeChessSession, resetChessSessions } from '@/stores/chessSessionStore'
 import ApprovedAppCoachController from './ApprovedAppCoachController'
 
 const { mockInsertMessage, mockScrollToBottom } = vi.hoisted(() => ({
@@ -29,6 +31,7 @@ vi.mock('@/stores/scrollActions', () => ({
 describe('ApprovedAppCoachController', () => {
   beforeEach(() => {
     resetApprovedAppOpenedEvents()
+    resetChessSessions()
     mockInsertMessage.mockReset()
     mockInsertMessage.mockResolvedValue(undefined)
     mockScrollToBottom.mockReset()
@@ -73,7 +76,7 @@ describe('ApprovedAppCoachController', () => {
     const kickoffMessage = mockInsertMessage.mock.calls[0]?.[1]
     expect(kickoffMessage?.contentParts?.find((part: { type: string }) => part.type === 'tool-call')).toMatchObject({
       toolName: 'chess.get-board-state',
-      toolCallId: buildChessApprovedAppKickoffToolCallId('open.chess.1'),
+      toolCallId: buildChessApprovedAppKickoffToolCallId('app-session.sidebar.chess-tutor'),
     })
     expect(kickoffMessage?.contentParts?.find((part: { type: string }) => part.type === 'text')?.text).toContain(
       'Ready to play some chess?'
@@ -95,7 +98,7 @@ describe('ApprovedAppCoachController', () => {
                 {
                   type: 'tool-call',
                   state: 'result',
-                  toolCallId: buildChessApprovedAppKickoffToolCallId('open.chess.2'),
+                  toolCallId: buildChessApprovedAppKickoffToolCallId('app-session.sidebar.chess-tutor'),
                   toolName: 'chess.get-board-state',
                   args: {
                     scope: 'current-position',
@@ -184,5 +187,168 @@ describe('ApprovedAppCoachController', () => {
 
     await Promise.resolve()
     expect(mockInsertMessage).not.toHaveBeenCalled()
+  })
+
+  it('does not insert duplicate kickoff prompts when the same chess app session re-publishes open events', async () => {
+    render(
+      <ApprovedAppCoachController
+        sessionId="session.test"
+        session={{
+          id: 'session.test',
+          messages: [],
+          threads: [],
+          type: 'chat',
+        } as never}
+      />
+    )
+
+    publishApprovedAppOpenedEvent({
+      eventId: 'open.chess.dup.1',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      summary: 'Chess Tutor is open in the right sidebar.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      openedAt: '2026-04-05T03:03:00.000Z',
+    })
+    publishApprovedAppOpenedEvent({
+      eventId: 'open.chess.dup.2',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      summary: 'Chess Tutor is open in the right sidebar.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      openedAt: '2026-04-05T03:03:01.000Z',
+    })
+
+    await waitFor(() => {
+      expect(mockInsertMessage).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('inserts a proactive coach message after a manual board move changes the live chess session', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.sidebar.chess-tutor',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      status: 'waiting-user',
+    })
+
+    render(
+      <ApprovedAppCoachController
+        sessionId="session.test"
+        session={{
+          id: 'session.test',
+          messages: [],
+          threads: [],
+          type: 'chat',
+        } as never}
+      />
+    )
+
+    publishApprovedAppOpenedEvent({
+      eventId: 'open.chess.observe.1',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      summary: 'Chess Tutor is open in the right sidebar.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      openedAt: '2026-04-05T03:04:00.000Z',
+    })
+
+    await waitFor(() => {
+      expect(mockInsertMessage).toHaveBeenCalledTimes(1)
+    })
+
+    applyChessSessionMove({
+      conversationId: 'conversation.sidebar.chess-tutor',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      requestedMove: 'd2d4',
+      source: 'manual-board-move',
+    })
+
+    await waitFor(() => {
+      expect(mockInsertMessage).toHaveBeenCalledTimes(2)
+    })
+
+    const observedMessage = mockInsertMessage.mock.calls[1]?.[1]
+    expect(observedMessage?.contentParts?.find((part: { type: string }) => part.type === 'tool-call')).toMatchObject({
+      toolName: 'chess.get-board-state',
+      toolCallId: buildChessObservedBoardStateToolCallId('app-session.sidebar.chess-tutor', 1),
+    })
+    expect(observedMessage?.contentParts?.find((part: { type: string }) => part.type === 'text')?.text).toContain(
+      'I saw d4 on the board.'
+    )
+  })
+
+  it('does not insert a proactive coach message for chat-executed tool moves', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.sidebar.chess-tutor',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      status: 'waiting-user',
+    })
+
+    render(
+      <ApprovedAppCoachController
+        sessionId="session.test"
+        session={{
+          id: 'session.test',
+          messages: [],
+          threads: [],
+          type: 'chat',
+        } as never}
+      />
+    )
+
+    publishApprovedAppOpenedEvent({
+      eventId: 'open.chess.observe.2',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      summary: 'Chess Tutor is open in the right sidebar.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      openedAt: '2026-04-05T03:05:00.000Z',
+    })
+
+    await waitFor(() => {
+      expect(mockInsertMessage).toHaveBeenCalledTimes(1)
+    })
+
+    applyChessSessionMove({
+      conversationId: 'conversation.sidebar.chess-tutor',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      requestedMove: 'd2d4',
+      source: 'tool-move',
+    })
+
+    await Promise.resolve()
+    expect(mockInsertMessage).toHaveBeenCalledTimes(1)
   })
 })
