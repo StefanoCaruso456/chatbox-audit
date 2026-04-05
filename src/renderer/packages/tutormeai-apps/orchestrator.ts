@@ -803,7 +803,7 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     conversationId: string
     userRequest: string
   }
-): Promise<Message | null> {
+): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
   const boardState = buildLiveChessBoardStateResult({
     conversationId: input.conversationId,
     appSessionId: snapshot.appSessionId,
@@ -822,7 +822,10 @@ async function buildChessMoveMessageFromSidebarSnapshot(
 
   const previewMove = validateRequestedChessMove(boardState, requestedMove)
   if (!previewMove) {
-    return buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`)
+    return {
+      kind: 'clarify',
+      message: buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`),
+    }
   }
 
   const commandResult = await attemptSidebarChessMove({
@@ -833,12 +836,15 @@ async function buildChessMoveMessageFromSidebarSnapshot(
   })
 
   if (commandResult.ok) {
-    return buildChessMoveAssistantMessage({
-      toolCallId: commandResult.toolCallId,
-      boardState,
-      requestedMove,
-      moveResult: commandResult.moveResult,
-    })
+    return {
+      kind: 'invoke-tool',
+      message: buildChessMoveAssistantMessage({
+        toolCallId: commandResult.toolCallId,
+        boardState,
+        requestedMove,
+        moveResult: commandResult.moveResult,
+      }),
+    }
   }
 
   if (commandResult.error.includes('The chess board changed before the requested move could be applied.')) {
@@ -862,27 +868,38 @@ async function buildChessMoveMessageFromSidebarSnapshot(
         if (refreshedPreviewMove) {
           const retryResult = await attemptSidebarChessMove({
             conversationId: input.conversationId,
-            appSessionId: refreshedSnapshot.appSessionId,
+            appSessionId: refreshedBoardState.appSessionId,
             boardState: refreshedBoardState,
             requestedMove: refreshedRequestedMove,
           })
 
           if (retryResult.ok) {
-            return buildChessMoveAssistantMessage({
-              toolCallId: retryResult.toolCallId,
-              boardState: refreshedBoardState,
-              requestedMove: refreshedRequestedMove,
-              moveResult: retryResult.moveResult,
-            })
+            return {
+              kind: 'invoke-tool',
+              message: buildChessMoveAssistantMessage({
+                toolCallId: retryResult.toolCallId,
+                boardState: refreshedBoardState,
+                requestedMove: refreshedRequestedMove,
+                moveResult: retryResult.moveResult,
+              }),
+            }
           }
 
-          return buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${retryResult.error}`)
+          return {
+            kind: 'clarify',
+            message: buildClarificationMessage(
+              `Chess Tutor is open, but it did not confirm the move. ${retryResult.error}`
+            ),
+          }
         }
       }
     }
   }
 
-  return buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`)
+  return {
+    kind: 'clarify',
+    message: buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`),
+  }
 }
 
 function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
@@ -1330,10 +1347,7 @@ export async function routeTutorMeAiAppRequest(
           userRequest: input.userRequest,
         })
         if (moveMessage) {
-          return {
-            kind: 'invoke-tool',
-            message: moveMessage,
-          }
+          return moveMessage
         }
       }
 

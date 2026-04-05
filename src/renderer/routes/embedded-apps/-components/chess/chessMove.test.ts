@@ -7,6 +7,11 @@ describe('chessMove helpers', () => {
     expect(extractRequestedChessMove('okay make that next move of the D4')).toBe('d4')
   })
 
+  it('extracts uppercase natural-language coordinate moves', () => {
+    expect(extractRequestedChessMove('can you move the black piece from D4 to E5')).toBe('d4e5')
+    expect(extractRequestedChessMove('move B8-C6')).toBe('b8c6')
+  })
+
   it('accepts uppercase SAN when applying a requested chess move', () => {
     const chess = new Chess()
     const move = applyRequestedChessMove(chess, 'D4')

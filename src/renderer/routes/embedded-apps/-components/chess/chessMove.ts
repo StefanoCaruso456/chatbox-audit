@@ -15,8 +15,8 @@ type ParsedSanMove = {
 
 export type ParsedChessMove = ParsedCoordinateMove | ParsedSanMove
 
-const COORDINATE_MOVE_PATTERN = /\b([a-h][1-8])\s*(?:to|-)\s*([a-h][1-8])(?:\s*=?\s*([qrbnQRBN]))?\b/u
-const COMPACT_COORDINATE_MOVE_PATTERN = /\b([a-h][1-8])([a-h][1-8])([qrbnQRBN]?)\b/u
+const COORDINATE_MOVE_PATTERN = /\b(?:from\s+)?([a-h][1-8])\s*(?:to|-)\s*([a-h][1-8])(?:\s*=?\s*([qrbnQRBN]))?\b/iu
+const COMPACT_COORDINATE_MOVE_PATTERN = /\b([a-h][1-8])([a-h][1-8])([qrbnQRBN]?)\b/iu
 const SAN_MOVE_PATTERN =
   /\b(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|[a-h]x[a-h][1-8](?:=[QRBN])?[+#]?|[KQRBN][a-h]?[1-8]?[+#]?|[a-h][1-8])\b/giu
 
@@ -93,19 +93,36 @@ export function applyRequestedChessMove(chess: Chess, requestedMove: string) {
   }
 
   if (parsedMove.kind === 'coordinate') {
-    return chess.move({
-      from: parsedMove.from,
-      to: parsedMove.to,
-      promotion: parsedMove.promotion ?? 'q',
-    })
+    try {
+      return chess.move({
+        from: parsedMove.from,
+        to: parsedMove.to,
+        promotion: parsedMove.promotion ?? 'q',
+      })
+    } catch {
+      return null
+    }
   }
 
-  const directMove = chess.move(parsedMove.normalized)
+  let directMove = null
+  try {
+    directMove = chess.move(parsedMove.normalized)
+  } catch {
+    directMove = null
+  }
   if (directMove) {
     return directMove
   }
 
   const comparableRequestedMove = normalizeComparableSanMove(parsedMove.normalized)
   const matchingSanMove = chess.moves().find((move) => normalizeComparableSanMove(move) === comparableRequestedMove)
-  return matchingSanMove ? chess.move(matchingSanMove) : null
+  if (!matchingSanMove) {
+    return null
+  }
+
+  try {
+    return chess.move(matchingSanMove)
+  } catch {
+    return null
+  }
 }
