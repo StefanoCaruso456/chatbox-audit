@@ -45,6 +45,14 @@ type SelectionState = {
   from: Square | null
 }
 
+function isSidebarPanelMode() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return new URLSearchParams(window.location.search).get('chatbridge_panel') === '1'
+}
+
 function shouldShowVendorReferenceByDefault() {
   return true
 }
@@ -299,6 +307,9 @@ export function ChessComAppPage() {
   const [showVendorReference, setShowVendorReference] = useState(() => shouldShowVendorReferenceByDefault())
   const [embedUrlError, setEmbedUrlError] = useState<string | null>(null)
   const [importValue, setImportValue] = useState('')
+  const [isCompactSidebarLayout, setIsCompactSidebarLayout] = useState(
+    () => isSidebarPanelMode() || (typeof window !== 'undefined' && window.innerWidth <= 860)
+  )
   const [vendorFrameState, setVendorFrameState] = useState<'idle' | 'loading' | 'ready' | 'blocked'>(() =>
     shouldShowVendorReferenceByDefault() ? 'loading' : 'idle'
   )
@@ -328,6 +339,23 @@ export function ChessComAppPage() {
   }, [runtimeContext?.initialState, savedEmbedUrl])
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const syncLayoutMode = () => {
+      setIsCompactSidebarLayout(isSidebarPanelMode() || window.innerWidth <= 860)
+    }
+
+    syncLayoutMode()
+    window.addEventListener('resize', syncLayoutMode)
+
+    return () => {
+      window.removeEventListener('resize', syncLayoutMode)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!runtimeContext) {
       return
     }
@@ -351,6 +379,14 @@ export function ChessComAppPage() {
       ? asChessMode(invocationMessage.payload.arguments.mode)
       : asChessMode(runtimeContext?.initialState?.mode)
   const embedUrl = savedEmbedUrl || defaultEmbedUrl
+  const vendorReferenceOrder = isCompactSidebarLayout ? 2 : 1
+  const mirroredBoardOrder = isCompactSidebarLayout ? 1 : 2
+  const vendorIframeScale = isCompactSidebarLayout ? 0.76 : 1
+  const vendorIframeHeight = isCompactSidebarLayout ? '12.5rem' : '20rem'
+  const vendorIframeWidth = isCompactSidebarLayout ? `calc(100% / ${vendorIframeScale})` : '100%'
+  const vendorScaledHeight = isCompactSidebarLayout
+    ? `calc(${vendorIframeHeight} / ${vendorIframeScale})`
+    : vendorIframeHeight
 
   const chess = useMemo(
     () => new Chess(sharedChessSnapshot?.fen ?? fallbackChess.fen()),
@@ -721,8 +757,9 @@ export function ChessComAppPage() {
         </Group>
 
         <Alert color="blue" variant="light">
-          The mirrored ChatBridge board is the live surface for chat memory, move execution, and board analysis.
-          Chess.com stays as an optional visual reference board.
+          {isCompactSidebarLayout
+            ? 'The mirrored ChatBridge board stays on top in the sidebar so you can play and coach without the Chess.com embed taking over the whole panel.'
+            : 'The mirrored ChatBridge board is the live surface for chat memory, move execution, and board analysis. Chess.com stays as an optional visual reference board.'}
         </Alert>
 
         {feedback ? (
@@ -737,7 +774,7 @@ export function ChessComAppPage() {
           p="sm"
           shadow="sm"
           style={{
-            order: 2,
+            order: mirroredBoardOrder,
             background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%)',
             borderColor: 'rgba(148, 163, 184, 0.22)',
           }}
@@ -910,7 +947,7 @@ export function ChessComAppPage() {
           radius="xl"
           p="sm"
           style={{
-            order: 1,
+            order: vendorReferenceOrder,
             background: 'rgba(15, 23, 42, 0.74)',
             borderColor: 'rgba(148, 163, 184, 0.18)',
           }}
@@ -922,7 +959,9 @@ export function ChessComAppPage() {
                   Chess.com reference board
                 </Text>
                 <Text size="xs" c="rgba(226,232,240,0.7)">
-                  Optional vendor board for visual comparison only
+                  {isCompactSidebarLayout
+                    ? 'Compact live Chess.com preview inside the sidebar'
+                    : 'Optional vendor board for visual comparison only'}
                 </Text>
               </div>
               <Badge
@@ -948,8 +987,9 @@ export function ChessComAppPage() {
             </Group>
 
             <Text size="sm" c="rgba(226,232,240,0.72)">
-              This vendor iframe is less reliable than the mirrored ChatBridge board. Use it as a reference surface, not
-              the primary board for chat-driven play.
+              {isCompactSidebarLayout
+                ? 'This keeps the third-party Chess.com UI visible in the sidebar, but the mirrored board remains the reliable surface for chat-driven play.'
+                : 'This vendor iframe is less reliable than the mirrored ChatBridge board. Use it as a reference surface, not the primary board for chat-driven play.'}
             </Text>
 
             <Group gap="xs">
@@ -964,15 +1004,27 @@ export function ChessComAppPage() {
 
             {showVendorReference ? (
               <>
-                <Box className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[#0b1120]">
+                <Box
+                  className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[#0b1120]"
+                  style={{
+                    height: vendorIframeHeight,
+                  }}
+                >
                   <iframe
                     src={embedUrl}
                     title="Chess.com reference board"
-                    className="h-[20rem] w-full border-0 bg-white"
                     sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
                     referrerPolicy={getPreviewReferrerPolicy({ id: CHESS_COM_APP_ID })}
                     onLoad={() => setVendorFrameState('ready')}
                     onError={() => setVendorFrameState('blocked')}
+                    style={{
+                      width: vendorIframeWidth,
+                      height: vendorScaledHeight,
+                      transform: `scale(${vendorIframeScale})`,
+                      transformOrigin: 'top left',
+                      border: '0',
+                      background: '#ffffff',
+                    }}
                   />
                   {vendorFrameState !== 'ready' ? (
                     <Box
