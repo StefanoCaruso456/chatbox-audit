@@ -31,6 +31,7 @@ import { routeTutorMeAiAppRequest } from '@/packages/tutormeai-apps/orchestrator
 import platform from '@/platform'
 import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
+import { type RuntimeTraceRetryEvent, recordAssistantModelTrace } from '@/stores/runtimeTraceGeneration'
 import { trackEvent } from '@/utils/track'
 import * as chatStore from '../chatStore'
 import { settingsStore } from '../settingsStore'
@@ -196,15 +197,17 @@ export async function generate(
         let firstTokenLatency: number | undefined
         const persistInterval = 2000
         let lastPersistTimestamp = Date.now()
+        const retryEvents: RuntimeTraceRetryEvent[] = []
         const previousMessages = messages.slice(0, targetMsgIx)
         const latestUserMessage = [...previousMessages].reverse().find((message) => message.role === 'user')
+        const userRequest = latestUserMessage ? getMessageText(latestUserMessage, true, true) : ''
         const localAppResult =
           latestUserMessage && typeof window !== 'undefined'
             ? await routeTutorMeAiAppRequest({
                 origin: window.location.origin,
                 conversationId: session.id,
                 userId: configs.uuid || 'local-user',
-                userRequest: getMessageText(latestUserMessage, true, true),
+                userRequest,
                 requestMessageId: latestUserMessage.id,
                 previousMessages,
               })
@@ -252,21 +255,87 @@ export async function generate(
           }
         }
 
-        const { result } = await streamText(model, {
-          sessionId: session.id,
-          messages: promptMsgs,
-          onResultChangeWithCancel: modifyMessageCache,
-          onStatusChange: (status) => {
-            targetMsg = {
-              ...targetMsg,
-              status: status ? [status] : [],
-            }
-            void modifyMessage(sessionId, targetMsg, false, true)
-          },
-          providerOptions: settings.providerOptions,
-          knowledgeBase,
-          webBrowsing,
+        let result: Awaited<ReturnType<typeof streamText>>['result']
+        try {
+          const generationResult = await streamText(model, {
+            sessionId: session.id,
+            messages: promptMsgs,
+            onResultChangeWithCancel: modifyMessageCache,
+            onStatusChange: (status) => {
+              if (status?.type === 'retrying') {
+                retryEvents.push({
+                  attempt: status.attempt,
+                  maxAttempts: status.maxAttempts,
+                  error: status.error,
+                  recordedAt: new Date().toISOString(),
+                })
+              }
+
+              targetMsg = {
+                ...targetMsg,
+                status: status ? [status] : [],
+              }
+              void modifyMessage(sessionId, targetMsg, false, true)
+            },
+            providerOptions: settings.providerOptions,
+            knowledgeBase,
+            webBrowsing,
+          })
+          result = generationResult.result
+        } catch (error) {
+          const normalizedError = error instanceof Error ? error : new Error(`${error}`)
+          const endedAt = new Date().toISOString()
+
+          recordAssistantModelTrace({
+            conversationId: session.id,
+            sessionId,
+            previousMessages,
+            userRequest,
+            provider: settings.provider,
+            modelId: model.modelId,
+            messageId: targetMsg.id,
+            promptMessageCount: promptMsgs.length,
+            webBrowsingEnabled: webBrowsing,
+            knowledgeBaseId: knowledgeBase?.id,
+            knowledgeBaseName: knowledgeBase?.name,
+            startedAt: new Date(startTime).toISOString(),
+            endedAt,
+            firstTokenLatencyMs: firstTokenLatency,
+            contentParts: targetMsg.contentParts,
+            retryEvents,
+            error: {
+              message: normalizedError.message,
+              code: error instanceof BaseError ? String(error.code) : undefined,
+              recoverable: error instanceof ApiError || error instanceof NetworkError,
+            },
+          })
+
+          throw error
+        }
+
+        const endedAt = new Date().toISOString()
+        recordAssistantModelTrace({
+          conversationId: session.id,
+          sessionId,
+          previousMessages,
+          userRequest,
+          provider: settings.provider,
+          modelId: model.modelId,
+          messageId: targetMsg.id,
+          promptMessageCount: promptMsgs.length,
+          webBrowsingEnabled: webBrowsing,
+          knowledgeBaseId: knowledgeBase?.id,
+          knowledgeBaseName: knowledgeBase?.name,
+          startedAt: new Date(startTime).toISOString(),
+          endedAt,
+          firstTokenLatencyMs: firstTokenLatency,
+          contentParts: result.contentParts,
+          usage: result.usage,
+          finishReason: result.finishReason,
+          trace: result.trace,
+          retryEvents,
         })
+
         targetMsg = {
           ...targetMsg,
           generating: false,
