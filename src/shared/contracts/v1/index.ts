@@ -1,5 +1,6 @@
 export * from './app-manifest'
 export * from './app-session-state'
+export * from './chess-coach-action'
 export * from './completion-signal'
 export * from './conversation-context'
 export * from './permissions'

@@ -12,6 +12,7 @@ import {
   Stack,
   Text,
 } from '@mantine/core'
+import { type ChessCoachActionClientData, ChessCoachActionClientDataSchema } from '@shared/contracts/v1'
 import {
   createMessage,
   type Message,
@@ -179,7 +180,10 @@ const WebSearchToolCallUI: FC<{ part: WebBrowsingToolCallPart }> = ({ part }) =>
 
 const ChessBoardStateResultSchema = z
   .object({
+    appSessionId: z.string(),
+    fen: z.string(),
     turn: z.enum(['white', 'black']),
+    moveCount: z.number().int().min(0),
     phase: z.string(),
     lastMove: z.string(),
     status: z.string(),
@@ -189,6 +193,8 @@ const ChessBoardStateResultSchema = z
     recommendationReason: z.string().nullable().optional(),
     coachingTip: z.string().nullable().optional(),
     alternativeMoves: z.array(z.string()).default([]),
+    summary: z.string().optional(),
+    mode: z.string().optional(),
   })
   .passthrough()
 
@@ -197,10 +203,7 @@ const ChessBoardStateToolCallPartSchema = MessageToolCallPartSchema.extend({
   result: ChessBoardStateResultSchema.optional(),
 })
 
-type ChessBoardStateToolCallPart = MessageToolCallPart<
-  { scope?: string },
-  z.infer<typeof ChessBoardStateResultSchema>
->
+type ChessBoardStateToolCallPart = MessageToolCallPart<{ scope?: string }, z.infer<typeof ChessBoardStateResultSchema>>
 
 const ChessMoveResultSchema = z
   .object({
@@ -228,6 +231,7 @@ type ChessCoachAction = {
   label: string
   prompt: string
   primary?: boolean
+  clientData?: ChessCoachActionClientData
 }
 
 function titleCaseChessTurn(turn: 'white' | 'black') {
@@ -235,10 +239,16 @@ function titleCaseChessTurn(turn: 'white' | 'black') {
 }
 
 function buildChessCoachActionLabelPromptSet(input: {
+  appSessionId: string
+  fen: string
   recommendedMove?: string | null
   alternativeMoves?: string[]
   turn: 'white' | 'black'
+  moveCount: number
+  lastMove: string
   moveExecutionAvailable?: boolean
+  summary?: string
+  mode?: string
 }) {
   const recommendedMove = input.recommendedMove?.trim() || null
   const sideToMove = titleCaseChessTurn(input.turn)
@@ -249,6 +259,21 @@ function buildChessCoachActionLabelPromptSet(input: {
       label: `Play ${recommendedMove}`,
       prompt: `play ${recommendedMove}`,
       primary: true,
+      clientData: ChessCoachActionClientDataSchema.parse({
+        type: 'chess-coach-action',
+        action: 'play-recommended-move',
+        appSessionId: input.appSessionId,
+        requestedMove: recommendedMove,
+        boardState: {
+          fen: input.fen,
+          turn: input.turn,
+          moveCount: input.moveCount,
+          lastMove: input.lastMove,
+          moveExecutionAvailable: input.moveExecutionAvailable,
+          summary: input.summary,
+          mode: input.mode,
+        },
+      }),
     })
   }
 
@@ -315,8 +340,9 @@ const ChessCoachActionButtons: FC<{
 
       setSubmittingPrompt(prompt)
       try {
+        const selectedAction = actions.find((action) => action.prompt === prompt)
         await submitNewUserMessage(sessionId, {
-          newUserMsg: createMessage('user', prompt),
+          newUserMsg: createMessage('user', prompt, selectedAction?.clientData),
           needGenerating: true,
         })
       } catch (error) {
@@ -416,7 +442,10 @@ const ChessCoachCard: FC<{
   )
 }
 
-const ChessBoardStateToolCallUI: FC<{ part: ChessBoardStateToolCallPart; sessionId: string }> = ({ part, sessionId }) => {
+const ChessBoardStateToolCallUI: FC<{ part: ChessBoardStateToolCallPart; sessionId: string }> = ({
+  part,
+  sessionId,
+}) => {
   if (!part.result) {
     return <GeneralToolCallUI part={part} />
   }
@@ -424,7 +453,9 @@ const ChessBoardStateToolCallUI: FC<{ part: ChessBoardStateToolCallPart; session
   const recommendedMove = part.result.recommendedMove ?? part.result.candidateMoves[0] ?? null
   const recommendationReason =
     part.result.recommendationReason ??
-    (recommendedMove ? `${recommendedMove} improves the position with a clear strategic idea.` : 'No clear move available.')
+    (recommendedMove
+      ? `${recommendedMove} improves the position with a clear strategic idea.`
+      : 'No clear move available.')
 
   return (
     <ChessCoachCard
@@ -437,10 +468,16 @@ const ChessBoardStateToolCallUI: FC<{ part: ChessBoardStateToolCallPart; session
       coachingTip={part.result.coachingTip}
       alternatives={part.result.alternativeMoves}
       actions={buildChessCoachActionLabelPromptSet({
+        appSessionId: part.result.appSessionId,
+        fen: part.result.fen,
         recommendedMove,
         alternativeMoves: part.result.alternativeMoves,
         turn: part.result.turn,
+        moveCount: part.result.moveCount,
+        lastMove: part.result.lastMove,
         moveExecutionAvailable: part.result.moveExecutionAvailable,
+        summary: part.result.summary,
+        mode: part.result.mode,
       })}
     />
   )

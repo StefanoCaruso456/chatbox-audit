@@ -69,7 +69,9 @@ describe('ToolCallPartUI chess coaching cards', () => {
       },
       result: {
         appSessionId: 'app-session.chess.1',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
         turn: 'white',
+        moveCount: 0,
         phase: 'opening',
         lastMove: 'No moves yet',
         status: 'Position is stable',
@@ -100,6 +102,19 @@ describe('ToolCallPartUI chess coaching cards', () => {
     expect(sessionId).toBe('session.chess.1')
     expect(params.needGenerating).toBe(true)
     expect(params.newUserMsg.contentParts).toMatchObject([{ type: 'text', text: 'play d4' }])
+    expect(params.newUserMsg.clientData).toMatchObject({
+      type: 'chess-coach-action',
+      action: 'play-recommended-move',
+      appSessionId: 'app-session.chess.1',
+      requestedMove: 'd4',
+      boardState: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'white',
+        moveCount: 0,
+        lastMove: 'No moves yet',
+        moveExecutionAvailable: true,
+      },
+    })
   })
 
   it('renders a coaching card for played chess moves with guided next-step prompts', () => {
