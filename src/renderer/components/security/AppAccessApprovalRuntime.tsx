@@ -19,6 +19,7 @@ function isReviewerRole(role: string | null | undefined) {
 
 export default function AppAccessApprovalRuntime() {
   const requestedApprovedAppId = useUIStore((state) => state.requestedApprovedAppId)
+  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
   const completeApprovedAppOpen = useUIStore((state) => state.completeApprovedAppOpen)
   const clearApprovedAppOpenRequest = useUIStore((state) => state.clearApprovedAppOpenRequest)
 
@@ -66,6 +67,7 @@ export default function AppAccessApprovalRuntime() {
         if (cancelled) {
           return
         }
+        setStudentSubmittingAppId(null)
         clearApprovedAppOpenRequest(app.id)
         if (result.access === 'approved') {
           setStudentRequest(null)
@@ -78,6 +80,7 @@ export default function AppAccessApprovalRuntime() {
         if (cancelled) {
           return
         }
+        setStudentSubmittingAppId(null)
         clearApprovedAppOpenRequest(app.id)
         setAppAccessError(submitError instanceof Error ? submitError.message : String(submitError))
       })
@@ -103,6 +106,16 @@ export default function AppAccessApprovalRuntime() {
   ])
 
   useEffect(() => {
+    if (!studentSubmittingAppId) {
+      return
+    }
+
+    if (studentRequest?.appId === studentSubmittingAppId || activeApprovedAppId === studentSubmittingAppId) {
+      setStudentSubmittingAppId(null)
+    }
+  }, [activeApprovedAppId, setStudentSubmittingAppId, studentRequest?.appId, studentSubmittingAppId])
+
+  useEffect(() => {
     if (!accessToken || user?.role !== 'student' || studentRequest?.status !== 'pending') {
       return
     }
@@ -117,6 +130,7 @@ export default function AppAccessApprovalRuntime() {
         if (cancelled || !latest) {
           return
         }
+        setStudentSubmittingAppId(null)
         if (latest.status === 'approved') {
           setStudentRequest(null)
           completeApprovedAppOpen(latest.appId)
@@ -139,7 +153,15 @@ export default function AppAccessApprovalRuntime() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [accessToken, completeApprovedAppOpen, setAppAccessError, setStudentRequest, studentRequest, user?.role])
+  }, [
+    accessToken,
+    completeApprovedAppOpen,
+    setAppAccessError,
+    setStudentRequest,
+    setStudentSubmittingAppId,
+    studentRequest,
+    user?.role,
+  ])
 
   useEffect(() => {
     if (!accessToken || !isReviewerRole(user?.role)) {

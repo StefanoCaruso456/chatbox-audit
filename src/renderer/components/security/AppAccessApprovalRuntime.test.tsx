@@ -148,6 +148,7 @@ describe('AppAccessApprovalRuntime', () => {
     expect(await screen.findByText(/waiting for teacher approval/i)).toBeTruthy()
     expect(uiStore.getState().activeApprovedAppId).toBeNull()
     expect(appAccessStore.getState().studentRequest?.status).toBe('pending')
+    expect(appAccessStore.getState().studentSubmittingAppId).toBeNull()
   })
 
   it('shows a teacher popup and lets the teacher approve the pending student request', async () => {
@@ -222,5 +223,84 @@ describe('AppAccessApprovalRuntime', () => {
         status: 'approved',
       })
     })
+  })
+
+  it('clears the student requesting overlay once a pending request is approved and the app opens', async () => {
+    fetchTutorMeAIMyAppAccessRequest.mockResolvedValueOnce({
+      appAccessRequestId: 'request-1',
+      appId: 'chess-tutor',
+      appName: 'Chess Tutor',
+      studentUserId: 'student.user',
+      studentDisplayName: 'Student Demo',
+      studentEmail: 'student@example.com',
+      studentRole: 'student',
+      status: 'approved',
+      decisionReason: null,
+      decidedByUserId: 'teacher.user',
+      decidedByDisplayName: 'Teacher Demo',
+      requestedAt: '2026-04-05T05:00:00.000Z',
+      decidedAt: '2026-04-05T05:00:10.000Z',
+      updatedAt: '2026-04-05T05:00:10.000Z',
+    })
+
+    tutorMeAIAuthStore.setState({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        userId: 'student.user',
+        email: 'student@example.com',
+        username: 'student.demo',
+        displayName: 'Student Demo',
+        role: 'student',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      },
+      status: 'authenticated',
+      error: null,
+      hasHydrated: true,
+    })
+    appAccessStore.setState({
+      studentRequest: {
+        appAccessRequestId: 'request-1',
+        appId: 'chess-tutor',
+        appName: 'Chess Tutor',
+        studentUserId: 'student.user',
+        studentDisplayName: 'Student Demo',
+        studentEmail: 'student@example.com',
+        studentRole: 'student',
+        status: 'pending',
+        decisionReason: null,
+        decidedByUserId: null,
+        decidedByDisplayName: null,
+        requestedAt: '2026-04-05T05:00:00.000Z',
+        decidedAt: null,
+        updatedAt: '2026-04-05T05:00:00.000Z',
+      },
+      studentSubmittingAppId: 'chess-tutor',
+      teacherPendingRequests: [],
+      reviewerBusyRequestId: null,
+      error: null,
+    })
+
+    render(
+      <MantineProvider>
+        <AppAccessApprovalRuntime />
+      </MantineProvider>
+    )
+
+    await waitFor(() => {
+      expect(fetchTutorMeAIMyAppAccessRequest).toHaveBeenCalledWith({
+        accessToken: 'access-token',
+        appId: 'chess-tutor',
+      })
+    })
+
+    await waitFor(() => {
+      expect(uiStore.getState().activeApprovedAppId).toBe('chess-tutor')
+    })
+
+    expect(appAccessStore.getState().studentRequest).toBeNull()
+    expect(appAccessStore.getState().studentSubmittingAppId).toBeNull()
+    expect(screen.queryByText(/sending your app request to the teacher approval queue/i)).toBeNull()
   })
 })
