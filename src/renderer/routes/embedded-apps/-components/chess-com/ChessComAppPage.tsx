@@ -46,11 +46,7 @@ type SelectionState = {
 }
 
 function shouldShowVendorReferenceByDefault() {
-  if (typeof window === 'undefined') {
-    return true
-  }
-
-  return new URLSearchParams(window.location.search).get('chatbridge_panel') !== '1'
+  return true
 }
 
 const CHESS_COM_APP_ID = 'chess-com'
@@ -741,6 +737,7 @@ export function ChessComAppPage() {
           p="sm"
           shadow="sm"
           style={{
+            order: 2,
             background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%)',
             borderColor: 'rgba(148, 163, 184, 0.22)',
           }}
@@ -844,6 +841,7 @@ export function ChessComAppPage() {
           radius="xl"
           p="sm"
           style={{
+            order: 3,
             background: 'rgba(15, 23, 42, 0.64)',
             borderColor: 'rgba(148, 163, 184, 0.18)',
           }}
@@ -877,6 +875,7 @@ export function ChessComAppPage() {
           radius="xl"
           p="sm"
           style={{
+            order: 4,
             background: 'rgba(15, 23, 42, 0.64)',
             borderColor: 'rgba(148, 163, 184, 0.18)',
           }}
@@ -911,6 +910,7 @@ export function ChessComAppPage() {
           radius="xl"
           p="sm"
           style={{
+            order: 1,
             background: 'rgba(15, 23, 42, 0.74)',
             borderColor: 'rgba(148, 163, 184, 0.18)',
           }}
@@ -1018,6 +1018,7 @@ export function ChessComAppPage() {
           radius="xl"
           p="sm"
           style={{
+            order: 5,
             background: 'rgba(15, 23, 42, 0.64)',
             borderColor: 'rgba(148, 163, 184, 0.18)',
           }}
