@@ -2,9 +2,14 @@ import type {
   GetOAuthConnectionRequest,
   OAuthConnectionRecord,
   PlatformSessionRecord,
+  UserRecord,
 } from './types'
 
 export interface AuthRepository {
+  saveUser(user: UserRecord): Promise<void>
+  getUserById(userId: string): Promise<UserRecord | undefined>
+  getUserByEmail(email: string): Promise<UserRecord | undefined>
+
   savePlatformSession(session: PlatformSessionRecord): Promise<void>
   getPlatformSessionById(platformSessionId: string): Promise<PlatformSessionRecord | undefined>
   getPlatformSessionBySessionTokenHash(sessionTokenHash: string): Promise<PlatformSessionRecord | undefined>
@@ -19,11 +24,15 @@ export interface AuthRepository {
 }
 
 export interface InMemoryAuthRepositoryOptions {
+  initialUsers?: UserRecord[]
   initialPlatformSessions?: PlatformSessionRecord[]
   initialOAuthConnections?: OAuthConnectionRecord[]
 }
 
 export class InMemoryAuthRepository implements AuthRepository {
+  private readonly usersById = new Map<string, UserRecord>()
+  private readonly userIdsByEmail = new Map<string, string>()
+
   private readonly platformSessionsById = new Map<string, PlatformSessionRecord>()
   private readonly platformSessionIdsByTokenHash = new Map<string, string>()
   private readonly platformSessionIdsByRefreshTokenHash = new Map<string, string>()
@@ -35,6 +44,10 @@ export class InMemoryAuthRepository implements AuthRepository {
   private readonly oauthConnectionIdsByUser = new Map<string, Set<string>>()
 
   constructor(options: InMemoryAuthRepositoryOptions = {}) {
+    options.initialUsers?.forEach((user) => {
+      void this.saveUser(user)
+    })
+
     options.initialPlatformSessions?.forEach((session) => {
       void this.savePlatformSession(session)
     })
@@ -42,6 +55,36 @@ export class InMemoryAuthRepository implements AuthRepository {
     options.initialOAuthConnections?.forEach((connection) => {
       void this.saveOAuthConnection(connection)
     })
+  }
+
+  async saveUser(user: UserRecord): Promise<void> {
+    const previous = this.usersById.get(user.userId)
+    if (previous) {
+      this.unindexUser(previous)
+    }
+
+    const snapshot = clone(user)
+    this.usersById.set(snapshot.userId, snapshot)
+
+    const normalizedEmail = normalizeEmail(snapshot.email)
+    if (normalizedEmail) {
+      this.userIdsByEmail.set(normalizedEmail, snapshot.userId)
+    }
+  }
+
+  async getUserById(userId: string): Promise<UserRecord | undefined> {
+    const user = this.usersById.get(userId)
+    return user ? clone(user) : undefined
+  }
+
+  async getUserByEmail(email: string): Promise<UserRecord | undefined> {
+    const normalizedEmail = normalizeEmail(email)
+    if (!normalizedEmail) {
+      return undefined
+    }
+
+    const userId = this.userIdsByEmail.get(normalizedEmail)
+    return userId ? this.getUserById(userId) : undefined
   }
 
   async savePlatformSession(session: PlatformSessionRecord): Promise<void> {
@@ -135,6 +178,13 @@ export class InMemoryAuthRepository implements AuthRepository {
     this.removeFromUserIndex(this.platformSessionIdsByUser, session.userId, session.platformSessionId)
   }
 
+  private unindexUser(user: UserRecord) {
+    const normalizedEmail = normalizeEmail(user.email)
+    if (normalizedEmail) {
+      this.userIdsByEmail.delete(normalizedEmail)
+    }
+  }
+
   private unindexOAuthConnection(connection: OAuthConnectionRecord) {
     this.oauthConnectionIdsByStateHash.delete(connection.authorizationStateHash)
     this.oauthConnectionIdsByUserAppProvider.delete(
@@ -199,4 +249,13 @@ function clone<T>(value: T): T {
   return typeof structuredClone === 'function'
     ? structuredClone(value)
     : (JSON.parse(JSON.stringify(value)) as T)
+}
+
+function normalizeEmail(email: string | null | undefined) {
+  if (typeof email !== 'string') {
+    return null
+  }
+
+  const normalized = email.trim().toLowerCase()
+  return normalized.length > 0 ? normalized : null
 }

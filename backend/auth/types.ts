@@ -3,6 +3,16 @@ import type { BackendFailureResult, BackendResult } from '../errors'
 
 export type PlatformSessionStatus = 'active' | 'expired' | 'revoked'
 
+export interface UserRecord {
+  userId: string
+  email: string | null
+  displayName: string
+  metadata: JsonObject
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
 export interface PlatformSessionRecord {
   platformSessionId: string
   userId: string

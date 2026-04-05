@@ -1,9 +1,9 @@
 import { IdentifierSchema } from '@shared/contracts/v1'
 import { OriginSchema, normalizeOrigin } from '@shared/contracts/v1/shared'
+import { resolveTutorMeAIBackendOrigin } from '@/packages/tutormeai-auth/client'
 
 export const PLANNER_OAUTH_APP_ID = 'planner.oauth'
 export const PLANNER_OAUTH_PROVIDER = 'google'
-export const DEFAULT_PLANNER_BACKEND_ORIGIN = 'https://chatbox-audit-production.up.railway.app'
 
 export interface PlannerAuthProfileInput {
   email?: string
@@ -71,20 +71,7 @@ export function resolvePlannerBackendOrigin(
   currentOrigin: string | undefined = typeof window !== 'undefined' ? window.location.origin : undefined,
   env: Record<string, string | undefined> = process.env
 ): string {
-  const configuredOrigin = normalizeOriginCandidate(env.TUTORMEAI_BACKEND_ORIGIN)
-  if (configuredOrigin) {
-    return configuredOrigin
-  }
-
-  const current = normalizeOriginCandidate(currentOrigin)
-  if (current) {
-    const hostname = new URL(current).hostname
-    if (hostname.endsWith('.railway.app')) {
-      return current
-    }
-  }
-
-  return DEFAULT_PLANNER_BACKEND_ORIGIN
+  return resolveTutorMeAIBackendOrigin(currentOrigin, env)
 }
 
 export function buildPlannerOAuthStartUrl(input: {
@@ -100,25 +87,77 @@ export function buildPlannerOAuthStartUrl(input: {
   return url.toString()
 }
 
+export async function requestPlannerOAuthAuthorizationUrl(input: {
+  backendOrigin: string
+  clientOrigin: string
+  accessToken: string
+  appId?: string
+  fetchImpl?: typeof fetch
+  signal?: AbortSignal
+}) {
+  const response = await (input.fetchImpl ?? fetch)(new URL('/api/auth/oauth/google/start', input.backendOrigin).toString(), {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${input.accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      appId: input.appId ?? PLANNER_OAUTH_APP_ID,
+      clientOrigin: normalizeOrigin(input.clientOrigin),
+    }),
+    mode: 'cors',
+    signal: input.signal,
+  })
+
+  const payload = (await response.json()) as
+    | {
+        ok: true
+        data: {
+          authorizationUrl: string
+        }
+      }
+    | {
+        ok: false
+        error?: {
+          message?: string
+        }
+      }
+
+  if (!response.ok || !payload.ok) {
+    const message =
+      !payload.ok && payload.error?.message
+        ? payload.error.message
+        : `Planner OAuth start failed with status ${response.status}.`
+    throw new Error(message)
+  }
+
+  return payload.data.authorizationUrl
+}
+
 export async function fetchPlannerOAuthConnection(
   input: {
     backendOrigin: string
-    userId: string
+    userId?: string
     appId?: string
+    accessToken?: string
     fetchImpl?: typeof fetch
     signal?: AbortSignal
   }
 ): Promise<PlannerOAuthConnectionRecord | null> {
   const url = new URL('/api/auth/oauth', input.backendOrigin)
-  url.searchParams.set('userId', input.userId)
   url.searchParams.set('appId', input.appId ?? PLANNER_OAUTH_APP_ID)
   url.searchParams.set('provider', PLANNER_OAUTH_PROVIDER)
+  if (input.userId) {
+    url.searchParams.set('userId', input.userId)
+  }
 
   const fetchImpl = input.fetchImpl ?? fetch
   const response = await fetchImpl(url.toString(), {
     method: 'GET',
     headers: {
       accept: 'application/json',
+      ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
     },
     mode: 'cors',
     signal: input.signal,
