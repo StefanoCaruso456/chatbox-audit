@@ -560,6 +560,100 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
   })
 
+  it('treats alternative-follow-up questions as board analysis instead of replaying the named move', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8.alternatives',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8.alternatives',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      updatedAt: '2026-04-04T05:33:00.000Z',
+    })
+
+    initializeChessSession({
+      conversationId: 'conversation.8.alternatives',
+      appSessionId: 'app-session.sidebar.chess.8.alternatives',
+      fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+      moveCount: 1,
+      lastMove: 'd4',
+      status: 'active',
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.alternatives',
+      userId: 'user.8.alternatives',
+      userRequest: 'What were the top 2 alternatives to d4 here, and what were their tradeoffs?',
+      requestMessageId: 'message.8.alternatives',
+      previousMessages: [createMessage('assistant', 'Move played: d4. Black to move.')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      appSessionId: 'app-session.sidebar.chess.8.alternatives',
+      turn: 'black',
+      lastMove: 'd4',
+      moveCount: 1,
+    })
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+  })
+
+  it('uses the live shared chess session for strategy prompts even in a clean chat thread', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.8.clean-thread',
+      appSessionId: 'app-session.sidebar.chess.8.clean-thread',
+      fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+      moveCount: 1,
+      lastMove: 'd4',
+      status: 'active',
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.clean-thread',
+      userId: 'user.8.clean-thread',
+      userRequest: 'What should Black play here? Teach the idea first, then recommend the best move.',
+      requestMessageId: 'message.8.clean-thread',
+      previousMessages: [createMessage('user', 'What should White play on the current board?')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      appSessionId: 'app-session.sidebar.chess.8.clean-thread',
+      turn: 'black',
+      lastMove: 'd4',
+      moveCount: 1,
+    })
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Black to move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+  })
+
   it('reads the current live chess position from the shared session when the sidebar snapshot is stale', async () => {
     upsertSidebarAppRuntimeSnapshot({
       hostSessionId: 'conversation.shared.live-board',
