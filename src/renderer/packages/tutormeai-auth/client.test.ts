@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildTutorMeAIPlatformGoogleStartUrl,
+  deriveTutorMeAIUsernameCandidate,
   fetchTutorMeAIPlatformProfile,
   isTutorMeAIPlatformCallbackMessage,
+  isTutorMeAIProfileComplete,
   refreshTutorMeAIPlatformSession,
   resolveTutorMeAIBackendOrigin,
+  updateTutorMeAIPlatformProfile,
 } from './client'
 
 describe('TutorMeAI auth client helpers', () => {
@@ -43,8 +46,11 @@ describe('TutorMeAI auth client helpers', () => {
               user: {
                 userId: 'user.google.demo',
                 email: 'student@example.com',
+                username: null,
                 displayName: 'Student Demo',
+                role: null,
                 pictureUrl: null,
+                onboardingCompletedAt: null,
               },
               session: {
                 platformSessionId: 'platform-session.demo',
@@ -73,8 +79,11 @@ describe('TutorMeAI auth client helpers', () => {
               user: {
                 userId: 'user.google.demo',
                 email: 'student@example.com',
+                username: 'student.demo',
                 displayName: 'Student Demo',
+                role: 'student',
                 pictureUrl: null,
+                onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
               },
               session: {
                 platformSessionId: 'platform-session.demo',
@@ -101,6 +110,7 @@ describe('TutorMeAI auth client helpers', () => {
     })
 
     expect(profile.user.userId).toBe('user.google.demo')
+    expect(isTutorMeAIProfileComplete(profile.user)).toBe(false)
 
     const refreshed = await refreshTutorMeAIPlatformSession({
       backendOrigin: 'https://chatbox-audit-production.up.railway.app',
@@ -110,6 +120,47 @@ describe('TutorMeAI auth client helpers', () => {
 
     expect(refreshed.accessToken).toBe('next-access-token')
     expect(refreshed.refreshToken).toBe('next-refresh-token')
+    expect(isTutorMeAIProfileComplete(refreshed.user)).toBe(true)
+  })
+
+  it('updates the TutorMeAI onboarding profile and derives a username suggestion', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            user: {
+              userId: 'user.google.demo',
+              email: 'student@example.com',
+              username: 'student.demo',
+              displayName: 'Student Demo',
+              role: 'student',
+              pictureUrl: null,
+              onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        }
+      )
+    )
+
+    const updated = await updateTutorMeAIPlatformProfile({
+      backendOrigin: 'https://chatbox-audit-production.up.railway.app',
+      accessToken: 'access-token',
+      displayName: 'Student Demo',
+      username: 'student.demo',
+      role: 'student',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+
+    expect(updated.user.username).toBe('student.demo')
+    expect(updated.user.role).toBe('student')
+    expect(deriveTutorMeAIUsernameCandidate(updated.user)).toBe('student.demo')
   })
 
   it('recognizes platform callback messages only from the configured backend origin', () => {
@@ -123,8 +174,11 @@ describe('TutorMeAI auth client helpers', () => {
         user: {
           userId: 'user.google.demo',
           email: 'student@example.com',
+          username: null,
           displayName: 'Student Demo',
+          role: null,
           pictureUrl: null,
+          onboardingCompletedAt: null,
         },
       },
     })

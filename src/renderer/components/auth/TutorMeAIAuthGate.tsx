@@ -1,13 +1,24 @@
-import { Alert, Box, Button, Paper, Stack, Text, Title } from '@mantine/core'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react'
+import { Alert, Box, Button, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core'
+import type { TutorMeAIUserRole } from '@shared/types/settings'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildTutorMeAIPlatformGoogleStartUrl,
+  deriveTutorMeAIUsernameCandidate,
   fetchTutorMeAIPlatformProfile,
   isTutorMeAIPlatformCallbackMessage,
+  isTutorMeAIProfileComplete,
   refreshTutorMeAIPlatformSession,
   resolveTutorMeAIBackendOrigin,
+  updateTutorMeAIPlatformProfile,
 } from '@/packages/tutormeai-auth/client'
 import { tutorMeAIAuthStore, useTutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
+
+const ROLE_OPTIONS: Array<{ value: TutorMeAIUserRole; label: string }> = [
+  { value: 'student', label: 'student' },
+  { value: 'teacher', label: 'teacher' },
+  { value: 'school_admin', label: 'school_admin' },
+  { value: 'district_Director', label: 'district_Director' },
+]
 
 export function TutorMeAIAuthGate(props: { children: ReactNode }) {
   const { children } = props
@@ -18,12 +29,18 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
   const error = useTutorMeAIAuthStore((state) => state.error)
   const hasHydrated = useTutorMeAIAuthStore((state) => state.hasHydrated)
   const setSession = useTutorMeAIAuthStore((state) => state.setSession)
+  const updateUser = useTutorMeAIAuthStore((state) => state.updateUser)
   const clearSession = useTutorMeAIAuthStore((state) => state.clearSession)
   const setStatus = useTutorMeAIAuthStore((state) => state.setStatus)
 
   const backendOrigin = useMemo(() => resolveTutorMeAIBackendOrigin(), [])
   const popupRef = useRef<Window | null>(null)
   const pollTimerRef = useRef<number | null>(null)
+  const [displayName, setDisplayName] = useState('')
+  const [username, setUsername] = useState('')
+  const [role, setRole] = useState<TutorMeAIUserRole>('student')
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [savingProfile, setSavingProfile] = useState(false)
 
   const clearConnectPolling = useCallback(() => {
     if (pollTimerRef.current !== null) {
@@ -122,6 +139,17 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
     }
   }, [clearConnectPolling])
 
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+
+    setDisplayName(user.displayName)
+    setUsername(deriveTutorMeAIUsernameCandidate(user))
+    setRole(user.role ?? 'student')
+    setProfileError(null)
+  }, [user?.displayName, user?.email, user?.role, user?.userId, user?.username])
+
   const handleSignIn = useCallback(() => {
     clearConnectPolling()
     setStatus('checking')
@@ -152,6 +180,30 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
     }, 500)
   }, [backendOrigin, clearConnectPolling, setStatus])
 
+  const handleCompleteProfile = useCallback(async () => {
+    if (!accessToken || !user) {
+      return
+    }
+
+    setSavingProfile(true)
+    setProfileError(null)
+
+    try {
+      const updated = await updateTutorMeAIPlatformProfile({
+        backendOrigin,
+        accessToken,
+        displayName: displayName.trim(),
+        username: username.trim().toLowerCase(),
+        role,
+      })
+      updateUser(updated.user)
+    } catch (updateError) {
+      setProfileError(updateError instanceof Error ? updateError.message : String(updateError))
+    } finally {
+      setSavingProfile(false)
+    }
+  }, [accessToken, backendOrigin, displayName, role, updateUser, user, username])
+
   if (!hasHydrated || status === 'checking') {
     return (
       <Box p="xl" mih="100vh" bg="linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)">
@@ -163,8 +215,74 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
     )
   }
 
-  if (status === 'authenticated' && user) {
+  if (status === 'authenticated' && user && isTutorMeAIProfileComplete(user)) {
     return <>{children}</>
+  }
+
+  if (status === 'authenticated' && user) {
+    return (
+      <Box p="xl" mih="100vh" bg="radial-gradient(circle at top, #dbeafe 0%, #f8fafc 45%, #ffffff 100%)">
+        <Stack align="center" justify="center" mih="100vh">
+          <Paper withBorder shadow="sm" radius="xl" p="xl" maw={520} w="100%">
+            <Stack gap="md">
+              <div>
+                <Title order={2}>Complete Your TutorMeAI Profile</Title>
+                <Text c="dimmed" size="sm">
+                  Google sign-in worked. Finish your TutorMeAI account setup so we can store your role and user
+                  profile on the platform.
+                </Text>
+              </div>
+
+              {(error || profileError) && (
+                <Alert color="red" variant="light">
+                  {profileError ?? error}
+                </Alert>
+              )}
+
+              <TextInput label="Email" value={user.email ?? ''} readOnly />
+
+              <TextInput
+                label="Name"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.currentTarget.value)}
+                placeholder="How should we display your name?"
+              />
+
+              <TextInput
+                label="Username"
+                value={username}
+                onChange={(event) => setUsername(event.currentTarget.value)}
+                placeholder="your.username"
+                description="Lowercase letters, numbers, dots, underscores, and hyphens only."
+              />
+
+              <Select
+                label="Role"
+                data={ROLE_OPTIONS}
+                value={role}
+                allowDeselect={false}
+                comboboxProps={{ withinPortal: true }}
+                onChange={(value) => {
+                  if (!value) {
+                    return
+                  }
+                  setRole(value as TutorMeAIUserRole)
+                }}
+              />
+
+              <Button loading={savingProfile} onClick={() => void handleCompleteProfile()}>
+                Continue to TutorMeAI
+              </Button>
+
+              <Text size="xs" c="dimmed">
+                Your Google account stays the identity provider. This step saves your TutorMeAI profile and classroom
+                role on the platform.
+              </Text>
+            </Stack>
+          </Paper>
+        </Stack>
+      </Box>
+    )
   }
 
   return (

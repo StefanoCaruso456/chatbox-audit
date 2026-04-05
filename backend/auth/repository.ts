@@ -9,6 +9,7 @@ export interface AuthRepository {
   saveUser(user: UserRecord): Promise<void>
   getUserById(userId: string): Promise<UserRecord | undefined>
   getUserByEmail(email: string): Promise<UserRecord | undefined>
+  getUserByUsername(username: string): Promise<UserRecord | undefined>
 
   savePlatformSession(session: PlatformSessionRecord): Promise<void>
   getPlatformSessionById(platformSessionId: string): Promise<PlatformSessionRecord | undefined>
@@ -32,6 +33,7 @@ export interface InMemoryAuthRepositoryOptions {
 export class InMemoryAuthRepository implements AuthRepository {
   private readonly usersById = new Map<string, UserRecord>()
   private readonly userIdsByEmail = new Map<string, string>()
+  private readonly userIdsByUsername = new Map<string, string>()
 
   private readonly platformSessionsById = new Map<string, PlatformSessionRecord>()
   private readonly platformSessionIdsByTokenHash = new Map<string, string>()
@@ -70,6 +72,11 @@ export class InMemoryAuthRepository implements AuthRepository {
     if (normalizedEmail) {
       this.userIdsByEmail.set(normalizedEmail, snapshot.userId)
     }
+
+    const normalizedUsername = normalizeUsername(snapshot.username)
+    if (normalizedUsername) {
+      this.userIdsByUsername.set(normalizedUsername, snapshot.userId)
+    }
   }
 
   async getUserById(userId: string): Promise<UserRecord | undefined> {
@@ -84,6 +91,16 @@ export class InMemoryAuthRepository implements AuthRepository {
     }
 
     const userId = this.userIdsByEmail.get(normalizedEmail)
+    return userId ? this.getUserById(userId) : undefined
+  }
+
+  async getUserByUsername(username: string): Promise<UserRecord | undefined> {
+    const normalizedUsername = normalizeUsername(username)
+    if (!normalizedUsername) {
+      return undefined
+    }
+
+    const userId = this.userIdsByUsername.get(normalizedUsername)
     return userId ? this.getUserById(userId) : undefined
   }
 
@@ -183,6 +200,11 @@ export class InMemoryAuthRepository implements AuthRepository {
     if (normalizedEmail) {
       this.userIdsByEmail.delete(normalizedEmail)
     }
+
+    const normalizedUsername = normalizeUsername(user.username)
+    if (normalizedUsername) {
+      this.userIdsByUsername.delete(normalizedUsername)
+    }
   }
 
   private unindexOAuthConnection(connection: OAuthConnectionRecord) {
@@ -257,5 +279,14 @@ function normalizeEmail(email: string | null | undefined) {
   }
 
   const normalized = email.trim().toLowerCase()
+  return normalized.length > 0 ? normalized : null
+}
+
+function normalizeUsername(username: string | null | undefined) {
+  if (typeof username !== 'string') {
+    return null
+  }
+
+  const normalized = username.trim().toLowerCase()
   return normalized.length > 0 ? normalized : null
 }

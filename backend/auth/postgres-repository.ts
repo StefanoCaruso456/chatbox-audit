@@ -11,7 +11,10 @@ import type {
 interface UserRow {
   user_id: string
   email: string | null
+  username: string | null
   display_name: string
+  role: UserRecord['role']
+  onboarding_completed_at: string | Date | null
   metadata: JsonObject
   created_at: string | Date
   updated_at: string | Date
@@ -77,23 +80,32 @@ export class PostgresAuthRepository implements AuthRepository {
       `INSERT INTO users (
         user_id,
         email,
+        username,
         display_name,
+        role,
+        onboarding_completed_at,
         metadata,
         created_at,
         updated_at,
         deleted_at
-      ) VALUES ($1, $2, $3, $4::jsonb, $5::timestamptz, $6::timestamptz, $7::timestamptz)
+      ) VALUES ($1, $2, $3, $4, $5, $6::timestamptz, $7::jsonb, $8::timestamptz, $9::timestamptz, $10::timestamptz)
       ON CONFLICT (user_id) DO UPDATE
       SET
         email = EXCLUDED.email,
+        username = EXCLUDED.username,
         display_name = EXCLUDED.display_name,
+        role = EXCLUDED.role,
+        onboarding_completed_at = EXCLUDED.onboarding_completed_at,
         metadata = EXCLUDED.metadata,
         updated_at = EXCLUDED.updated_at,
         deleted_at = EXCLUDED.deleted_at`,
       [
         user.userId,
         user.email,
+        user.username,
         user.displayName,
+        user.role,
+        user.onboardingCompletedAt,
         JSON.stringify(user.metadata ?? {}),
         user.createdAt,
         user.updatedAt,
@@ -104,7 +116,7 @@ export class PostgresAuthRepository implements AuthRepository {
 
   async getUserById(userId: string): Promise<UserRecord | undefined> {
     const result = await this.pool.query<UserRow>(
-      `SELECT user_id, email, display_name, metadata, created_at, updated_at, deleted_at
+      `SELECT user_id, email, username, display_name, role, onboarding_completed_at, metadata, created_at, updated_at, deleted_at
       FROM users
       WHERE user_id = $1`,
       [userId]
@@ -115,11 +127,23 @@ export class PostgresAuthRepository implements AuthRepository {
 
   async getUserByEmail(email: string): Promise<UserRecord | undefined> {
     const result = await this.pool.query<UserRow>(
-      `SELECT user_id, email, display_name, metadata, created_at, updated_at, deleted_at
+      `SELECT user_id, email, username, display_name, role, onboarding_completed_at, metadata, created_at, updated_at, deleted_at
       FROM users
       WHERE LOWER(email) = LOWER($1)
       LIMIT 1`,
       [email]
+    )
+
+    return result.rows[0] ? mapUserRow(result.rows[0]) : undefined
+  }
+
+  async getUserByUsername(username: string): Promise<UserRecord | undefined> {
+    const result = await this.pool.query<UserRow>(
+      `SELECT user_id, email, username, display_name, role, onboarding_completed_at, metadata, created_at, updated_at, deleted_at
+      FROM users
+      WHERE LOWER(username) = LOWER($1)
+      LIMIT 1`,
+      [username]
     )
 
     return result.rows[0] ? mapUserRow(result.rows[0]) : undefined
@@ -502,7 +526,10 @@ function mapUserRow(row: UserRow): UserRecord {
   return {
     userId: row.user_id,
     email: row.email,
+    username: row.username,
     displayName: row.display_name,
+    role: row.role,
+    onboardingCompletedAt: toNullableIsoString(row.onboarding_completed_at),
     metadata: asJsonObject(row.metadata),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at),

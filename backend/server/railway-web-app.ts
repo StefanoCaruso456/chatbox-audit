@@ -5,6 +5,7 @@ import { extname, join, normalize, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { IdentifierSchema } from '@shared/contracts/v1'
 import { OriginSchema, normalizeOrigin } from '@shared/contracts/v1/shared'
+import { TutorMeAIUserRoleSchema, type TutorMeAIUserRole } from '@shared/types/settings'
 import { z } from 'zod'
 import { failureResult, toApiErrorBody } from '../errors'
 import {
@@ -32,6 +33,7 @@ const OAUTH_CONNECTION_PATH = '/api/auth/oauth'
 const PLATFORM_GOOGLE_START_PATH = '/api/auth/platform/google/start'
 const PLATFORM_GOOGLE_CALLBACK_PATH = '/api/auth/platform/google/callback'
 const PLATFORM_ME_PATH = '/api/auth/me'
+const PLATFORM_PROFILE_PATH = '/api/auth/profile'
 const PLATFORM_REFRESH_PATH = '/api/auth/platform/refresh'
 const PLATFORM_LOGOUT_PATH = '/api/auth/platform/logout'
 const PLATFORM_GOOGLE_COOKIE_NAME = 'tutormeai_platform_google'
@@ -49,6 +51,21 @@ const PlatformRefreshBodySchema = z.object({
 
 const PlatformLogoutBodySchema = z.object({
   refreshToken: z.string().trim().min(1).optional(),
+})
+
+const PlatformUsernameSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(32)
+  .regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/u, {
+    message: 'Username must use lowercase letters, numbers, dots, underscores, or hyphens.',
+  })
+
+const PlatformProfileBodySchema = z.object({
+  displayName: z.string().trim().min(1).max(120),
+  username: PlatformUsernameSchema,
+  role: TutorMeAIUserRoleSchema,
 })
 
 type CallbackPayload =
@@ -85,8 +102,11 @@ type PlatformCallbackPayload =
 interface PublicPlatformUser {
   userId: string
   email: string | null
+  username: string | null
   displayName: string
+  role: TutorMeAIUserRole | null
   pictureUrl: string | null
+  onboardingCompletedAt: string | null
 }
 
 interface PlatformGoogleCookiePayload {
@@ -193,6 +213,18 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
 
       if (url.pathname === PLATFORM_ME_PATH && request.method === 'GET') {
         return withCors(request, await handleGetPlatformProfile(request, { platformAuthService, repository }), env)
+      }
+
+      if (url.pathname === PLATFORM_PROFILE_PATH && request.method === 'POST') {
+        return withCors(
+          request,
+          await handleUpsertPlatformProfile(request, {
+            repository,
+            platformAuthService,
+            now,
+          }),
+          env
+        )
       }
 
       if (url.pathname === PLATFORM_REFRESH_PATH && request.method === 'POST') {
@@ -453,14 +485,15 @@ async function handlePlatformGoogleCallback(
   }
 
   const now = input.now()
-  const user = buildGoogleUserRecord(profileResult.value, now)
+  const existingUser = await input.repository.getUserById(buildGoogleUserId(profileResult.value.sub))
+  const user = buildGoogleUserRecord(profileResult.value, now, existingUser)
   await input.repository.saveUser(user)
 
   const issued = await input.platformAuthService.issuePlatformSession({
     userId: user.userId,
     provider: 'google',
     userAgent: normalizeNonEmptyString(request.headers.get('user-agent')),
-    ipAddress: getRequestIpAddress(request),
+    ipAddress: getRequestIpAddress(request) ?? undefined,
     metadata: {
       authProvider: 'google',
       email: user.email,
@@ -514,6 +547,12 @@ async function handleGetPlatformProfile(
   if (session instanceof Response) {
     return session
   }
+  if (!session) {
+    return jsonResponse(
+      401,
+      toApiErrorBody(failureResult('auth', 'platform-session-invalid-token', 'A TutorMeAI platform session is required.'))
+    )
+  }
 
   const user = await input.repository.getUserById(session.userId)
   if (!user) {
@@ -534,6 +573,83 @@ async function handleGetPlatformProfile(
         sessionExpiresAt: session.sessionExpiresAt,
         refreshExpiresAt: session.refreshExpiresAt,
       },
+    },
+  })
+}
+
+async function handleUpsertPlatformProfile(
+  request: Request,
+  input: {
+    repository: AuthRepository
+    platformAuthService: PlatformAuthService
+    now: () => string
+  }
+): Promise<Response> {
+  const session = await authenticatePlatformRequest(request, input.platformAuthService)
+  if (session instanceof Response) {
+    return session
+  }
+  if (!session) {
+    return jsonResponse(
+      401,
+      toApiErrorBody(failureResult('auth', 'platform-session-invalid-token', 'A TutorMeAI platform session is required.'))
+    )
+  }
+
+  const parsedBody = await parseJsonBody(request, PlatformProfileBodySchema)
+  if (!parsedBody.ok) {
+    return parsedBody.response
+  }
+
+  const existingUser = await input.repository.getUserById(session.userId)
+  if (!existingUser) {
+    return jsonResponse(
+      404,
+      toApiErrorBody(failureResult('auth', 'platform-session-not-found', 'TutorMeAI user account was not found.'))
+    )
+  }
+
+  const usernameOwner = await input.repository.getUserByUsername(parsedBody.data.username)
+  if (usernameOwner && usernameOwner.userId !== existingUser.userId) {
+    return jsonResponse(
+      409,
+      toApiErrorBody(failureResult('api', 'invalid-request', 'That username is already taken. Choose a different one.'))
+    )
+  }
+
+  const now = input.now()
+  const updatedUser: UserRecord = {
+    ...existingUser,
+    displayName: parsedBody.data.displayName,
+    username: parsedBody.data.username,
+    role: parsedBody.data.role,
+    onboardingCompletedAt: existingUser.onboardingCompletedAt ?? now,
+    updatedAt: now,
+    metadata: {
+      ...existingUser.metadata,
+      onboardingCompleted: true,
+      onboardingCompletedAt: existingUser.onboardingCompletedAt ?? now,
+      onboardingSource: existingUser.onboardingCompletedAt ? 'profile-update' : 'signup',
+    },
+  }
+
+  try {
+    await input.repository.saveUser(updatedUser)
+  } catch (error) {
+    if (isUniqueConstraintViolation(error)) {
+      return jsonResponse(
+        409,
+        toApiErrorBody(failureResult('api', 'invalid-request', 'That username is already taken. Choose a different one.'))
+      )
+    }
+
+    throw error
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    data: {
+      user: toPublicPlatformUser(updatedUser),
     },
   })
 }
@@ -593,7 +709,7 @@ async function handleLogoutPlatformSession(
 
   const sessionToken = readBearerToken(request)
   const result = await input.platformAuthService.revokePlatformSession({
-    sessionToken,
+    sessionToken: sessionToken ?? undefined,
     refreshToken: parsedBody.data.refreshToken,
     reason: 'user-logout',
   })
@@ -644,6 +760,12 @@ async function handleGoogleOAuthStart(
     const session = await authenticatePlatformRequest(request, input.platformAuthService)
     if (session instanceof Response) {
       return session
+    }
+    if (!session) {
+      return jsonResponse(
+        401,
+        toApiErrorBody(failureResult('auth', 'platform-session-invalid-token', 'A TutorMeAI platform session is required.'))
+      )
     }
 
     const parsedBody = await parseJsonBody(
@@ -1437,13 +1559,17 @@ function generateOpaqueValue(size: number) {
   return randomBytes(size).toString('base64url')
 }
 
-function buildGoogleUserRecord(profile: GoogleUserProfile, now: string): UserRecord {
+function buildGoogleUserRecord(profile: GoogleUserProfile, now: string, existingUser?: UserRecord): UserRecord {
   const userId = buildGoogleUserId(profile.sub)
   return {
     userId,
-    email: profile.email,
-    displayName: profile.name ?? profile.email ?? 'TutorMeAI User',
+    email: profile.email ?? existingUser?.email ?? null,
+    username: existingUser?.username ?? null,
+    displayName: existingUser?.displayName ?? profile.name ?? profile.email ?? 'TutorMeAI User',
+    role: existingUser?.role ?? null,
+    onboardingCompletedAt: existingUser?.onboardingCompletedAt ?? null,
     metadata: {
+      ...(existingUser?.metadata ?? {}),
       authProvider: 'google',
       emailVerified: profile.emailVerified,
       pictureUrl: profile.picture,
@@ -1451,9 +1577,9 @@ function buildGoogleUserRecord(profile: GoogleUserProfile, now: string): UserRec
       givenName: profile.givenName,
       familyName: profile.familyName,
     },
-    createdAt: now,
+    createdAt: existingUser?.createdAt ?? now,
     updatedAt: now,
-    deletedAt: null,
+    deletedAt: existingUser?.deletedAt ?? null,
   }
 }
 
@@ -1476,9 +1602,21 @@ function toPublicPlatformUser(user: UserRecord): PublicPlatformUser {
   return {
     userId: user.userId,
     email: user.email,
+    username: user.username,
     displayName: user.displayName,
+    role: user.role,
     pictureUrl,
+    onboardingCompletedAt: user.onboardingCompletedAt,
   }
+}
+
+function isUniqueConstraintViolation(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: string }).code === '23505'
+  )
 }
 
 function getRequestIpAddress(request: Request) {

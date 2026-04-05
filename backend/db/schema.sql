@@ -11,17 +11,30 @@ $$;
 CREATE TABLE users (
   user_id text PRIMARY KEY,
   email text,
+  username text,
   display_name text NOT NULL,
+  role text,
+  onboarding_completed_at timestamptz,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   updated_at timestamptz NOT NULL DEFAULT NOW(),
   deleted_at timestamptz,
-  CONSTRAINT users_email_present CHECK (email IS NULL OR LENGTH(TRIM(email)) > 0)
+  CONSTRAINT users_email_present CHECK (email IS NULL OR LENGTH(TRIM(email)) > 0),
+  CONSTRAINT users_username_present CHECK (username IS NULL OR LENGTH(TRIM(username)) > 0),
+  CONSTRAINT users_role_valid CHECK (role IS NULL OR role IN ('student', 'teacher', 'school_admin', 'district_Director')),
+  CONSTRAINT users_onboarding_requires_profile CHECK (
+    onboarding_completed_at IS NULL
+    OR (role IS NOT NULL AND username IS NOT NULL)
+  )
 );
 
 CREATE UNIQUE INDEX idx_users_email_unique
   ON users (LOWER(email))
   WHERE email IS NOT NULL AND deleted_at IS NULL;
+
+CREATE UNIQUE INDEX idx_users_username_unique
+  ON users (LOWER(username))
+  WHERE username IS NOT NULL AND deleted_at IS NULL;
 
 CREATE TABLE platform_sessions (
   platform_session_id text PRIMARY KEY,

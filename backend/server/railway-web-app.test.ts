@@ -62,6 +62,8 @@ describe('createRailwayWebApp', () => {
         GOOGLE_OAUTH_CLIENT_ID: 'client-id',
         GOOGLE_OAUTH_CLIENT_SECRET: 'client-secret',
         GOOGLE_OAUTH_REDIRECT_URI: 'https://chatbox-audit-production.up.railway.app/api/auth/platform/google/callback',
+        TUTORMEAI_PLATFORM_GOOGLE_REDIRECT_URI:
+          'https://chatbox-audit-production.up.railway.app/api/auth/platform/google/callback',
         TUTORMEAI_AUTH_TOKEN_SECRET: 'test-auth-secret',
       },
     })
@@ -119,11 +121,50 @@ describe('createRailwayWebApp', () => {
         user: {
           userId: string
           email: string | null
+          username: string | null
+          role: string | null
+          onboardingCompletedAt: string | null
         }
       }
     }
     expect(meBody.data.user.userId).toBe('user.google.google.user.456')
     expect(meBody.data.user.email).toBe('stefano@example.com')
+    expect(meBody.data.user.username).toBeNull()
+    expect(meBody.data.user.role).toBeNull()
+    expect(meBody.data.user.onboardingCompletedAt).toBeNull()
+
+    const profileResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/auth/profile', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${callbackPayload.accessToken}`,
+          'content-type': 'application/json',
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+        body: JSON.stringify({
+          displayName: 'Stefano',
+          username: 'stefano.caruso',
+          role: 'student',
+        }),
+      })
+    )
+
+    expect(profileResponse.status).toBe(200)
+    const profileBody = (await profileResponse.json()) as {
+      ok: true
+      data: {
+        user: {
+          username: string | null
+          role: string | null
+          onboardingCompletedAt: string | null
+          displayName: string
+        }
+      }
+    }
+    expect(profileBody.data.user.displayName).toBe('Stefano')
+    expect(profileBody.data.user.username).toBe('stefano.caruso')
+    expect(profileBody.data.user.role).toBe('student')
+    expect(profileBody.data.user.onboardingCompletedAt).toBeTruthy()
 
     const refreshResponse = await app.handleRequest(
       new Request('https://chatbox-audit-production.up.railway.app/api/auth/platform/refresh', {
@@ -144,10 +185,18 @@ describe('createRailwayWebApp', () => {
       data: {
         accessToken: string
         refreshToken: string
+        user: {
+          username: string | null
+          role: string | null
+          onboardingCompletedAt: string | null
+        }
       }
     }
     expect(refreshBody.data.accessToken).not.toBe(callbackPayload.accessToken)
     expect(refreshBody.data.refreshToken).not.toBe(callbackPayload.refreshToken)
+    expect(refreshBody.data.user.username).toBe('stefano.caruso')
+    expect(refreshBody.data.user.role).toBe('student')
+    expect(refreshBody.data.user.onboardingCompletedAt).toBeTruthy()
 
     const logoutResponse = await app.handleRequest(
       new Request('https://chatbox-audit-production.up.railway.app/api/auth/platform/logout', {
