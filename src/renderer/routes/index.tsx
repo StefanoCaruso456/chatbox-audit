@@ -276,7 +276,7 @@ function Index() {
                 showCopilotsInNewSession && (
                   <CopilotPicker onSelect={(copilot) => setSession((old) => ({ ...old, copilotId: copilot?.id }))} />
                 )
-              )
+              )}
 
               <InputBox
                 sessionType="chat"
