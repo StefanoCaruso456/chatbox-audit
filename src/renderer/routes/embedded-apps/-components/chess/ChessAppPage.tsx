@@ -6,10 +6,10 @@ import { postSidebarDirectIframeStateMessage } from '@/components/apps/sidebarDi
 import {
   activateChessSession,
   applyChessSessionMove,
+  type ChessMode,
   getChessSessionSnapshot,
   initializeChessSession,
   subscribeChessSession,
-  type ChessMode,
 } from '@/stores/chessSessionStore'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
 
@@ -29,7 +29,10 @@ function formatSummary(chess: Chess) {
   return `Current board FEN: ${chess.fen()}. ${formatTurn(chess.turn())} to move. Recent moves: ${recentMoves}.`
 }
 
-function buildSidebarRuntimeSnapshot(chess: Chess, mode?: 'practice' | 'analysis'): {
+function buildSidebarRuntimeSnapshot(
+  chess: Chess,
+  mode?: 'practice' | 'analysis'
+): {
   status: RuntimeAppStatus
   summary: string
   state: {
@@ -216,14 +219,14 @@ function getCoordinatePalette() {
 function getPiecePalette(color: 'w' | 'b') {
   return color === 'w'
     ? {
-        fill: '#fffdf8',
-        shadow: '0 1px 1px rgba(15,23,42,0.92), 0 0 6px rgba(15,23,42,0.6)',
-        stroke: '1.35px rgba(15, 23, 42, 0.92)',
+        fill: '#f8fafc',
+        shadow: '0 1px 2px rgba(15,23,42,0.3)',
+        stroke: '0.8px rgba(15, 23, 42, 0.58)',
       }
     : {
-        fill: '#111827',
-        shadow: '0 1px 0 rgba(248,250,252,0.32), 0 0 3px rgba(15,23,42,0.42)',
-        stroke: '0.55px rgba(248, 250, 252, 0.22)',
+        fill: '#0f172a',
+        shadow: '0 1px 0 rgba(248,250,252,0.18), 0 2px 4px rgba(15,23,42,0.2)',
+        stroke: '0',
       }
 }
 
@@ -232,18 +235,12 @@ const boardSquares = (['8', '7', '6', '5', '4', '3', '2', '1'] as const).flatMap
 )
 
 const pieceGlyphs: Record<string, string> = {
-  wp: '♙',
-  wr: '♖',
-  wn: '♘',
-  wb: '♗',
-  wq: '♕',
-  wk: '♔',
-  bp: '♟',
-  br: '♜',
-  bn: '♞',
-  bb: '♝',
-  bq: '♛',
-  bk: '♚',
+  p: '♟',
+  r: '♜',
+  n: '♞',
+  b: '♝',
+  q: '♛',
+  k: '♚',
 }
 
 export function ChessAppPage() {
@@ -291,11 +288,11 @@ export function ChessAppPage() {
         state: {
           fen: sharedChessSnapshot.fen,
           turn: sharedChessSnapshot.turn,
-        moveCount: sharedChessSnapshot.moveCount,
-        ...(sharedChessSnapshot.lastMove !== 'No moves yet' ? { lastMove: sharedChessSnapshot.lastMove } : {}),
-        ...(sharedChessSnapshot.lastUpdateSource ? { lastUpdateSource: sharedChessSnapshot.lastUpdateSource } : {}),
-        ...(sharedChessSnapshot.mode ? { mode: sharedChessSnapshot.mode } : {}),
-      },
+          moveCount: sharedChessSnapshot.moveCount,
+          ...(sharedChessSnapshot.lastMove !== 'No moves yet' ? { lastMove: sharedChessSnapshot.lastMove } : {}),
+          ...(sharedChessSnapshot.lastUpdateSource ? { lastUpdateSource: sharedChessSnapshot.lastUpdateSource } : {}),
+          ...(sharedChessSnapshot.mode ? { mode: sharedChessSnapshot.mode } : {}),
+        },
       }
     }
 
@@ -321,11 +318,12 @@ export function ChessAppPage() {
       summary: activeSidebarSnapshot.summary,
       state: activeSidebarSnapshot.state,
       progress: {
-        label: activeSidebarSnapshot.state.moveCount === 0 ? 'Opening position' : `Move ${activeSidebarSnapshot.state.moveCount}`,
-        percent:
+        label:
           activeSidebarSnapshot.state.moveCount === 0
-            ? 0
-            : Math.min(95, 5 + activeSidebarSnapshot.state.moveCount * 5),
+            ? 'Opening position'
+            : `Move ${activeSidebarSnapshot.state.moveCount}`,
+        percent:
+          activeSidebarSnapshot.state.moveCount === 0 ? 0 : Math.min(95, 5 + activeSidebarSnapshot.state.moveCount * 5),
       },
     })
   }, [activeSidebarSnapshot, runtimeContext, sendState])
@@ -368,7 +366,9 @@ export function ChessAppPage() {
     }
 
     const requestedMove =
-      typeof invocationMessage.payload.arguments.move === 'string' ? invocationMessage.payload.arguments.move.trim() : ''
+      typeof invocationMessage.payload.arguments.move === 'string'
+        ? invocationMessage.payload.arguments.move.trim()
+        : ''
     const expectedFen =
       typeof invocationMessage.payload.arguments.expectedFen === 'string'
         ? invocationMessage.payload.arguments.expectedFen.trim()
@@ -465,7 +465,7 @@ export function ChessAppPage() {
         const square = `${String.fromCharCode(97 + fileIndex)}${8 - rankIndex}` as Square
         map.set(square, {
           label: `${piece.color === 'w' ? 'White' : 'Black'} ${piece.type.toUpperCase()}`,
-          glyph: pieceGlyphs[`${piece.color}${piece.type}`] ?? piece.type.toUpperCase(),
+          glyph: pieceGlyphs[piece.type] ?? piece.type.toUpperCase(),
           color: piece.color,
         })
       })
