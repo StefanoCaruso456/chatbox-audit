@@ -6,9 +6,9 @@ import {
   type ConversationAppContext,
   exampleAuthenticatedPlannerManifest,
   exampleChessGetBoardStateToolSchema,
+  exampleChessMakeMoveToolSchema,
   exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
-  exampleChessMakeMoveToolSchema,
   examplePublicFlashcardsManifest,
   parseConversationAppContext,
   type ToolSchema,
@@ -17,6 +17,7 @@ import type { JsonObject } from '@shared/contracts/v1/shared'
 import { createMessage, type Message, type MessageEmbeddedAppPart } from '@shared/types'
 import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
+import { applyRequestedChessMove, extractRequestedChessMove } from '@/routes/embedded-apps/-components/chess/chessMove'
 import {
   getChessSessionHistory,
   getChessSessionSnapshot,
@@ -26,7 +27,6 @@ import { buildRuntimeTraceId, recordRuntimeTraceSpan } from '@/stores/runtimeTra
 import { enqueueSidebarAppRuntimeCommand } from '@/stores/sidebarAppRuntimeCommandStore'
 import { getSidebarAppRuntimeSnapshot, type SidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
-import { applyRequestedChessMove, extractRequestedChessMove } from '@/routes/embedded-apps/-components/chess/chessMove'
 import {
   AvailableToolDiscoveryService,
   type ToolRouteDecision,
@@ -134,6 +134,10 @@ function buildTextPreview(message: Message) {
   return firstTextPart?.text.slice(0, 280)
 }
 
+function buildTraceTags(...values: Array<string | undefined | null | false>) {
+  return values.filter((value): value is string => Boolean(value))
+}
+
 function finalizeTutorMeAiInterceptionResult(input: {
   conversationId: string
   userRequest: string
@@ -167,6 +171,12 @@ function finalizeTutorMeAiInterceptionResult(input: {
       layer: 'agent',
       source: 'tutormeai-orchestrator',
     },
+    input: input.userRequest,
+    output:
+      input.result.kind === 'pass-through'
+        ? 'No app interception result was returned.'
+        : (buildTextPreview(input.result.message) ?? `${input.source} returned ${input.result.kind}.`),
+    tags: buildTraceTags('agent-return', 'agent', approvedAppId, runtimeAppId, input.result.kind, input.source),
     agentReturn: {
       kind: input.result.kind,
       toolName: input.result.kind === 'pass-through' ? undefined : inferToolNameFromMessage(input.result.message),
@@ -212,6 +222,16 @@ function recordChessStateSelectionSpan(input: {
       layer: 'agent',
       source: 'tutormeai-orchestrator',
     },
+    input: 'Choose the freshest chess board state for the active conversation.',
+    output: input.selectedResult?.summary ?? 'No chess board state was selected.',
+    expected: input.selectionReason,
+    tags: buildTraceTags(
+      'state-selection',
+      'agent',
+      CHESS_APPROVED_APP_ID,
+      exampleInternalChessManifest.appId,
+      input.selectedSource
+    ),
     state: input.selectedResult
       ? {
           source: input.selectedSource,
@@ -267,6 +287,16 @@ function recordChessRuntimeCommandSpan(input: {
       layer: 'agent',
       source: 'tutormeai-orchestrator',
     },
+    input: `Requested move: ${input.requestedMove}`,
+    output: input.moveResult?.summary ?? input.errorMessage ?? 'Chess move command did not return a summary.',
+    expected: `Expected FEN before move: ${input.expectedFen}`,
+    tags: buildTraceTags(
+      'runtime-command',
+      'agent',
+      CHESS_APPROVED_APP_ID,
+      exampleInternalChessManifest.appId,
+      exampleChessMakeMoveToolSchema.name
+    ),
     state: {
       source: 'sidebar-runtime-command',
       requestedMove: input.requestedMove,

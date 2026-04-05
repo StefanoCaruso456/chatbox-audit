@@ -1,4 +1,5 @@
 import type { RuntimeTraceSpan } from '@shared/contracts/v1'
+import type { JsonValue } from '@shared/contracts/v1/shared'
 import { initLogger, type Logger } from 'braintrust'
 
 export const DEFAULT_BRAINTRUST_APP_URL = 'https://www.braintrust.dev'
@@ -157,9 +158,13 @@ function normalizeNonEmptyString(input: string | undefined) {
 }
 
 function buildBraintrustSpanEvent(span: RuntimeTraceSpan) {
+  const rowFields = buildBraintrustRowFields(span)
+
   return {
-    input: span.input,
-    output: span.output,
+    input: rowFields.input,
+    output: rowFields.output,
+    expected: rowFields.expected,
+    tags: rowFields.tags,
     error: span.error?.message,
     metadata: {
       runtimeTraceVersion: span.version,
@@ -183,6 +188,93 @@ function buildBraintrustSpanEvent(span: RuntimeTraceSpan) {
       recordedAtMs: new Date(span.recordedAt).getTime(),
     },
   }
+}
+
+function buildBraintrustRowFields(span: RuntimeTraceSpan): {
+  input: JsonValue | undefined
+  output: JsonValue | undefined
+  expected: JsonValue | undefined
+  tags: string[] | undefined
+} {
+  return {
+    input: span.input ?? buildFallbackInput(span),
+    output: span.output ?? buildFallbackOutput(span),
+    expected: span.expected ?? buildFallbackExpected(span),
+    tags: span.tags?.length ? span.tags : buildFallbackTags(span),
+  }
+}
+
+function buildFallbackInput(span: RuntimeTraceSpan): JsonValue | undefined {
+  const summaryTarget = span.approvedAppId ?? span.runtimeAppId ?? span.appSessionId ?? span.conversationId
+
+  switch (span.kind) {
+    case 'trace-root':
+      return summaryTarget ? `Initialize runtime trace for ${summaryTarget}` : 'Initialize runtime trace'
+    case 'runtime-open':
+      return summaryTarget ? `Open ${summaryTarget} in the sidebar runtime` : span.name
+    case 'runtime-snapshot':
+      return summaryTarget ? `Sync runtime snapshot for ${summaryTarget}` : span.name
+    case 'runtime-command':
+      return span.state?.requestedMove
+        ? `Requested move: ${span.state.requestedMove}`
+        : span.agentReturn?.toolName
+          ? `Run ${span.agentReturn.toolName}`
+          : span.name
+    case 'state-selection':
+      return 'Choose the freshest runtime state for the active conversation.'
+    case 'agent-return':
+      return typeof span.metadata?.userRequest === 'string' ? span.metadata.userRequest : span.name
+    case 'coach-message':
+      return span.name
+    case 'app-event':
+      return span.name
+    default:
+      return span.name
+  }
+}
+
+function buildFallbackOutput(span: RuntimeTraceSpan): JsonValue | undefined {
+  if (span.state?.summary) {
+    return span.state.summary
+  }
+
+  if (span.error?.message) {
+    return span.error.message
+  }
+
+  if (span.agentReturn?.kind === 'pass-through') {
+    return 'No runtime action was taken.'
+  }
+
+  if (span.agentReturn?.toolName) {
+    return `Returned ${span.agentReturn.kind} via ${span.agentReturn.toolName}.`
+  }
+
+  if (span.kind === 'trace-root') {
+    return 'Runtime trace opened.'
+  }
+
+  return undefined
+}
+
+function buildFallbackExpected(span: RuntimeTraceSpan): JsonValue | undefined {
+  if (span.state?.expectedFen && span.state?.requestedMove) {
+    return `Expected FEN before ${span.state.requestedMove}: ${span.state.expectedFen}`
+  }
+
+  return undefined
+}
+
+function buildFallbackTags(span: RuntimeTraceSpan) {
+  const tags = [
+    span.kind,
+    span.actor.layer,
+    span.approvedAppId,
+    span.runtimeAppId,
+    span.agentReturn?.kind,
+  ].filter((value): value is string => Boolean(value))
+
+  return tags.length ? [...new Set(tags)].slice(0, 16) : undefined
 }
 
 function sortRuntimeTraceSpans(spans: RuntimeTraceSpan[]) {

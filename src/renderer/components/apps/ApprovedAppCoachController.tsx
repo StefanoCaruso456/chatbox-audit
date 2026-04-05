@@ -7,9 +7,9 @@ import {
   buildChessObservedBoardStateMessage,
   buildChessObservedBoardStateToolCallId,
 } from '@/packages/tutormeai-apps/orchestrator'
+import { useApprovedAppEventStore } from '@/stores/approvedAppEventStore'
 import { buildRuntimeTraceId, recordRuntimeTraceSpan } from '@/stores/runtimeTraceStore'
 import * as scrollActions from '@/stores/scrollActions'
-import { useApprovedAppEventStore } from '@/stores/approvedAppEventStore'
 import { insertMessage } from '@/stores/session/messages'
 import { getAllMessageList } from '@/stores/sessionHelpers'
 
@@ -47,6 +47,9 @@ function recordCoachTraceSpan(input: {
       layer: 'host',
       source: 'approved-app-coach-controller',
     },
+    input: `Create chess coach message from ${input.traceSource}`,
+    output: input.summary,
+    tags: ['coach-message', 'host', 'chess-tutor', 'chess.internal', input.traceSource],
     state: {
       source: input.traceSource,
       summary: input.summary,
@@ -75,9 +78,7 @@ function sessionAlreadyHasKickoffMessage(session: Session, appSessionId: string)
   const kickoffToolCallId = buildChessApprovedAppKickoffToolCallId(appSessionId)
 
   return getAllMessageList(session).some((message) =>
-    (message.contentParts ?? []).some(
-      (part) => part.type === 'tool-call' && part.toolCallId === kickoffToolCallId
-    )
+    (message.contentParts ?? []).some((part) => part.type === 'tool-call' && part.toolCallId === kickoffToolCallId)
   )
 }
 
@@ -85,9 +86,7 @@ function sessionAlreadyHasObservedBoardMessage(session: Session, appSessionId: s
   const observedToolCallId = buildChessObservedBoardStateToolCallId(appSessionId, moveCount)
 
   return getAllMessageList(session).some((message) =>
-    (message.contentParts ?? []).some(
-      (part) => part.type === 'tool-call' && part.toolCallId === observedToolCallId
-    )
+    (message.contentParts ?? []).some((part) => part.type === 'tool-call' && part.toolCallId === observedToolCallId)
   )
 }
 
@@ -187,8 +186,7 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
 
     const observedStateDigest = activeChessObservedStateEvent.latestStateDigest
     const fen = typeof observedStateDigest?.fen === 'string' ? observedStateDigest.fen : null
-    const moveCount =
-      typeof observedStateDigest?.moveCount === 'number' ? observedStateDigest.moveCount : null
+    const moveCount = typeof observedStateDigest?.moveCount === 'number' ? observedStateDigest.moveCount : null
     const lastUpdateSource =
       typeof observedStateDigest?.lastUpdateSource === 'string' ? observedStateDigest.lastUpdateSource : null
 
@@ -228,10 +226,7 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
           traceSource: 'approved-app.state-observed',
           summary: activeChessObservedStateEvent.summary,
           latestStateDigest: observedStateDigest,
-          toolCallId: buildChessObservedBoardStateToolCallId(
-            activeChessObservedStateEvent.appSessionId,
-            moveCount
-          ),
+          toolCallId: buildChessObservedBoardStateToolCallId(activeChessObservedStateEvent.appSessionId, moveCount),
         })
         scrollActions.scrollToBottom('smooth')
       })

@@ -405,6 +405,19 @@ describe('routeTutorMeAiAppRequest', () => {
     })
     expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Move played: d4')
     expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(
+      getRuntimeTraceSpans().find(
+        (span) =>
+          span.kind === 'runtime-command' &&
+          span.conversationId === 'conversation.8' &&
+          span.approvedAppId === 'chess-tutor'
+      )
+    ).toMatchObject({
+      input: 'Requested move: d4',
+      output: 'Move played: d4. Black to move.',
+      expected: 'Expected FEN before move: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      tags: ['runtime-command', 'agent', 'chess-tutor', 'chess.internal', 'chess.make-move'],
+    })
   })
 
   it('plays the last structured chess recommendation when the user says play it', async () => {

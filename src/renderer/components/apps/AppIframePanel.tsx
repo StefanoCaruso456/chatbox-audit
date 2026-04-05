@@ -15,6 +15,7 @@ import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { probeForNewerBuild } from '@/lib/build-freshness'
 import { cn } from '@/lib/utils'
+import { publishApprovedAppOpenedEvent, publishApprovedAppStateObservedEvent } from '@/stores/approvedAppEventStore'
 import { currentSessionIdAtom } from '@/stores/atoms'
 import { useSession } from '@/stores/chatStore'
 import { buildRuntimeTraceId, recordRuntimeTraceSpan } from '@/stores/runtimeTraceStore'
@@ -29,12 +30,11 @@ import {
   getSidebarAppRuntimeSnapshot,
   upsertSidebarAppRuntimeSnapshot,
 } from '@/stores/sidebarAppRuntimeStore'
-import { publishApprovedAppOpenedEvent, publishApprovedAppStateObservedEvent } from '@/stores/approvedAppEventStore'
 import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
-import { isSidebarDirectIframeStateMessage } from './sidebarDirectIframeState'
 import AppIcon from './AppIcon'
 import { resolveAppPanelLaunchUrl, resolveApprovedAppPanelRuntime } from './app-panel-runtime'
+import { isSidebarDirectIframeStateMessage } from './sidebarDirectIframeState'
 
 const iframeSandbox = [
   'allow-downloads',
@@ -69,14 +69,17 @@ function getChessObservedBoardStateKey(stateDigest: JsonObject | undefined) {
 
   const fen = typeof stateDigest.fen === 'string' ? stateDigest.fen : null
   const moveCount = typeof stateDigest.moveCount === 'number' ? stateDigest.moveCount : null
-  const lastUpdateSource =
-    typeof stateDigest.lastUpdateSource === 'string' ? stateDigest.lastUpdateSource : null
+  const lastUpdateSource = typeof stateDigest.lastUpdateSource === 'string' ? stateDigest.lastUpdateSource : null
 
   if (!fen || moveCount === null || lastUpdateSource !== 'manual-board-move') {
     return null
   }
 
   return `${fen}::${moveCount}::${lastUpdateSource}`
+}
+
+function buildTraceTags(...values: Array<string | undefined | null | false>) {
+  return values.filter((value): value is string => Boolean(value))
 }
 
 function hasRenderableIframeContent(iframe: HTMLIFrameElement | null) {
@@ -344,6 +347,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           layer: 'host',
           source: 'app-iframe-panel',
         },
+        input: `Sync ${app.id} runtime snapshot from ${input.traceSource ?? 'runtime.snapshot-sync'}`,
+        output: input.summary,
+        tags: buildTraceTags('runtime-snapshot', 'host', app.id, runtimeAppId, input.status),
         state: {
           source: input.traceSource ?? 'runtime.snapshot-sync',
           status: input.status,
@@ -400,6 +406,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           layer: 'host',
           source: 'app-iframe-panel',
         },
+        input: `Publish ${app.id} observed board-change event`,
+        output: input.summary,
+        tags: buildTraceTags('app-event', 'host', app.id, runtimeAppId, 'board-change'),
         state: {
           source: 'approved-app.state-observed',
           status: input.status,
@@ -568,6 +577,13 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         layer: 'host',
         source: 'app-iframe-panel',
       },
+      input: `Open ${app.name} in the sidebar runtime`,
+      output:
+        embeddedRuntime.completion?.summary ??
+        (embeddedRuntime.pendingInvocation
+          ? `${app.name} is preparing ${embeddedRuntime.pendingInvocation.toolName}.`
+          : `${app.name} is open in the right sidebar.`),
+      tags: buildTraceTags('runtime-open', 'host', app.id, runtimeAppId, app.experience),
       state: {
         source: 'approved-app.opened',
         status:
@@ -575,7 +591,8 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
             ? 'failed'
             : embeddedRuntime.completion
               ? 'completed'
-              : embeddedRuntime.bootstrap?.authState === 'required' || embeddedRuntime.bootstrap?.authState === 'expired'
+              : embeddedRuntime.bootstrap?.authState === 'required' ||
+                  embeddedRuntime.bootstrap?.authState === 'expired'
                 ? 'waiting-auth'
                 : embeddedRuntime.pendingInvocation
                   ? 'pending'
@@ -825,7 +842,15 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       })
       setLoadState(hasRuntimeResponseRef.current || hasRenderableIframeContent(iframeRef.current) ? 'ready' : 'blocked')
     },
-    [app.experience, app.name, clearDirectCommandReplayTimers, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot]
+    [
+      app.experience,
+      app.name,
+      clearDirectCommandReplayTimers,
+      currentSessionId,
+      embeddedRuntime,
+      runtimeAppId,
+      syncSidebarRuntimeSnapshot,
+    ]
   )
 
   useEffect(() => {
@@ -937,7 +962,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
         setLoadState(message.payload.recoverable ? 'ready' : 'blocked')
         syncSidebarRuntimeSnapshot({
-          status: message.payload.recoverable ? existingSnapshot?.status ?? 'active' : 'failed',
+          status: message.payload.recoverable ? (existingSnapshot?.status ?? 'active') : 'failed',
           summary: message.payload.message,
           latestStateDigest: existingSnapshot?.latestStateDigest ?? embeddedRuntime.bootstrap?.initialState,
           errorMessage: message.payload.message,
