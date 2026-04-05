@@ -235,17 +235,16 @@ describe('AppIframePanel', () => {
     expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })
 
-  it('opens Chess.com as a governed embedded runtime workspace in the sidebar', () => {
+  it('opens Chess.com as a governed partner-embed workspace in the sidebar', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-com' })
 
     renderPanel(<AppIframePanel />)
 
-    const host = screen.getByTestId('embedded-app-host')
-    expect(host.getAttribute('data-src')).toMatch(
-      /^http:\/\/localhost:3000\/embedded-apps\/chess-com\?chatbridge_panel=1&chatbridge_launch=.+$/
+    const iframe = screen.getByTitle('Chess.com app panel') as HTMLIFrameElement
+    expect(iframe.getAttribute('src')).toMatch(
+      /^http:\/\/localhost:3000\/embedded-apps\/catalog\/chess-com\?chatbridge_panel=1&chatbridge_launch=.+$/
     )
-    expect(host.getAttribute('data-runtime')).toContain('"conversationId":"conversation.sidebar.chess-com"')
-    expect(host.getAttribute('data-runtime')).toContain('"handshakeToken":"sidebar.chess.com.workspace.chess-com.0"')
+    expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })
 
   it('keeps Chess Tutor visible when the board has rendered before the runtime timeout fires', () => {

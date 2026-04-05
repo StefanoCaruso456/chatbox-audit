@@ -5,21 +5,6 @@ describe('approvedApps', () => {
   it('includes the TutorMeAI runtime apps in the shared library', () => {
     expect(approvedApps).toHaveLength(30)
 
-    expect(getApprovedAppById('chess-com')).toMatchObject({
-      experience: 'tutormeai-runtime',
-      launchUrl: '/embedded-apps/chess-com',
-      runtimeBridge: {
-        appId: 'chess.com.workspace',
-        initialState: {
-          provider: 'chess.com',
-          mode: 'analysis',
-        },
-      },
-      integrationConfig: {
-        defaultLaunchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
-        launchUrlLabel: 'Chess.com emboard URL',
-      },
-    })
     expect(getApprovedAppById('chess-tutor')).toMatchObject({
       experience: 'tutormeai-runtime',
       launchUrl: '/embedded-apps/chess',
@@ -49,6 +34,16 @@ describe('approvedApps', () => {
   })
 
   it('keeps approved library apps pointed at their governed workspace routes', () => {
+    expect(getApprovedAppById('chess-com')).toMatchObject({
+      experience: 'approved-library',
+      launchUrl: '/embedded-apps/catalog/chess-com',
+      vendorUrl: 'https://www.chess.com/play/computer',
+      integrationMode: 'partner-embed',
+      integrationConfig: {
+        defaultLaunchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+        launchUrlLabel: 'Chess.com emboard URL',
+      },
+    })
     expect(getApprovedAppById('google-classroom')).toMatchObject({
       experience: 'approved-library',
       launchUrl: '/embedded-apps/catalog/google-classroom',
@@ -103,7 +98,7 @@ describe('approvedApps', () => {
   it('gives every approved library app an integration workspace config', () => {
     const approvedLibraryApps = approvedApps.filter((app) => app.experience === 'approved-library')
 
-    expect(approvedLibraryApps).toHaveLength(26)
+    expect(approvedLibraryApps).toHaveLength(27)
     approvedLibraryApps.forEach((app) => {
       expect(app.launchUrl).toBe(`/embedded-apps/catalog/${app.id}`)
       expect(app.integrationConfig?.capabilities?.length).toBeGreaterThan(0)
