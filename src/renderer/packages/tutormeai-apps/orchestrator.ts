@@ -615,7 +615,7 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     conversationId: string
     userRequest: string
   }
-): Promise<Message | null> {
+): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
   const boardState = buildChessBoardStateResult({
     appSessionId: snapshot.appSessionId,
     summary: snapshot.summary,
@@ -634,7 +634,10 @@ async function buildChessMoveMessageFromSidebarSnapshot(
   const validationChess = new Chess(boardState.fen)
   const previewMove = applyRequestedChessMove(validationChess, requestedMove)
   if (!previewMove) {
-    return buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`)
+    return {
+      kind: 'clarify',
+      message: buildClarificationMessage(`"${requestedMove}" is not a legal move from the current live Chess position.`),
+    }
   }
 
   const toolCallId = `tool-call.chess.make-move.${uuidv4()}`
@@ -653,21 +656,33 @@ async function buildChessMoveMessageFromSidebarSnapshot(
   })
 
   if (!commandResult.ok) {
-    return buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`)
+    return {
+      kind: 'clarify',
+      message: buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`),
+    }
   }
 
   if (commandResult.completion.status !== 'succeeded') {
-    return buildClarificationMessage(commandResult.completion.resultSummary)
+    return {
+      kind: 'clarify',
+      message: buildClarificationMessage(commandResult.completion.resultSummary),
+    }
   }
 
   const completionResult = toJsonObject(commandResult.completion.result)
   if (!completionResult) {
-    return buildClarificationMessage('Chess Tutor responded, but the move result was not machine-readable.')
+    return {
+      kind: 'clarify',
+      message: buildClarificationMessage('Chess Tutor responded, but the move result was not machine-readable.'),
+    }
   }
 
   const moveResult = buildChessMoveToolResult(completionResult)
   if (!moveResult) {
-    return buildClarificationMessage('Chess Tutor responded, but the move result was missing required board details.')
+    return {
+      kind: 'clarify',
+      message: buildClarificationMessage('Chess Tutor responded, but the move result was missing required board details.'),
+    }
   }
 
   const message = createMessage('assistant')
@@ -690,7 +705,10 @@ async function buildChessMoveMessageFromSidebarSnapshot(
   ]
   message.generating = false
   message.status = []
-  return message
+  return {
+    kind: 'invoke-tool',
+    message,
+  }
 }
 
 function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
@@ -1137,10 +1155,7 @@ export async function routeTutorMeAiAppRequest(
           userRequest: input.userRequest,
         })
         if (moveMessage) {
-          return {
-            kind: 'invoke-tool',
-            message: moveMessage,
-          }
+          return moveMessage
         }
       }
 
