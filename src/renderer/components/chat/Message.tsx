@@ -545,7 +545,7 @@ const _Message: FC<Props> = (props) => {
                           </div>
                         )
                       ) : item.type === 'tool-call' ? (
-                        <ToolCallPartUI key={item.toolCallId} part={item as MessageToolCallPart} />
+                        <ToolCallPartUI key={item.toolCallId} part={item as MessageToolCallPart} sessionId={sessionId} />
                       ) : item.type === 'embedded-app' ? (
                         <div key={`${item.appId}:${item.appSessionId || index}`} className="mt-2">
                           <div className="mb-2 flex flex-wrap items-center gap-2">

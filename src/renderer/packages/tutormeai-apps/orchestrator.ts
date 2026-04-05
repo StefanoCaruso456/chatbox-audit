@@ -436,6 +436,10 @@ type ChessBoardStateToolResult = {
   status: string
   summary: string
   moveExecutionAvailable: boolean
+  recommendedMove: string | null
+  recommendationReason: string | null
+  coachingTip: string | null
+  alternativeMoves: string[]
   mode?: string
 }
 
@@ -452,6 +456,9 @@ type ChessMoveToolResult = {
   summary: string
   explanation: string
   moveExecutionAvailable: boolean
+  coachingTip: string | null
+  strategicTheme: string | null
+  alternativeMoves: string[]
 }
 
 type ChessBoardStateSource = {
@@ -556,11 +563,15 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
   const legalMoves = chess.moves()
   const moveCount =
     typeof stateDigest.moveCount === 'number' && Number.isFinite(stateDigest.moveCount) ? stateDigest.moveCount : 0
+  const candidateMoves = buildChessCandidateMoves(chess)
+  const phase = inferChessPhase(chess)
+  const turn = chess.turn() === 'w' ? 'white' : 'black'
+  const recommendedMove = candidateMoves[0] ?? null
 
   return {
     appSessionId: source.appSessionId,
     fen: chess.fen(),
-    turn: chess.turn() === 'w' ? 'white' : 'black',
+    turn,
     moveCount,
     lastMove:
       typeof stateDigest.lastMove === 'string' && stateDigest.lastMove.trim().length > 0
@@ -569,22 +580,24 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
     moveHistory: source.moveHistory?.filter((move): move is string => typeof move === 'string' && move.trim().length > 0) ?? [],
     legalMoveCount: legalMoves.length,
     legalMoves: legalMoves.slice(0, 20),
-    candidateMoves: buildChessCandidateMoves(chess),
-    phase: inferChessPhase(chess),
+    candidateMoves,
+    phase,
     status: describeChessStatus(chess),
     summary:
       typeof source.summary === 'string' && source.summary.trim().length > 0
         ? source.summary
         : `Current board FEN: ${chess.fen()}. ${formatChessTurn(chess.turn())} to move.`,
     moveExecutionAvailable: source.availableToolNames?.includes(exampleChessMakeMoveToolSchema.name) ?? false,
+    recommendedMove,
+    recommendationReason: recommendedMove ? buildChessMoveExplanation(recommendedMove) : null,
+    coachingTip: recommendedMove ? buildChessCoachingTip(recommendedMove, phase, turn) : null,
+    alternativeMoves: candidateMoves.slice(1, 3),
     ...(typeof stateDigest.mode === 'string' ? { mode: stateDigest.mode } : {}),
   }
 }
 
 function buildChessLiveBoardSummary(result: ChessBoardStateToolResult) {
-  const candidateMoves =
-    result.candidateMoves.length > 0 ? ` Candidate moves: ${result.candidateMoves.join(', ')}.` : ''
-  return `Current live Chess board: ${result.turn === 'white' ? 'White' : 'Black'} to move. ${result.status}. Last move: ${result.lastMove}. Legal moves: ${result.legalMoveCount}.${candidateMoves}`
+  return `Current live Chess board: ${result.turn === 'white' ? 'White' : 'Black'} to move. ${result.status}. Last move: ${result.lastMove}.`
 }
 
 function describeChessMovedPiece(lastMove: string) {
@@ -641,20 +654,22 @@ function buildChessHistoryText(result: ChessBoardStateToolResult, userRequest: s
 
 function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest: string) {
   const sharedSummary = buildChessLiveBoardSummary(result)
-  const recommendation =
-    result.candidateMoves.length > 0
-      ? ` Recommended next move: ${result.candidateMoves[0]} because it ${buildChessMoveExplanation(result.candidateMoves[0])}.`
-      : ''
+  const recommendation = result.recommendedMove
+    ? ` Recommended next move: ${result.recommendedMove}. Why now: it ${result.recommendationReason}.`
+    : ''
+  const coachingTip = result.coachingTip ? ` Coach note: ${result.coachingTip}` : ''
+  const alternatives =
+    result.alternativeMoves.length > 0 ? ` Alternatives to compare: ${result.alternativeMoves.join(', ')}.` : ''
 
   if (isChessMoveHistoryIntent(userRequest)) {
     return buildChessHistoryText(result, userRequest)
   }
 
   if (isChessMoveIntent(userRequest) && !result.moveExecutionAvailable) {
-    return `I can read the live Chess board now, but direct move execution from chat is not wired yet. ${sharedSummary}${recommendation}`
+    return `I can read the live Chess board now, but direct move execution from chat is not wired yet. ${sharedSummary}${recommendation}${coachingTip}${alternatives}`
   }
 
-  return `${sharedSummary}${recommendation}`
+  return `${sharedSummary}${recommendation}${coachingTip}${alternatives}`
 }
 
 function buildChessMoveToolResult(completionResult: JsonObject): ChessMoveToolResult | null {
@@ -678,6 +693,16 @@ function buildChessMoveToolResult(completionResult: JsonObject): ChessMoveToolRe
     return null
   }
 
+  let phase = 'middlegame'
+  try {
+    phase = inferChessPhase(new Chess(completionResult.fen))
+  } catch {
+    phase = 'middlegame'
+  }
+
+  const candidateMoves = completionResult.candidateMoves.filter((move): move is string => typeof move === 'string')
+  const sideThatMoved = completionResult.turn === 'white' ? 'black' : 'white'
+
   return {
     appSessionId: completionResult.appSessionId,
     requestedMove: completionResult.requestedMove,
@@ -687,17 +712,22 @@ function buildChessMoveToolResult(completionResult: JsonObject): ChessMoveToolRe
     moveCount: completionResult.moveCount,
     lastMove: completionResult.lastMove,
     legalMoveCount: completionResult.legalMoveCount,
-    candidateMoves: completionResult.candidateMoves.filter((move): move is string => typeof move === 'string'),
+    candidateMoves,
     summary: completionResult.summary,
     explanation: completionResult.explanation,
     moveExecutionAvailable: completionResult.moveExecutionAvailable,
+    coachingTip: buildChessCoachingTip(completionResult.appliedMove, phase, sideThatMoved),
+    strategicTheme: buildChessStrategicTheme(completionResult.appliedMove, phase),
+    alternativeMoves: candidateMoves.slice(0, 3),
   }
 }
 
 function buildChessMoveResultText(result: ChessMoveToolResult) {
+  const strategicTheme = result.strategicTheme ? ` Strategic theme: ${result.strategicTheme}.` : ''
+  const coachingTip = result.coachingTip ? ` Coach note: ${result.coachingTip}` : ''
   const nextMoveHint =
-    result.candidateMoves.length > 0 ? ` Candidate replies: ${result.candidateMoves.join(', ')}.` : ''
-  return `${result.summary} ${result.explanation}${nextMoveHint}`
+    result.alternativeMoves.length > 0 ? ` Typical replies to compare: ${result.alternativeMoves.join(', ')}.` : ''
+  return `${result.summary} Why it works: ${result.explanation}.${strategicTheme}${coachingTip}${nextMoveHint}`
 }
 
 function extractSuggestedChessMoveCandidate(text: string) {
@@ -922,6 +952,66 @@ function buildChessMoveExplanation(moveSan: string) {
   }
 
   return 'improves the position without creating unnecessary risk'
+}
+
+function buildChessStrategicTheme(moveSan: string, phase: string) {
+  const normalized = moveSan.toLowerCase()
+
+  if (normalized === 'e4' || normalized === 'd4' || normalized === 'e5' || normalized === 'd5') {
+    return 'fight for the center and open lines for rapid development'
+  }
+
+  if (normalized === 'nf3' || normalized === 'nc3' || normalized === 'nf6' || normalized === 'nc6') {
+    return 'develop pieces before starting direct attacks'
+  }
+
+  if (moveSan === 'O-O' || moveSan === 'O-O-O') {
+    return 'improve king safety before expanding elsewhere'
+  }
+
+  if (moveSan.includes('x')) {
+    return 'improve the position while changing the material balance'
+  }
+
+  if (phase === 'opening') {
+    return 'improve development and coordination without creating early weaknesses'
+  }
+
+  if (phase === 'middlegame') {
+    return 'improve piece activity and create useful pressure'
+  }
+
+  return 'play purposeful moves that improve coordination and reduce counterplay'
+}
+
+function buildChessCoachingTip(moveSan: string, phase: string, sideToCoach: 'white' | 'black') {
+  const normalized = moveSan.toLowerCase()
+
+  if (normalized === 'e4' || normalized === 'd4' || normalized === 'e5' || normalized === 'd5') {
+    return `In the ${phase}, ${sideToCoach} usually wants central space first so the bishops and knights have better squares next.`
+  }
+
+  if (normalized === 'nf3' || normalized === 'nc3' || normalized === 'nf6' || normalized === 'nc6') {
+    return `A good habit for ${sideToCoach} is to bring knights out before launching flank pawns, because development keeps the position flexible.`
+  }
+
+  if (moveSan === 'O-O' || moveSan === 'O-O-O') {
+    return `When the center can open soon, ${sideToCoach} should value king safety and rook connection over grabbing extra space.`
+  }
+
+  if (moveSan.includes('x')) {
+    return `Before exchanging, ${sideToCoach} should ask whether the capture improves piece activity or simply helps the opponent.`
+  }
+
+  if (phase === 'opening') {
+    return `A strong opening habit for ${sideToCoach} is to develop, fight for the center, and avoid moving the same piece twice without a reason.`
+  }
+
+  if (phase === 'middlegame') {
+    return `In the middlegame, ${sideToCoach} should compare plans, not just moves, and prefer the move that improves the worst-placed piece.`
+  }
+
+  return `In the endgame, ${sideToCoach} should favor moves that activate the king and create clear targets or passed pawns.`
 }
 
 function buildChessBoardStateMessage(reference: EmbeddedAppReference, userRequest: string): Message | null {
