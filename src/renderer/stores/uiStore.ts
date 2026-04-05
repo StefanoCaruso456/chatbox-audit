@@ -47,6 +47,7 @@ export const uiStore = createStore(
         approvedAppPanelWidth: null as number | null, // Custom approved app panel width, null means use default
         pendingConversationModeHintId: null as number | null,
         approvedAppsModalOpen: false,
+        requestedApprovedAppId: null as string | null,
         activeApprovedAppId: null as string | null,
       },
       (set, get) => ({
@@ -225,11 +226,24 @@ export const uiStore = createStore(
         },
 
         openApprovedApp: (appId: string) => {
-          set({ activeApprovedAppId: appId, approvedAppsModalOpen: false })
+          set({ requestedApprovedAppId: appId, approvedAppsModalOpen: false })
+        },
+
+        completeApprovedAppOpen: (appId: string) => {
+          set({ activeApprovedAppId: appId, requestedApprovedAppId: null, approvedAppsModalOpen: false })
+        },
+
+        clearApprovedAppOpenRequest: (appId?: string) => {
+          set((state) => {
+            if (appId && state.requestedApprovedAppId !== appId) {
+              return {}
+            }
+            return { requestedApprovedAppId: null }
+          })
         },
 
         closeApprovedApp: () => {
-          set({ activeApprovedAppId: null })
+          set({ activeApprovedAppId: null, requestedApprovedAppId: null })
         },
       })
     ),

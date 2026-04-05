@@ -1,9 +1,11 @@
 import { type RemoteConfig, Theme } from '@shared/types'
 import AppsModal from '@/components/apps/AppsModal'
+import RuntimeTraceExportController from '@/components/apps/RuntimeTraceExportController'
 import { TutorMeAIAuthGate } from '@/components/auth/TutorMeAIAuthGate'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import Toasts from '@/components/common/Toasts'
 import ExitFullscreenButton from '@/components/layout/ExitFullscreenButton'
+import AppAccessApprovalRuntime from '@/components/security/AppAccessApprovalRuntime'
 import useAppTheme from '@/hooks/useAppTheme'
 import { useSystemLanguageWhenInit } from '@/hooks/useDefaultSystemLanguage'
 import { useI18nEffect } from '@/hooks/useI18nEffect'
@@ -191,6 +193,8 @@ function Root() {
         </Grid>
       ) : (
         <TutorMeAIAuthGate>
+          <AppAccessApprovalRuntime />
+          <RuntimeTraceExportController />
           <Grid container className="h-full">
             <Sidebar />
             <Box
