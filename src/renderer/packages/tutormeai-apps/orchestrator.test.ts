@@ -465,6 +465,47 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Move played: d4')
   })
 
+  it('returns a chess clarification for invalid natural-language coordinate moves instead of misparsing them', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.sidebar.10',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.10',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1. Black to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+        turn: 'b',
+        moveCount: 1,
+        lastMove: 'd4',
+      },
+      updatedAt: '2026-04-04T23:55:00.000Z',
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.sidebar.10',
+      userId: 'user.10',
+      userRequest: 'can you move the black piece from D4 to E5',
+      requestMessageId: 'message.10',
+      previousMessages: [createMessage('user', "let's play chess")],
+    })
+
+    expect(result.kind).toBe('clarify')
+    if (result.kind !== 'clarify') {
+      return
+    }
+
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('"d4e5" is not a legal move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+  })
+
   it('keeps the latest unfinished app active when a later completed app exists', () => {
     const activeChess = createMessage('assistant', 'Chess Tutor is active.')
     activeChess.timestamp = Date.parse('2026-04-01T12:00:00.000Z')
