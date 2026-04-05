@@ -235,6 +235,25 @@ describe('AppIframePanel', () => {
     expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })
 
+  it('keeps Chess Tutor visible when the board has rendered before the runtime timeout fires', () => {
+    vi.useFakeTimers()
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    act(() => {
+      vi.advanceTimersByTime(8_000)
+    })
+
+    expect(screen.queryByTestId('app-iframe-panel-fallback')).toBeNull()
+    expect(screen.queryByText('Connecting Chess Tutor runtime')).toBeNull()
+  })
+
   it('sends the runtime bootstrap and invoke messages into the Chess sidebar iframe', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 
