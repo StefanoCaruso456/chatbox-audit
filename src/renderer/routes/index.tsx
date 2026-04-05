@@ -12,6 +12,7 @@ import { z } from 'zod'
 import ApprovedAppDraftSessionBootstrapController from '@/components/apps/ApprovedAppDraftSessionBootstrapController'
 import AppsTrigger from '@/components/apps/AppsTrigger'
 import AppsWorkspace from '@/components/apps/AppsWorkspace'
+import { TutorMeAIAuthGate } from '@/components/auth/TutorMeAIAuthGate'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
 import InputBox, { type InputBoxPayload } from '@/components/InputBox/InputBox'
 import HomepageIcon from '@/components/icons/HomepageIcon'
@@ -176,118 +177,120 @@ function Index() {
 
   return (
     <Page title="" right={<AppsTrigger />}>
-      <ApprovedAppDraftSessionBootstrapController onRuntimeAppOpened={createDraftSessionAndSwitch} />
-      <AppsWorkspace>
-        <div className="relative flex h-full flex-col overflow-hidden p-0">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-chatbox-background-brand-secondary/25 to-transparent" />
-          <Stack align="center" justify="center" gap="sm" flex={1} className="relative px-md">
-            <div className="cb-neumo-card flex h-20 w-20 items-center justify-center rounded-[28px]">
-              <HomepageIcon className="h-9" />
-            </div>
-            <Text fw="700" size={isSmallScreen ? 'sm' : 'md'}>
-              {t('What can I help you with today?')}
-            </Text>
-            <Text size="sm" c="chatbox-secondary" ta="center" maw={520}>
-              {t(
-                'Start with a prompt, launch an app, or pick a copilot. The workspace is now tuned for a softer, more focused chat flow.'
-              )}
-            </Text>
-          </Stack>
+      <TutorMeAIAuthGate>
+        <ApprovedAppDraftSessionBootstrapController onRuntimeAppOpened={createDraftSessionAndSwitch} />
+        <AppsWorkspace>
+          <div className="relative flex h-full flex-col overflow-hidden p-0">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-chatbox-background-brand-secondary/25 to-transparent" />
+            <Stack align="center" justify="center" gap="sm" flex={1} className="relative px-md">
+              <div className="cb-neumo-card flex h-20 w-20 items-center justify-center rounded-[28px]">
+                <HomepageIcon className="h-9" />
+              </div>
+              <Text fw="700" size={isSmallScreen ? 'sm' : 'md'}>
+                {t('What can I help you with today?')}
+              </Text>
+              <Text size="sm" c="chatbox-secondary" ta="center" maw={520}>
+                {t(
+                  'Start with a prompt, launch an app, or pick a copilot. The workspace is now tuned for a softer, more focused chat flow.'
+                )}
+              </Text>
+            </Stack>
 
-          {!providers.length && (
-            <Box px="sm">
-              <Paper
-                radius="md"
-                shadow="none"
-                withBorder
-                py="md"
-                px="sm"
-                mb="md"
-                className={clsx('cb-neumo-card rounded-[28px]', widthFull ? 'w-full' : 'mx-auto w-full max-w-4xl')}
-              >
-                <Stack gap="sm">
-                  <Stack gap="xxs" align="center">
-                    <Text fw={600} className="text-center">
-                      {t('Select and configure an AI model provider')}
-                    </Text>
-
-                    <Text size="xs" c="chatbox-tertiary" className="text-center">
-                      {t(
-                        'To start a conversation, you need to configure at least one AI model. Click the buttons below to get started.'
-                      )}
-                    </Text>
-                  </Stack>
-
-                  <Flex gap="xs" justify="center" align="center">
-                    <Button
-                      size="xs"
-                      variant="default"
-                      h={32}
-                      miw={160}
-                      fw={600}
-                      flex="0 1 auto"
-                      onClick={() => {
-                        router.navigate({
-                          to: isSmallScreen ? '/settings/provider' : '/settings/chatbox-ai',
-                        })
-                      }}
-                    >
-                      {t('Setup Provider')}
-                    </Button>
-                  </Flex>
-                </Stack>
-              </Paper>
-            </Box>
-          )}
-
-          <Stack gap="sm">
-            {session.copilotId ? (
-              <Box px="md">
-                <Stack
-                  gap="sm"
-                  className={clsx(
-                    'cb-neumo-card rounded-[28px] px-4 py-4',
-                    widthFull ? 'w-full' : 'mx-auto w-full max-w-4xl'
-                  )}
+            {!providers.length && (
+              <Box px="sm">
+                <Paper
+                  radius="md"
+                  shadow="none"
+                  withBorder
+                  py="md"
+                  px="sm"
+                  mb="md"
+                  className={clsx('cb-neumo-card rounded-[28px]', widthFull ? 'w-full' : 'mx-auto w-full max-w-4xl')}
                 >
-                  <Flex align="center" gap="sm">
-                    <CopilotItem name={session.name} picUrl={session.picUrl} selected />
-                    <ActionIcon
-                      size={32}
-                      radius={16}
-                      c="chatbox-tertiary"
-                      variant="default"
-                      onClick={() => setSession((old) => ({ ...old, copilotId: undefined }))}
-                    >
-                      <ScalableIcon icon={IconX} size={24} />
-                    </ActionIcon>
-                  </Flex>
+                  <Stack gap="sm">
+                    <Stack gap="xxs" align="center">
+                      <Text fw={600} className="text-center">
+                        {t('Select and configure an AI model provider')}
+                      </Text>
 
-                  <Text c="chatbox-secondary" className="line-clamp-5">
-                    {session.messages[0]?.contentParts
-                      ?.map((part) => (part.type === 'text' ? part.text : ''))
-                      .join('') || ''}
-                  </Text>
-                </Stack>
+                      <Text size="xs" c="chatbox-tertiary" className="text-center">
+                        {t(
+                          'To start a conversation, you need to configure at least one AI model. Click the buttons below to get started.'
+                        )}
+                      </Text>
+                    </Stack>
+
+                    <Flex gap="xs" justify="center" align="center">
+                      <Button
+                        size="xs"
+                        variant="default"
+                        h={32}
+                        miw={160}
+                        fw={600}
+                        flex="0 1 auto"
+                        onClick={() => {
+                          router.navigate({
+                            to: isSmallScreen ? '/settings/provider' : '/settings/chatbox-ai',
+                          })
+                        }}
+                      >
+                        {t('Setup Provider')}
+                      </Button>
+                    </Flex>
+                  </Stack>
+                </Paper>
               </Box>
-            ) : (
-              showCopilotsInNewSession && (
-                <CopilotPicker onSelect={(copilot) => setSession((old) => ({ ...old, copilotId: copilot?.id }))} />
-              )
             )}
 
-            <InputBox
-              sessionType="chat"
-              sessionId="new"
-              model={selectedModel}
-              // fullWidth
-              onSelectModel={onSelectModel}
-              onClickSessionSettings={onClickSessionSettings}
-              onSubmit={handleSubmit}
-            />
-          </Stack>
-        </div>
-      </AppsWorkspace>
+            <Stack gap="sm">
+              {session.copilotId ? (
+                <Box px="md">
+                  <Stack
+                    gap="sm"
+                    className={clsx(
+                      'cb-neumo-card rounded-[28px] px-4 py-4',
+                      widthFull ? 'w-full' : 'mx-auto w-full max-w-4xl'
+                    )}
+                  >
+                    <Flex align="center" gap="sm">
+                      <CopilotItem name={session.name} picUrl={session.picUrl} selected />
+                      <ActionIcon
+                        size={32}
+                        radius={16}
+                        c="chatbox-tertiary"
+                        variant="default"
+                        onClick={() => setSession((old) => ({ ...old, copilotId: undefined }))}
+                      >
+                        <ScalableIcon icon={IconX} size={24} />
+                      </ActionIcon>
+                    </Flex>
+
+                    <Text c="chatbox-secondary" className="line-clamp-5">
+                      {session.messages[0]?.contentParts
+                        ?.map((part) => (part.type === 'text' ? part.text : ''))
+                        .join('') || ''}
+                    </Text>
+                  </Stack>
+                </Box>
+              ) : (
+                showCopilotsInNewSession && (
+                  <CopilotPicker onSelect={(copilot) => setSession((old) => ({ ...old, copilotId: copilot?.id }))} />
+                )
+              )
+
+              <InputBox
+                sessionType="chat"
+                sessionId="new"
+                model={selectedModel}
+                // fullWidth
+                onSelectModel={onSelectModel}
+                onClickSessionSettings={onClickSessionSettings}
+                onSubmit={handleSubmit}
+              />
+            </Stack>
+          </div>
+        </AppsWorkspace>
+      </TutorMeAIAuthGate>
     </Page>
   )
 }

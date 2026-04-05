@@ -226,144 +226,139 @@ export function TutorMeAIAuthGate(props: { children: ReactNode }) {
     }
   }, [accessToken, backendOrigin, displayName, reviewerRoleSelected, role, selectedStudentIds, updateUser, user, username])
 
-  if (!hasHydrated || status === 'checking') {
-    return (
-      <Box p="xl" mih="100vh" bg="linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)">
-        <Stack align="center" justify="center" mih="100vh" gap="sm">
-          <Title order={2}>TutorMeAI</Title>
-          <Text c="dimmed">Checking your account...</Text>
-        </Stack>
-      </Box>
-    )
-  }
-
   if (status === 'authenticated' && user && isTutorMeAIProfileComplete(user)) {
     return <>{children}</>
   }
 
-  if (status === 'authenticated' && user) {
-    return (
-      <Box p="xl" mih="100vh" bg="radial-gradient(circle at top, #dbeafe 0%, #f8fafc 45%, #ffffff 100%)">
-        <Stack align="center" justify="center" mih="100vh">
-          <Paper withBorder shadow="sm" radius="xl" p="xl" maw={520} w="100%">
-            <Stack gap="md">
-              <div>
-                <Title order={2}>Complete Your TutorMeAI Profile</Title>
-                <Text c="dimmed" size="sm">
-                  Google sign-in worked. Finish your TutorMeAI account setup so we can store your role and user
-                  profile on the platform.
+  return (
+    <Box className="relative min-h-full">
+      {children}
+
+      <Box data-testid="tutormeai-auth-overlay" className="fixed inset-0 z-[200]">
+        <Box className="absolute inset-0 bg-slate-950/18 backdrop-blur-sm" />
+        <Stack align="center" justify="center" className="relative h-full p-6 sm:p-8">
+          {!hasHydrated || status === 'checking' ? (
+            <Paper withBorder shadow="sm" radius="xl" p="xl" maw={420} w="100%">
+              <Stack align="center" gap="sm">
+                <Title order={2}>TutorMeAI</Title>
+                <Text c="dimmed">Checking your account...</Text>
+              </Stack>
+            </Paper>
+          ) : status === 'authenticated' && user ? (
+            <Paper withBorder shadow="sm" radius="xl" p="xl" maw={520} w="100%">
+              <Stack gap="md">
+                <div>
+                  <Title order={2}>Complete Your TutorMeAI Profile</Title>
+                  <Text c="dimmed" size="sm">
+                    Google sign-in worked. Finish your TutorMeAI account setup so we can store your role and user
+                    profile on the platform.
+                  </Text>
+                </div>
+
+                {(error || profileError) && (
+                  <Alert color="red" variant="light">
+                    {profileError ?? error}
+                  </Alert>
+                )}
+
+                <TextInput label="Email" value={user.email ?? ''} readOnly />
+
+                <TextInput
+                  label="Name"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.currentTarget.value)}
+                  placeholder="How should we display your name?"
+                />
+
+                <TextInput
+                  label="Username"
+                  value={username}
+                  onChange={(event) => setUsername(event.currentTarget.value)}
+                  placeholder="your.username"
+                  description="Lowercase letters, numbers, dots, underscores, and hyphens only."
+                />
+
+                <Select
+                  label="Role"
+                  data={ROLE_OPTIONS}
+                  value={role}
+                  allowDeselect={false}
+                  comboboxProps={{ withinPortal: true }}
+                  onChange={(value) => {
+                    if (!value) {
+                      return
+                    }
+                    setRole(value as TutorMeAIUserRole)
+                  }}
+                />
+
+                {reviewerRoleSelected ? (
+                  <>
+                    {studentDirectory.error ? (
+                      <Alert color="red" variant="light">
+                        {studentDirectory.error}
+                      </Alert>
+                    ) : null}
+
+                    {!studentDirectory.loading && studentOptions.length === 0 ? (
+                      <Alert color="yellow" variant="light">
+                        No TutorMeAI student profiles are registered yet. Ask a student to finish onboarding first.
+                      </Alert>
+                    ) : null}
+
+                    <MultiSelect
+                      label="Students"
+                      value={selectedStudentIds}
+                      data={studentOptions}
+                      searchable
+                      clearable
+                      disabled={studentDirectory.loading}
+                      onChange={setSelectedStudentIds}
+                      description="Select the students this teacher or administrator will approve apps for."
+                      placeholder={studentDirectory.loading ? 'Loading students...' : 'Choose one or more students'}
+                    />
+                  </>
+                ) : null}
+
+                <Button loading={savingProfile} onClick={() => void handleCompleteProfile()}>
+                  Continue to TutorMeAI
+                </Button>
+
+                <Text size="xs" c="dimmed">
+                  Your Google account stays the identity provider. This step saves your TutorMeAI profile and classroom
+                  role on the platform.
                 </Text>
-              </div>
+              </Stack>
+            </Paper>
+          ) : (
+            <Paper withBorder shadow="sm" radius="xl" p="xl" maw={460} w="100%">
+              <Stack gap="md">
+                <div>
+                  <Title order={2}>Sign In to TutorMeAI</Title>
+                  <Text c="dimmed" size="sm">
+                    Continue with Google to open chat, launch apps, and keep your TutorMeAI workspace connected.
+                  </Text>
+                </div>
 
-              {(error || profileError) && (
-                <Alert color="red" variant="light">
-                  {profileError ?? error}
-                </Alert>
-              )}
+                {error && (
+                  <Alert color="red" variant="light">
+                    {error}
+                  </Alert>
+                )}
 
-              <TextInput label="Email" value={user.email ?? ''} readOnly />
+                <Button size="md" onClick={handleSignIn}>
+                  Continue with Google
+                </Button>
 
-              <TextInput
-                label="Name"
-                value={displayName}
-                onChange={(event) => setDisplayName(event.currentTarget.value)}
-                placeholder="How should we display your name?"
-              />
-
-              <TextInput
-                label="Username"
-                value={username}
-                onChange={(event) => setUsername(event.currentTarget.value)}
-                placeholder="your.username"
-                description="Lowercase letters, numbers, dots, underscores, and hyphens only."
-              />
-
-              <Select
-                label="Role"
-                data={ROLE_OPTIONS}
-                value={role}
-                allowDeselect={false}
-                comboboxProps={{ withinPortal: true }}
-                onChange={(value) => {
-                  if (!value) {
-                    return
-                  }
-                  setRole(value as TutorMeAIUserRole)
-                }}
-              />
-
-              {reviewerRoleSelected ? (
-                <>
-                  {studentDirectory.error ? (
-                    <Alert color="red" variant="light">
-                      {studentDirectory.error}
-                    </Alert>
-                  ) : null}
-
-                  {!studentDirectory.loading && studentOptions.length === 0 ? (
-                    <Alert color="yellow" variant="light">
-                      No TutorMeAI student profiles are registered yet. Ask a student to finish onboarding first.
-                    </Alert>
-                  ) : null}
-
-                  <MultiSelect
-                    label="Students"
-                    value={selectedStudentIds}
-                    data={studentOptions}
-                    searchable
-                    clearable
-                    disabled={studentDirectory.loading}
-                    onChange={setSelectedStudentIds}
-                    description="Select the students this teacher or administrator will approve apps for."
-                    placeholder={studentDirectory.loading ? 'Loading students...' : 'Choose one or more students'}
-                  />
-                </>
-              ) : null}
-
-              <Button loading={savingProfile} onClick={() => void handleCompleteProfile()}>
-                Continue to TutorMeAI
-              </Button>
-
-              <Text size="xs" c="dimmed">
-                Your Google account stays the identity provider. This step saves your TutorMeAI profile and classroom
-                role on the platform.
-              </Text>
-            </Stack>
-          </Paper>
+                <Text size="xs" c="dimmed">
+                  Your Google account signs you into TutorMeAI. App-specific permissions, like Planner access, will
+                  still request extra consent only when needed.
+                </Text>
+              </Stack>
+            </Paper>
+          )}
         </Stack>
       </Box>
-    )
-  }
-
-  return (
-    <Box p="xl" mih="100vh" bg="radial-gradient(circle at top, #dbeafe 0%, #f8fafc 45%, #ffffff 100%)">
-      <Stack align="center" justify="center" mih="100vh">
-        <Paper withBorder shadow="sm" radius="xl" p="xl" maw={460} w="100%">
-          <Stack gap="md">
-            <div>
-              <Title order={2}>Sign In to TutorMeAI</Title>
-              <Text c="dimmed" size="sm">
-                Continue with Google to open chat, launch apps, and keep your TutorMeAI workspace connected.
-              </Text>
-            </div>
-
-            {error && (
-              <Alert color="red" variant="light">
-                {error}
-              </Alert>
-            )}
-
-            <Button size="md" onClick={handleSignIn}>
-              Continue with Google
-            </Button>
-
-            <Text size="xs" c="dimmed">
-              Your Google account signs you into TutorMeAI. App-specific permissions, like Planner access, will still
-              request extra consent only when needed.
-            </Text>
-          </Stack>
-        </Paper>
-      </Stack>
     </Box>
   )
 }

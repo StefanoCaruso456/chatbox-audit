@@ -1,7 +1,6 @@
 import { type RemoteConfig, Theme } from '@shared/types'
 import AppsModal from '@/components/apps/AppsModal'
 import RuntimeTraceExportController from '@/components/apps/RuntimeTraceExportController'
-import { TutorMeAIAuthGate } from '@/components/auth/TutorMeAIAuthGate'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import Toasts from '@/components/common/Toasts'
 import ExitFullscreenButton from '@/components/layout/ExitFullscreenButton'
@@ -212,7 +211,7 @@ function Root() {
           </Box>
         </Grid>
       ) : (
-        <TutorMeAIAuthGate>
+        <>
           <AppAccessApprovalRuntime />
           <RuntimeTraceExportController />
           <Grid container className="h-full">
@@ -233,7 +232,7 @@ function Root() {
               </ErrorBoundary>
             </Box>
           </Grid>
-        </TutorMeAIAuthGate>
+        </>
       )}
       {/* 对话设置 */}
       {/* <AppStoreRatingDialog /> */}
