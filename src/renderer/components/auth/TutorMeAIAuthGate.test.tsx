@@ -3,7 +3,7 @@
  */
 
 import { MantineProvider } from '@mantine/core'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TutorMeAIAuthGate } from './TutorMeAIAuthGate'
 import { tutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
@@ -23,6 +23,16 @@ describe('TutorMeAIAuthGate', () => {
         dispatchEvent: vi.fn(),
       })),
     })
+  }
+
+  if (!globalThis.ResizeObserver) {
+    class ResizeObserverMock {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    vi.stubGlobal('ResizeObserver', ResizeObserverMock)
   }
 
   afterEach(() => {
@@ -59,10 +69,44 @@ describe('TutorMeAIAuthGate', () => {
     expect(screen.getByRole('button', { name: /continue with google/i })).toBeTruthy()
   })
 
-  it('unlocks the app after a successful platform auth callback', async () => {
+  it('requires onboarding after sign-in and unlocks the app after the profile is completed', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => {
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+
+        if (url.endsWith('/api/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              data: {
+                user: {
+                  userId: 'user.google.demo',
+                  email: 'student@example.com',
+                  username: null,
+                  displayName: 'Student Demo',
+                  role: null,
+                  pictureUrl: null,
+                  onboardingCompletedAt: null,
+                },
+                session: {
+                  platformSessionId: 'platform-session.demo',
+                  provider: 'google',
+                  status: 'active',
+                  sessionExpiresAt: '2026-04-05T04:00:00.000Z',
+                  refreshExpiresAt: '2026-05-05T04:00:00.000Z',
+                },
+              },
+            }),
+            {
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+              },
+            }
+          )
+        }
+
         return new Response(
           JSON.stringify({
             ok: true,
@@ -70,15 +114,11 @@ describe('TutorMeAIAuthGate', () => {
               user: {
                 userId: 'user.google.demo',
                 email: 'student@example.com',
+                username: 'student.demo',
                 displayName: 'Student Demo',
+                role: 'student',
                 pictureUrl: null,
-              },
-              session: {
-                platformSessionId: 'platform-session.demo',
-                provider: 'google',
-                status: 'active',
-                sessionExpiresAt: '2026-04-05T04:00:00.000Z',
-                refreshExpiresAt: '2026-05-05T04:00:00.000Z',
+                onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
               },
             },
           }),
@@ -124,12 +164,27 @@ describe('TutorMeAIAuthGate', () => {
           user: {
             userId: 'user.google.demo',
             email: 'student@example.com',
+            username: null,
             displayName: 'Student Demo',
+            role: null,
             pictureUrl: null,
+            onboardingCompletedAt: null,
           },
         },
       })
     )
+
+    await waitFor(() => {
+      expect(screen.getByText(/complete your tutormeai profile/i)).toBeTruthy()
+    })
+
+    fireEvent.change(screen.getByLabelText(/^name$/i), {
+      target: { value: 'Student Demo' },
+    })
+    fireEvent.change(screen.getByLabelText(/^username$/i), {
+      target: { value: 'student.demo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /continue to tutormeai/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Authenticated content')).toBeTruthy()

@@ -20,10 +20,13 @@ interface TutorMeAIAuthActions {
     refreshToken: string
     user: TutorMeAIPlatformUser
   }) => void
+  updateUser: (user: TutorMeAIPlatformUser) => void
   clearSession: () => void
   setStatus: (status: TutorMeAIAuthStatus, error?: string | null) => void
   markHydrated: () => void
 }
+
+type PersistedTutorMeAIAuthState = Pick<TutorMeAIAuthState, 'accessToken' | 'refreshToken' | 'user'>
 
 const initialState: TutorMeAIAuthState = {
   accessToken: null,
@@ -45,6 +48,13 @@ export const tutorMeAIAuthStore = createStore<TutorMeAIAuthState & TutorMeAIAuth
             state.refreshToken = refreshToken
             state.user = user
             state.status = 'authenticated'
+            state.error = null
+          })
+        },
+        updateUser: (user) => {
+          set((state) => {
+            state.user = user
+            state.status = state.accessToken && state.refreshToken ? 'authenticated' : state.status
             state.error = null
           })
         },
@@ -71,12 +81,28 @@ export const tutorMeAIAuthStore = createStore<TutorMeAIAuthState & TutorMeAIAuth
       })),
       {
         name: 'tutormeai-platform-auth',
-        version: 1,
+        version: 2,
         partialize: (state) => ({
           accessToken: state.accessToken,
           refreshToken: state.refreshToken,
           user: state.user,
         }),
+        migrate: (persistedState, _version): PersistedTutorMeAIAuthState => {
+          const state = persistedState as Partial<PersistedTutorMeAIAuthState> | undefined
+          const user = state?.user
+          return {
+            accessToken: state?.accessToken ?? null,
+            refreshToken: state?.refreshToken ?? null,
+            user: user
+              ? {
+                  ...user,
+                  username: user.username ?? null,
+                  role: user.role ?? null,
+                  onboardingCompletedAt: user.onboardingCompletedAt ?? null,
+                }
+              : null,
+          }
+        },
         onRehydrateStorage: () => {
           return (state, error) => {
             if (state) {
