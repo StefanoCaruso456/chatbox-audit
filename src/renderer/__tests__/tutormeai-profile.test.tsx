@@ -5,7 +5,7 @@
 import { MantineProvider } from '@mantine/core'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RouteComponent } from './tutormeai-profile'
+import { RouteComponent } from '@/routes/settings/tutormeai-profile'
 import { settingsStore } from '@/stores/settingsStore'
 import { tutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
 
