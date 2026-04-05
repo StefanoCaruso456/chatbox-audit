@@ -75,8 +75,8 @@ describe('approvedApps', () => {
       integrationMode: 'partner-embed',
       integrationConfig: {
         defaultLaunchUrl: '',
-        launchUrlLabel: 'Miro live embed URL',
-        launchUrlPlaceholder: 'https://miro.com/app/live-embed/{board_id}/?usePostAuth=true',
+        launchUrlLabel: 'Miro board or live embed URL',
+        launchUrlPlaceholder: 'https://miro.com/app/board/{board_id}/ or https://miro.com/app/live-embed/{board_id}/',
         authModel: 'vendor-session',
       },
       loadingFallback: {
