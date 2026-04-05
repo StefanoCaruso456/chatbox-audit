@@ -109,6 +109,57 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(
       result.message.contentParts.some((part) => part.type === 'embedded-app' && part.appId === 'chess.internal')
     ).toBe(true)
+    expect(
+      result.message.contentParts.some((part) => part.type === 'tool-call' && part.toolName === 'chess.get-board-state')
+    ).toBe(true)
+    const textParts = result.message.contentParts.filter(
+      (part): part is Extract<(typeof result.message.contentParts)[number], { type: 'text' }> => part.type === 'text'
+    )
+    expect(textParts.some((part) => part.text.includes('Ready to play some chess?'))).toBe(true)
+  })
+
+  it('can play the recommended opening move directly from the chess launch prompt', async () => {
+    const launchResult = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.1.launch-click',
+      userId: 'user.1.launch-click',
+      userRequest: "let's play chess",
+      requestMessageId: 'message.1.launch-click',
+      previousMessages: [createMessage('user', 'Hello')],
+    })
+
+    expect(launchResult.kind).toBe('invoke-tool')
+    if (launchResult.kind !== 'invoke-tool') {
+      return
+    }
+
+    mockEnqueueSidebarAppRuntimeCommand.mockClear()
+
+    const playResult = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.1.launch-click',
+      userId: 'user.1.launch-click',
+      userRequest: 'play d4',
+      requestMessageId: 'message.1.launch-click.play',
+      previousMessages: [createMessage('user', "let's play chess"), launchResult.message],
+    })
+
+    expect(playResult.kind).toBe('invoke-tool')
+    if (playResult.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = playResult.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.make-move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueSidebarAppRuntimeCommand.mock.calls[0]?.[0]).toMatchObject({
+      hostSessionId: 'conversation.1.launch-click',
+      runtimeAppId: 'chess.internal',
+      arguments: {
+        move: 'd4',
+        expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      },
+    })
   })
 
   it('launches flashcards for explicit study requests', async () => {
