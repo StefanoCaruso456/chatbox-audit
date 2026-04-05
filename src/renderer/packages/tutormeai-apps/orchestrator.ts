@@ -366,9 +366,55 @@ function isChessBoardReadIntent(userRequest: string) {
     'last 5 moves',
     'see the board',
     'current game',
+    'alternative',
+    'alternatives',
+    'tradeoff',
+    'tradeoffs',
+    'explain',
+    'why ',
+    'teach',
+    'coach',
+    'beginner',
+    'strategy',
+    'strategic',
+    'plan',
+    'compare',
   ]
 
   return boardPhrases.some((phrase) => normalized.includes(phrase))
+}
+
+function isChessStrategyExplanationIntent(userRequest: string) {
+  const normalized = normalizeComparable(userRequest)
+  const explanationPhrases = [
+    'alternative',
+    'alternatives',
+    'tradeoff',
+    'tradeoffs',
+    'explain',
+    'why',
+    'teach',
+    'idea',
+    'ideas',
+    'plan',
+    'compare',
+    'beginner',
+    'strategy',
+    'strategic',
+    'best practice',
+  ]
+
+  return explanationPhrases.some((phrase) => normalized.includes(phrase))
+}
+
+function isBareChessMoveRequest(userRequest: string) {
+  const trimmed = userRequest.trim().replace(/[.!?]+$/u, '')
+  const extractedMove = extractRequestedChessMove(trimmed)
+  if (!extractedMove) {
+    return false
+  }
+
+  return normalizeComparable(trimmed) === normalizeComparable(extractedMove)
 }
 
 function isChessMoveIntent(userRequest: string) {
@@ -378,18 +424,27 @@ function isChessMoveIntent(userRequest: string) {
     return false
   }
 
-  if (extractRequestedChessMove(userRequest)) {
-    return true
-  }
-
-  if (/[a-h][1-8]\s*(?:to|-)\s*[a-h][1-8]/iu.test(userRequest) || /\b[a-h][1-8][a-h][1-8]\b/iu.test(userRequest)) {
-    return true
-  }
-
-  const moveKeywordPattern = /\b(move|castle|capture|take|advance|push|play)\b/u
+  const extractedMove = extractRequestedChessMove(userRequest)
+  const moveKeywordPattern = /\b(move|moved|castle|capture|take|advance|push|play|execute)\b/u
   const pieceKeywords = ['piece', 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king']
+  const hasExplicitMoveVerb = moveKeywordPattern.test(normalized)
 
-  return moveKeywordPattern.test(normalized) && pieceKeywords.some((keyword) => normalized.includes(keyword))
+  if (isChessStrategyExplanationIntent(userRequest) && !hasExplicitMoveVerb && !isBareChessMoveRequest(userRequest)) {
+    return false
+  }
+
+  if (extractedMove) {
+    return hasExplicitMoveVerb || isBareChessMoveRequest(userRequest)
+  }
+
+  if (
+    hasExplicitMoveVerb &&
+    (/[a-h][1-8]\s*(?:to|-)\s*[a-h][1-8]/iu.test(userRequest) || /\b[a-h][1-8][a-h][1-8]\b/iu.test(userRequest))
+  ) {
+    return true
+  }
+
+  return hasExplicitMoveVerb && pieceKeywords.some((keyword) => normalized.includes(keyword))
 }
 
 function isChessSuggestedMoveFollowUpIntent(userRequest: string) {
@@ -1014,24 +1069,19 @@ function buildChessCoachingTip(moveSan: string, phase: string, sideToCoach: 'whi
   return `In the endgame, ${sideToCoach} should favor moves that activate the king and create clear targets or passed pawns.`
 }
 
-function buildChessBoardStateMessage(reference: EmbeddedAppReference, userRequest: string): Message | null {
-  const conversationId = reference.part.bridge?.conversationId
-  const result = conversationId
-    ? buildLiveChessBoardStateResult({
-        conversationId,
-        appSessionId: reference.appSessionId,
-        summary: reference.part.summary,
-        latestStateDigest:
-          toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
-        availableToolNames: reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
-      })
-    : buildChessBoardStateResult({
-        appSessionId: reference.appSessionId,
-        summary: reference.part.summary,
-        latestStateDigest:
-          toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
-        availableToolNames: reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
-      })
+function buildChessBoardStateMessage(input: {
+  conversationId: string
+  reference: EmbeddedAppReference
+  userRequest: string
+}): Message | null {
+  const result = buildLiveChessBoardStateResult({
+    conversationId: input.conversationId,
+    appSessionId: input.reference.appSessionId,
+    summary: input.reference.part.summary,
+    latestStateDigest:
+      toJsonObject(input.reference.part.bridge?.completion?.result) ?? input.reference.part.bridge?.bootstrap?.initialState,
+    availableToolNames: input.reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name),
+  })
   if (!result) {
     return null
   }
@@ -1050,7 +1100,56 @@ function buildChessBoardStateMessage(reference: EmbeddedAppReference, userReques
     },
     {
       type: 'text',
-      text: buildChessBoardStateText(result, userRequest),
+      text: buildChessBoardStateText(result, input.userRequest),
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
+function buildChessBoardStateMessageFromSharedSession(input: {
+  conversationId: string
+  userRequest: string
+  moveExecutionAvailable?: boolean
+}): Message | null {
+  const sharedSnapshot = getLatestChessSessionSnapshotForConversation(input.conversationId)
+  if (!sharedSnapshot) {
+    return null
+  }
+
+  const result = buildChessBoardStateResult({
+    appSessionId: sharedSnapshot.appSessionId,
+    summary: sharedSnapshot.summary,
+    latestStateDigest: buildChessStateDigestFromSharedSession({
+      fen: sharedSnapshot.fen,
+      turn: sharedSnapshot.turn,
+      moveCount: sharedSnapshot.moveCount,
+      lastMove: sharedSnapshot.lastMove,
+      mode: sharedSnapshot.mode,
+    }),
+    moveHistory: getChessSessionHistory(input.conversationId, sharedSnapshot.appSessionId),
+    availableToolNames: input.moveExecutionAvailable ? [exampleChessMakeMoveToolSchema.name] : [],
+  })
+  if (!result) {
+    return null
+  }
+
+  const message = createMessage('assistant')
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: `tool-call.chess.get-board-state.${uuidv4()}`,
+      toolName: exampleChessGetBoardStateToolSchema.name,
+      args: {
+        scope: 'current-position',
+      },
+      result,
+    },
+    {
+      type: 'text',
+      text: buildChessBoardStateText(result, input.userRequest),
     },
   ]
   message.generating = false
@@ -1681,8 +1780,16 @@ export async function routeTutorMeAiAppRequest(
     const boardStateMessage = activeSidebarChessSnapshot
       ? buildChessBoardStateMessageFromSidebarSnapshot(activeSidebarChessSnapshot, input.userRequest)
       : selectedReference?.appId === exampleInternalChessManifest.appId
-        ? buildChessBoardStateMessage(selectedReference, input.userRequest)
-        : null
+        ? buildChessBoardStateMessage({
+            conversationId: input.conversationId,
+            reference: selectedReference,
+            userRequest: input.userRequest,
+          })
+        : buildChessBoardStateMessageFromSharedSession({
+            conversationId: input.conversationId,
+            userRequest: input.userRequest,
+            moveExecutionAvailable: chessSidebarIsOpen,
+          })
 
     if (boardStateMessage) {
       return {
