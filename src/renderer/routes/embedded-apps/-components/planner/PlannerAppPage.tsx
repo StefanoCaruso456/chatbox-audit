@@ -1,9 +1,19 @@
 import { Alert, Badge, Box, Button, Group, List, Paper, Stack, Text, Title } from '@mantine/core'
 import type { CompletionSignal } from '@shared/contracts/v1'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
+import {
+  buildPlannerAuthUserId,
+  buildPlannerOAuthStartUrl,
+  derivePlannerOAuthAuthState,
+  fetchPlannerOAuthConnection,
+  isPlannerOAuthCallbackMessage,
+  resolvePlannerBackendOrigin,
+} from './auth'
 
 type PlannerFocus = 'today' | 'week' | 'overdue'
+type PlannerAuthPhase = 'checking' | 'required' | 'connecting' | 'connected' | 'error'
 
 const plannerTasks: Record<PlannerFocus, string[]> = {
   today: ['Finish algebra worksheet', 'Review vocabulary flashcards', 'Upload science reflection'],
@@ -11,12 +21,29 @@ const plannerTasks: Record<PlannerFocus, string[]> = {
   overdue: ['Turn in missing lab summary', 'Complete reading log', 'Finish late discussion reply'],
 }
 
-function buildPlannerSummary(focus: PlannerFocus, connected: boolean) {
-  if (!connected) {
-    return 'Planner Connect is waiting for the user to authorize their account.'
+function buildPlannerSummary(input: {
+  focus: PlannerFocus
+  authPhase: PlannerAuthPhase
+  connected: boolean
+  authError: string | null
+}) {
+  if (input.connected) {
+    return `Planner dashboard is focused on ${input.focus} items with ${plannerTasks[input.focus].length} suggested tasks ready.`
   }
 
-  return `Planner dashboard is focused on ${focus} items with ${plannerTasks[focus].length} suggested tasks ready.`
+  if (input.authPhase === 'checking') {
+    return 'Planner Connect is checking whether the user already linked a Google account.'
+  }
+
+  if (input.authPhase === 'connecting') {
+    return 'Planner Connect opened Google sign-in and is waiting for the account link to finish.'
+  }
+
+  if (input.authPhase === 'error' && input.authError) {
+    return input.authError
+  }
+
+  return 'Planner Connect is waiting for the user to authorize their Google account.'
 }
 
 function buildPlannerCompletionSignal(input: {
@@ -53,29 +80,164 @@ function buildPlannerCompletionSignal(input: {
 
 export function PlannerAppPage() {
   const { invocationMessage, runtimeContext, sendCompletion, sendState } = useEmbeddedAppBridge('planner.oauth')
+  const tutorMeAIProfile = useSettingsStore((state) => state.tutorMeAIProfile)
   const [connected, setConnected] = useState(false)
   const [focus, setFocus] = useState<PlannerFocus>('today')
+  const [authPhase, setAuthPhase] = useState<PlannerAuthPhase>('checking')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const popupRef = useRef<Window | null>(null)
+  const pollTimerRef = useRef<number | null>(null)
+
+  const authUserId = useMemo(
+    () =>
+      buildPlannerAuthUserId({
+        email: tutorMeAIProfile.email,
+        name: tutorMeAIProfile.name,
+      }),
+    [tutorMeAIProfile.email, tutorMeAIProfile.name]
+  )
+
+  const backendOrigin = useMemo(() => resolvePlannerBackendOrigin(), [])
+  const tasks = useMemo(() => plannerTasks[focus], [focus])
+
+  const clearConnectPolling = useCallback(() => {
+    if (pollTimerRef.current !== null) {
+      window.clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }, [])
+
+  const lookupConnection = useCallback(async () => {
+    try {
+      const connection = await fetchPlannerOAuthConnection({
+        backendOrigin,
+        userId: authUserId,
+      })
+      const authState = derivePlannerOAuthAuthState(connection)
+
+      if (authState === 'connected') {
+        return {
+          state: 'connected' as const,
+        }
+      }
+
+      if (authState === 'expired') {
+        return {
+          state: 'expired' as const,
+          error: 'Your Google planner connection expired. Connect the account again to continue.',
+        }
+      }
+
+      return {
+        state: 'required' as const,
+      }
+    } catch (error) {
+      return {
+        state: 'error' as const,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }, [authUserId, backendOrigin])
+
+  const applyLookupResult = useCallback(
+    (result: Awaited<ReturnType<typeof lookupConnection>>) => {
+      if (result.state === 'connected') {
+        clearConnectPolling()
+        popupRef.current?.close()
+        popupRef.current = null
+        setConnected(true)
+        setAuthPhase('connected')
+        setAuthError(null)
+        return
+      }
+
+      setConnected(false)
+
+      if (result.state === 'expired') {
+        clearConnectPolling()
+        popupRef.current = null
+        setAuthPhase('error')
+        setAuthError(result.error)
+        return
+      }
+
+      if (result.state === 'error') {
+        clearConnectPolling()
+        popupRef.current = null
+        setAuthPhase('error')
+        setAuthError(result.error)
+        return
+      }
+
+      setAuthPhase('required')
+      setAuthError(null)
+    },
+    [clearConnectPolling, lookupConnection]
+  )
 
   useEffect(() => {
     if (!runtimeContext) {
       return
     }
 
-    setConnected(runtimeContext.authState === 'connected')
-    const bootstrapFocus: PlannerFocus = 'today'
+    let cancelled = false
+    setAuthPhase('checking')
+
+    void lookupConnection().then((result) => {
+      if (!cancelled) {
+        applyLookupResult(result)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyLookupResult, lookupConnection, runtimeContext])
+
+  useEffect(() => {
+    if (!runtimeContext) {
+      return
+    }
+
+    const currentAuthState =
+      connected || authPhase === 'connected' ? 'connected' : authPhase === 'error' && authError?.includes('expired') ? 'expired' : 'required'
+
     sendState({
-      status: runtimeContext.authState === 'required' ? 'waiting-auth' : 'waiting-user',
-      summary: buildPlannerSummary(bootstrapFocus, runtimeContext.authState === 'connected'),
+      status: currentAuthState === 'connected' ? 'active' : 'waiting-auth',
+      summary: buildPlannerSummary({
+        focus,
+        authPhase,
+        connected,
+        authError,
+      }),
       state: {
-        authState: runtimeContext.authState,
-        focus: bootstrapFocus,
+        authState: currentAuthState,
+        focus,
+        taskCount: tasks.length,
+        backendOrigin,
+        authUserId,
+        ...(authError ? { authError } : {}),
       },
       progress: {
-        label: runtimeContext.authState === 'required' ? 'Connect account' : 'Planner ready',
-        percent: runtimeContext.authState === 'required' ? 20 : 60,
+        label:
+          currentAuthState === 'connected'
+            ? 'Connected'
+            : authPhase === 'checking'
+              ? 'Checking connection'
+              : authPhase === 'connecting'
+                ? 'Waiting for Google sign-in'
+                : 'Connect account',
+        percent:
+          currentAuthState === 'connected'
+            ? 80
+            : authPhase === 'checking'
+              ? 30
+              : authPhase === 'connecting'
+                ? 50
+                : 20,
       },
     })
-  }, [runtimeContext, sendState])
+  }, [authError, authPhase, authUserId, backendOrigin, connected, focus, runtimeContext, sendState, tasks.length])
 
   useEffect(() => {
     if (!invocationMessage) {
@@ -88,24 +250,75 @@ export function PlannerAppPage() {
     }
   }, [invocationMessage])
 
-  const tasks = useMemo(() => plannerTasks[focus], [focus])
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!isPlannerOAuthCallbackMessage(event, backendOrigin)) {
+        return
+      }
+
+      if (event.data.ok) {
+        void lookupConnection().then((result) => {
+          applyLookupResult(result)
+        })
+        return
+      }
+
+      clearConnectPolling()
+      popupRef.current = null
+      setConnected(false)
+      setAuthPhase('error')
+      setAuthError(event.data.message)
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
+  }, [applyLookupResult, backendOrigin, clearConnectPolling, lookupConnection])
+
+  useEffect(() => {
+    return () => {
+      clearConnectPolling()
+      popupRef.current = null
+    }
+  }, [clearConnectPolling])
 
   const handleConnect = useCallback(() => {
-    setConnected(true)
-    sendState({
-      status: 'active',
-      summary: buildPlannerSummary(focus, true),
-      state: {
-        authState: 'connected',
-        focus,
-        taskCount: tasks.length,
-      },
-      progress: {
-        label: 'Connected',
-        percent: 80,
-      },
+    clearConnectPolling()
+    setConnected(false)
+    setAuthPhase('connecting')
+    setAuthError(null)
+
+    const startUrl = buildPlannerOAuthStartUrl({
+      backendOrigin,
+      clientOrigin: window.location.origin,
+      userId: authUserId,
     })
-  }, [focus, sendState, tasks.length])
+
+    popupRef.current = window.open(startUrl, 'planner-google-oauth', 'popup=yes,width=640,height=760')
+    if (!popupRef.current) {
+      setAuthPhase('error')
+      setAuthError('The Google sign-in window was blocked. Allow pop-ups and try again.')
+      return
+    }
+
+    pollTimerRef.current = window.setInterval(() => {
+      const popupClosed = popupRef.current?.closed ?? false
+      void lookupConnection().then((result) => {
+        if (result.state === 'connected' || result.state === 'expired' || result.state === 'error') {
+          applyLookupResult(result)
+          return
+        }
+
+        if (popupClosed) {
+          clearConnectPolling()
+          popupRef.current = null
+          setAuthPhase('required')
+          setAuthError('Google sign-in was closed before the planner account connected.')
+        }
+      })
+    }, 1000)
+  }, [applyLookupResult, authUserId, backendOrigin, clearConnectPolling, lookupConnection])
 
   const handleShare = useCallback(() => {
     if (!runtimeContext) {
@@ -121,6 +334,14 @@ export function PlannerAppPage() {
       })
     )
   }, [focus, invocationMessage?.payload.toolCallId, runtimeContext, sendCompletion])
+
+  const handleRefresh = useCallback(() => {
+    setAuthPhase('checking')
+    setAuthError(null)
+    void lookupConnection().then((result) => {
+      applyLookupResult(result)
+    })
+  }, [applyLookupResult, lookupConnection])
 
   return (
     <Box p="md" bg="linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)" mih="100vh">
@@ -139,7 +360,8 @@ export function PlannerAppPage() {
 
         {!connected && (
           <Alert color="yellow" variant="light">
-            This app requires a user-level OAuth connection. Use the host-managed connect flow to continue.
+            {authError ??
+              'This app requires a user-level OAuth connection. Use the host-managed Google sign-in flow to continue.'}
           </Alert>
         )}
 
@@ -168,26 +390,12 @@ export function PlannerAppPage() {
               ) : (
                 <Button onClick={handleShare}>Send planner summary to chat</Button>
               )}
-              {connected && (
+              {(connected || authPhase === 'error') && (
                 <Button
                   variant="default"
-                  onClick={() => {
-                    sendState({
-                      status: 'active',
-                      summary: buildPlannerSummary(focus, true),
-                      state: {
-                        authState: 'connected',
-                        focus,
-                        taskCount: tasks.length,
-                      },
-                      progress: {
-                        label: 'Dashboard refreshed',
-                        percent: 85,
-                      },
-                    })
-                  }}
+                  onClick={handleRefresh}
                 >
-                  Refresh dashboard state
+                  {connected ? 'Refresh dashboard state' : 'Retry connection check'}
                 </Button>
               )}
             </Group>
