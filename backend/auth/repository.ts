@@ -1,3 +1,4 @@
+import type { TutorMeAIUserRole } from '@shared/types/settings'
 import type {
   GetOAuthConnectionRequest,
   OAuthConnectionRecord,
@@ -10,6 +11,7 @@ export interface AuthRepository {
   getUserById(userId: string): Promise<UserRecord | undefined>
   getUserByEmail(email: string): Promise<UserRecord | undefined>
   getUserByUsername(username: string): Promise<UserRecord | undefined>
+  listUsersByRole(role: TutorMeAIUserRole): Promise<UserRecord[]>
 
   savePlatformSession(session: PlatformSessionRecord): Promise<void>
   getPlatformSessionById(platformSessionId: string): Promise<PlatformSessionRecord | undefined>
@@ -102,6 +104,13 @@ export class InMemoryAuthRepository implements AuthRepository {
 
     const userId = this.userIdsByUsername.get(normalizedUsername)
     return userId ? this.getUserById(userId) : undefined
+  }
+
+  async listUsersByRole(role: TutorMeAIUserRole): Promise<UserRecord[]> {
+    return [...this.usersById.values()]
+      .filter((user) => user.role === role && user.deletedAt === null && user.onboardingCompletedAt !== null)
+      .sort(compareUsersForDirectory)
+      .map((user) => clone(user))
   }
 
   async savePlatformSession(session: PlatformSessionRecord): Promise<void> {
@@ -289,4 +298,14 @@ function normalizeUsername(username: string | null | undefined) {
 
   const normalized = username.trim().toLowerCase()
   return normalized.length > 0 ? normalized : null
+}
+
+function compareUsersForDirectory(left: UserRecord, right: UserRecord) {
+  return compareDirectoryStrings(left.displayName, right.displayName) ||
+    compareDirectoryStrings(left.email ?? '', right.email ?? '') ||
+    compareDirectoryStrings(left.userId, right.userId)
+}
+
+function compareDirectoryStrings(left: string, right: string) {
+  return left.localeCompare(right, undefined, { sensitivity: 'base' })
 }

@@ -9,8 +9,9 @@ import { RouteComponent } from '@/routes/settings/tutormeai-profile'
 import { settingsStore } from '@/stores/settingsStore'
 import { tutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
 
-const { logoutTutorMeAIPlatformSession, closeSettings } = vi.hoisted(() => ({
+const { logoutTutorMeAIPlatformSession, listTutorMeAIPlatformStudents, closeSettings } = vi.hoisted(() => ({
   logoutTutorMeAIPlatformSession: vi.fn(),
+  listTutorMeAIPlatformStudents: vi.fn().mockResolvedValue([]),
   closeSettings: vi.fn(),
 }))
 
@@ -22,6 +23,7 @@ vi.mock('@/packages/tutormeai-auth/client', async () => {
   return {
     ...actual,
     logoutTutorMeAIPlatformSession,
+    listTutorMeAIPlatformStudents,
   }
 })
 
@@ -74,6 +76,8 @@ describe('TutorMeAI profile settings', () => {
       hasHydrated: true,
     })
     logoutTutorMeAIPlatformSession.mockReset()
+    listTutorMeAIPlatformStudents.mockReset()
+    listTutorMeAIPlatformStudents.mockResolvedValue([])
     closeSettings.mockReset()
     vi.restoreAllMocks()
   })
@@ -97,6 +101,7 @@ describe('TutorMeAI profile settings', () => {
         role: 'teacher',
         pictureUrl: null,
         onboardingCompletedAt: '2026-04-05T04:59:43.916Z',
+        students: [],
       },
       status: 'authenticated',
       error: null,
@@ -150,6 +155,7 @@ describe('TutorMeAI profile settings', () => {
         role: 'teacher',
         pictureUrl: null,
         onboardingCompletedAt: '2026-04-05T04:59:43.916Z',
+        students: [],
       },
       status: 'authenticated',
       error: null,
