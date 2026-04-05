@@ -5,12 +5,13 @@
 import { MantineProvider } from '@mantine/core'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RouteComponent } from './tutormeai-profile'
+import { RouteComponent } from '@/routes/settings/tutormeai-profile'
 import { settingsStore } from '@/stores/settingsStore'
 import { tutorMeAIAuthStore } from '@/stores/tutorMeAIAuthStore'
 
-const { logoutTutorMeAIPlatformSession } = vi.hoisted(() => ({
+const { logoutTutorMeAIPlatformSession, closeSettings } = vi.hoisted(() => ({
   logoutTutorMeAIPlatformSession: vi.fn(),
+  closeSettings: vi.fn(),
 }))
 
 vi.mock('@/packages/tutormeai-auth/client', async () => {
@@ -23,6 +24,10 @@ vi.mock('@/packages/tutormeai-auth/client', async () => {
     logoutTutorMeAIPlatformSession,
   }
 })
+
+vi.mock('@/modals/Settings', () => ({
+  closeSettings,
+}))
 
 describe('TutorMeAI profile settings', () => {
   if (!window.matchMedia) {
@@ -69,6 +74,7 @@ describe('TutorMeAI profile settings', () => {
       hasHydrated: true,
     })
     logoutTutorMeAIPlatformSession.mockReset()
+    closeSettings.mockReset()
     vi.restoreAllMocks()
   })
 
@@ -117,8 +123,52 @@ describe('TutorMeAI profile settings', () => {
       })
     })
 
+    expect(closeSettings).toHaveBeenCalled()
     expect(tutorMeAIAuthStore.getState().status).toBe('required')
     expect(tutorMeAIAuthStore.getState().accessToken).toBeNull()
     expect(tutorMeAIAuthStore.getState().user).toBeNull()
+  })
+
+  it('still clears the local session and closes settings when the backend logout selector is stale', async () => {
+    logoutTutorMeAIPlatformSession.mockRejectedValueOnce(new Error('No platform session matched the supplied selector.'))
+
+    settingsStore.setState({
+      tutorMeAIProfile: {
+        name: 'Stefano Carusos',
+        email: 'stefanocaruso456@gmail.com',
+        role: 'student',
+      },
+    })
+    tutorMeAIAuthStore.setState({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        userId: 'user.google.demo',
+        email: 'stefanocaruso456@gmail.com',
+        username: 'stefanocaruso456',
+        displayName: 'Stefano Carusos',
+        role: 'teacher',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T04:59:43.916Z',
+      },
+      status: 'authenticated',
+      error: null,
+      hasHydrated: true,
+    })
+
+    render(
+      <MantineProvider>
+        <RouteComponent />
+      </MantineProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
+
+    await waitFor(() => {
+      expect(closeSettings).toHaveBeenCalled()
+    })
+
+    expect(tutorMeAIAuthStore.getState().status).toBe('required')
+    expect(screen.queryByText(/no platform session matched the supplied selector/i)).toBeNull()
   })
 })
