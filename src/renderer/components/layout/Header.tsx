@@ -1,10 +1,12 @@
 import NiceModal from '@ebay/nice-modal-react'
-import { ActionIcon, Flex, Title, Tooltip } from '@mantine/core'
+import { ActionIcon, Flex, Text, Title, Tooltip, UnstyledButton } from '@mantine/core'
 import type { Session } from '@shared/types'
-import { IconLayoutSidebarLeftExpand, IconMenu2, IconPencil } from '@tabler/icons-react'
+import { IconChevronRight, IconFolder, IconLayoutSidebarLeftExpand, IconMenu2, IconPencil } from '@tabler/icons-react'
+import { useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import useNeedRoomForWinControls from '@/hooks/useNeedRoomForWinControls'
+import { useProjects } from '@/hooks/useProjects'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { scheduleGenerateNameAndThreadName, scheduleGenerateThreadName } from '@/stores/sessionActions'
 import * as settingActions from '@/stores/settingActions'
@@ -16,13 +18,16 @@ import WindowControls from './WindowControls'
 
 export default function Header(props: { session: Session }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const showSidebar = useUIStore((s) => s.showSidebar)
   const setShowSidebar = useUIStore((s) => s.setShowSidebar)
+  const { getProjectById } = useProjects()
 
   const isSmallScreen = useIsSmallScreen()
   const { needRoomForMacWindowControls } = useNeedRoomForWinControls()
 
   const { session: currentSession } = props
+  const currentProject = getProjectById(currentSession.projectId)
 
   // 会话名称自动生成
   useEffect(() => {
@@ -72,8 +77,38 @@ export default function Header(props: { session: Session }) {
           </Flex>
         )}
 
-        <Flex align="center" gap={'xxs'} flex={1} {...(isSmallScreen ? { justify: 'center', pl: 28, pr: 8 } : {})}>
-          <Title order={4} fz={!isSmallScreen ? 20 : undefined} lineClamp={1}>
+        <Flex
+          align="center"
+          gap="xxs"
+          flex={1}
+          className="min-w-0"
+          {...(isSmallScreen ? { justify: 'center', pl: 28, pr: 8 } : {})}
+        >
+          {currentProject ? (
+            <>
+              <UnstyledButton
+                onClick={() =>
+                  navigate({
+                    to: '/projects/$projectId',
+                    params: {
+                      projectId: currentProject.id,
+                    },
+                  })
+                }
+                className="min-w-0"
+              >
+                <Flex align="center" gap={6} className="min-w-0">
+                  <ScalableIcon icon={IconFolder} size={18} className="text-chatbox-tertiary" />
+                  <Text fw={600} c="chatbox-secondary" lineClamp={1}>
+                    {currentProject.name}
+                  </Text>
+                </Flex>
+              </UnstyledButton>
+              <ScalableIcon icon={IconChevronRight} size={16} className="text-chatbox-tertiary flex-shrink-0" />
+            </>
+          ) : null}
+
+          <Title order={4} fz={!isSmallScreen ? 20 : undefined} lineClamp={1} className="min-w-0">
             {currentSession?.name}
           </Title>
 

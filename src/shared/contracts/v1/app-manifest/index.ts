@@ -11,7 +11,9 @@ import {
   SlugSchema,
 } from '../shared'
 import {
+  exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
+  exampleChessMakeMoveToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
   ToolSchemaSchema,
@@ -231,7 +233,7 @@ export const exampleInternalChessManifest: AppManifest = AppManifestSchema.parse
       minHeight: 480,
     },
   },
-  toolDefinitions: [exampleChessLaunchToolSchema],
+  toolDefinitions: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
   safetyMetadata: {
     reviewStatus: 'approved',
     ageRating: 'all-ages',
@@ -247,7 +249,8 @@ export const examplePublicFlashcardsManifest: AppManifest = AppManifestSchema.pa
   appId: 'flashcards.public',
   slug: 'flashcards',
   name: 'Flashcards Coach',
-  shortDescription: 'Practice quick recall with a topic-based flashcard deck inside chat.',
+  shortDescription:
+    'Study a live topic-based flashcard deck while keeping the current card and progress connected to chat.',
   appVersion: '1.0.0',
   distribution: 'public-external',
   authType: 'none',

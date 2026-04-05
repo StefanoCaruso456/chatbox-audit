@@ -10,6 +10,8 @@ import {
   IconFileText,
   IconKeyboard,
   IconMessages,
+  IconSchool,
+  IconShieldSearch,
   IconSparkles,
   IconWorldWww,
 } from '@tabler/icons-react'
@@ -18,8 +20,8 @@ import clsx from 'clsx'
 import { useTranslation } from 'react-i18next'
 import { Toaster } from 'sonner'
 import Divider from '@/components/common/Divider'
-import Page from '@/components/layout/Page'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
+import Page from '@/components/layout/Page'
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import platform from '@/platform'
@@ -27,24 +29,40 @@ import { featureFlags } from '@/utils/feature-flags'
 
 const ITEMS = [
   {
+    key: 'tutormeai-profile',
+    label: 'TutorMeAI Profile',
+    icon: <IconSchool className="w-full h-full" />,
+    to: '/settings/tutormeai-profile',
+  },
+  {
+    key: 'tutormeai-reviews',
+    label: 'TutorMeAI Reviews',
+    icon: <IconShieldSearch className="w-full h-full" />,
+    to: '/settings/tutormeai-reviews',
+  },
+  {
     key: 'chatbox-ai',
     label: 'Chatbox AI',
     icon: <IconSparkles className="w-full h-full" />,
+    to: '/settings/chatbox-ai',
   },
   {
     key: 'provider',
     label: 'Model Provider',
     icon: <IconCategory className="w-full h-full" />,
+    to: '/settings/provider',
   },
   {
     key: 'default-models',
     label: 'Default Models',
     icon: <IconBox className="w-full h-full" />,
+    to: '/settings/default-models',
   },
   {
     key: 'web-search',
     label: 'Web Search',
     icon: <IconWorldWww className="w-full h-full" />,
+    to: '/settings/web-search',
   },
   ...(featureFlags.mcp
     ? [
@@ -52,6 +70,7 @@ const ITEMS = [
           key: 'mcp',
           label: 'MCP',
           icon: <IconCircleDottedLetterM className="w-full h-full" />,
+          to: '/settings/mcp',
         },
       ]
     : []),
@@ -61,6 +80,7 @@ const ITEMS = [
           key: 'knowledge-base',
           label: 'Knowledge Base',
           icon: <IconBook className="w-full h-full" />,
+          to: '/settings/knowledge-base',
         },
       ]
     : []),
@@ -68,11 +88,13 @@ const ITEMS = [
     key: 'document-parser',
     label: 'Document Parser',
     icon: <IconFileText className="w-full h-full" />,
+    to: '/settings/document-parser',
   },
   {
     key: 'chat',
     label: 'Chat Settings',
     icon: <IconMessages className="w-full h-full" />,
+    to: '/settings/chat',
   },
   ...(platform.type === 'mobile'
     ? []
@@ -81,12 +103,14 @@ const ITEMS = [
           key: 'hotkeys',
           label: 'Keyboard Shortcuts',
           icon: <IconKeyboard className="w-full h-full" />,
+          to: '/settings/hotkeys',
         },
       ]),
   {
     key: 'general',
     label: 'General Settings',
     icon: <IconAdjustmentsHorizontal className="w-full h-full" />,
+    to: '/settings/general',
   },
 ]
 
@@ -152,7 +176,7 @@ export function SettingsRoot() {
                 routerState.location.pathname.startsWith(`/settings/${item.key}/`)
               }
               key={item.key}
-              to={`/settings/${item.key}` as any}
+              to={item.to}
               className={'block no-underline w-full'}
             >
               <Flex

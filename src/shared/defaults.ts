@@ -73,6 +73,11 @@ export function settings(): Settings {
     showModelName: true,
     showMessageTimestamp: false,
     showFirstTokenLatency: false,
+    tutorMeAIProfile: {
+      name: '',
+      email: '',
+      role: 'student',
+    },
     userAvatarKey: '',
     defaultAssistantAvatarKey: '',
     theme: Theme.System,
@@ -130,7 +135,7 @@ export function settings(): Settings {
         },
       },
       // documentParser is NOT set here - it uses platform-specific defaults
-      // Desktop: 'local', Mobile/Web: 'chatbox-ai'
+      // Desktop/Web: 'local'
       // See settingsStore.ts for the platform-aware initialization logic
       documentParser: undefined,
     },

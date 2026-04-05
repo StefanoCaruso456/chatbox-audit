@@ -1,17 +1,141 @@
-import { Alert, Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core'
+import { Alert, Badge, Box, Button, Group, Paper, Progress, Stack, Text, Title } from '@mantine/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
 import { buildFlashcardsCompletionSignal, buildStudyDeck, type DeterministicStudyDeck } from './deck'
+
+type FlashcardsSessionSeed = {
+  topic: string
+  currentCard: number
+  reviewedCardIds: string[]
+  reviewedCount: number
+}
+
+function getReviewPercent(reviewedCount: number, cardCount: number) {
+  if (cardCount <= 0) {
+    return 0
+  }
+
+  return Math.min(100, Math.round((reviewedCount / cardCount) * 100))
+}
+
+function getSeedTopic(initialState: Record<string, unknown> | undefined, invocationMessage: unknown) {
+  if (
+    invocationMessage &&
+    typeof invocationMessage === 'object' &&
+    'payload' in invocationMessage &&
+    invocationMessage.payload &&
+    typeof invocationMessage.payload === 'object' &&
+    'toolName' in invocationMessage.payload &&
+    invocationMessage.payload.toolName === 'flashcards.start-session' &&
+    'arguments' in invocationMessage.payload &&
+    invocationMessage.payload.arguments &&
+    typeof invocationMessage.payload.arguments === 'object' &&
+    'topic' in invocationMessage.payload.arguments
+  ) {
+    const topic = String(invocationMessage.payload.arguments.topic ?? '').trim()
+    return topic || 'fractions'
+  }
+
+  if (initialState) {
+    if (typeof initialState.topic === 'string' && initialState.topic.trim()) {
+      return initialState.topic.trim()
+    }
+
+    const toolArguments = initialState.toolArguments
+    if (toolArguments && typeof toolArguments === 'object' && 'topic' in toolArguments) {
+      const topic = String(toolArguments.topic ?? '').trim()
+      return topic || 'fractions'
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    const topic = new URLSearchParams(window.location.search).get('topic')?.trim()
+    if (topic) {
+      return topic
+    }
+  }
+
+  return null
+}
+
+function normalizeCount(value: unknown, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.max(0, Math.floor(value))
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter(Boolean)
+    .filter((entry, index, items) => items.indexOf(entry) === index)
+}
+
+function getFlashcardsSessionSeed(input: {
+  initialState?: Record<string, unknown>
+  invocationMessage: unknown
+}): FlashcardsSessionSeed | null {
+  const topic = getSeedTopic(input.initialState, input.invocationMessage)
+  if (!topic) {
+    return null
+  }
+
+  return {
+    topic,
+    currentCard: Math.max(1, normalizeCount(input.initialState?.currentCard, 1)),
+    reviewedCardIds: normalizeStringArray(input.initialState?.reviewedCardIds),
+    reviewedCount: normalizeCount(input.initialState?.reviewedCount, 0),
+  }
+}
+
+function buildReviewedCardIds(deck: DeterministicStudyDeck, seed: FlashcardsSessionSeed) {
+  const validCardIds = new Set(deck.cards.map((card) => card.id))
+  const restoredIds = seed.reviewedCardIds.filter((cardId) => validCardIds.has(cardId))
+
+  if (restoredIds.length > 0) {
+    return restoredIds
+  }
+
+  return deck.cards.slice(0, Math.min(seed.reviewedCount, deck.cards.length)).map((card) => card.id)
+}
+
+function buildFlashcardsSummary(input: {
+  deck: DeterministicStudyDeck
+  currentIndex: number
+  revealed: boolean
+  reviewedCount: number
+}) {
+  const currentCard = input.deck.cards[input.currentIndex]
+  const answerState = input.revealed ? 'answer revealed' : 'answer hidden'
+  return `${input.deck.topic} flashcards on card ${input.currentIndex + 1} of ${input.deck.cards.length}. Focus: ${currentCard.focus}. ${answerState}. ${input.reviewedCount} reviewed.`
+}
 
 export function FlashcardsAppPage() {
   const { invocationMessage, runtimeContext, sendCompletion, sendState } = useEmbeddedAppBridge('flashcards.public')
   const [deck, setDeck] = useState<DeterministicStudyDeck | null>(null)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
-  const [reviewedIndices, setReviewedIndices] = useState<number[]>([])
+  const [reviewedCardIds, setReviewedCardIds] = useState<string[]>([])
+  const sessionSeed = useMemo(
+    () =>
+      getFlashcardsSessionSeed({
+        initialState:
+          runtimeContext?.initialState && typeof runtimeContext.initialState === 'object'
+            ? (runtimeContext.initialState as Record<string, unknown>)
+            : undefined,
+        invocationMessage,
+      }),
+    [invocationMessage, runtimeContext?.initialState]
+  )
 
   useEffect(() => {
-    if (!runtimeContext) {
+    if (!runtimeContext || sessionSeed) {
       return
     }
 
@@ -26,34 +150,21 @@ export function FlashcardsAppPage() {
         percent: 0,
       },
     })
-  }, [runtimeContext, sendState])
+  }, [runtimeContext, sendState, sessionSeed])
 
   useEffect(() => {
-    if (!invocationMessage || invocationMessage.payload.toolName !== 'flashcards.start-session' || !runtimeContext) {
+    if (!sessionSeed) {
       return
     }
 
-    const nextDeck = buildStudyDeck(String(invocationMessage.payload.arguments.topic ?? 'fractions'))
-    setDeck(nextDeck)
-    setCurrentIndex(0)
-    setRevealed(false)
-    setReviewedIndices([])
+    const nextDeck = buildStudyDeck(sessionSeed.topic)
+    const nextCurrentIndex = Math.min(Math.max(0, sessionSeed.currentCard - 1), nextDeck.cards.length - 1)
 
-    sendState({
-      status: 'active',
-      summary: nextDeck.summary,
-      state: {
-        topic: nextDeck.topic,
-        cardCount: nextDeck.cards.length,
-        currentCard: 1,
-        reviewedCount: 0,
-      },
-      progress: {
-        label: 'Card 1',
-        percent: 20,
-      },
-    })
-  }, [invocationMessage, runtimeContext, sendState])
+    setDeck(nextDeck)
+    setCurrentIndex(nextCurrentIndex)
+    setRevealed(false)
+    setReviewedCardIds(buildReviewedCardIds(nextDeck, sessionSeed))
+  }, [sessionSeed])
 
   const currentCard = useMemo(() => {
     if (!deck) {
@@ -63,41 +174,85 @@ export function FlashcardsAppPage() {
     return deck.cards[currentIndex] ?? null
   }, [currentIndex, deck])
 
-  const handleReveal = useCallback(() => {
-    if (!deck || !currentCard) {
+  const reviewedCount = reviewedCardIds.length
+  const reviewPercent = deck ? getReviewPercent(reviewedCount, deck.cards.length) : 0
+  const currentCardNumber = currentIndex + 1
+  const canMovePrevious = currentIndex > 0
+  const canMoveNext = Boolean(deck) && currentIndex < deck.cards.length - 1
+
+  useEffect(() => {
+    if (!runtimeContext || !deck || !currentCard) {
       return
     }
 
-    setRevealed(true)
-    setReviewedIndices((current) => (current.includes(currentIndex) ? current : [...current, currentIndex]))
     sendState({
       status: 'active',
-      summary: `Reviewed card ${currentIndex + 1} of ${deck.cards.length} for ${deck.topic}.`,
+      summary: buildFlashcardsSummary({
+        deck,
+        currentIndex,
+        revealed,
+        reviewedCount,
+      }),
       state: {
         topic: deck.topic,
         cardCount: deck.cards.length,
-        currentCard: currentIndex + 1,
-        reviewedCount: reviewedIndices.includes(currentIndex) ? reviewedIndices.length : reviewedIndices.length + 1,
+        currentCard: currentCardNumber,
+        currentCardId: currentCard.id,
         currentFocus: currentCard.focus,
+        currentPrompt: currentCard.question,
+        currentAnswer: currentCard.answer,
+        answerRevealed: revealed,
+        reviewedCount,
+        reviewedCardIds,
+        remainingCount: Math.max(0, deck.cards.length - reviewedCount),
+        studyTip: deck.studyTip,
+        canMovePrevious,
+        canMoveNext,
+        availableActions: ['previous-card', revealed ? 'hide-answer' : 'reveal-answer', 'next-card', 'finish-session'],
       },
       progress: {
-        label: `Card ${currentIndex + 1}`,
-        percent: Math.min(95, Math.round(((currentIndex + 1) / deck.cards.length) * 100)),
+        label: `Card ${currentCardNumber} of ${deck.cards.length}`,
+        percent: Math.round((currentCardNumber / deck.cards.length) * 100),
       },
     })
-  }, [currentCard, currentIndex, deck, reviewedIndices, sendState])
+  }, [
+    canMoveNext,
+    canMovePrevious,
+    currentCard,
+    currentCardNumber,
+    currentIndex,
+    deck,
+    revealed,
+    reviewedCardIds,
+    reviewedCount,
+    runtimeContext,
+    sendState,
+  ])
+
+  const handleToggleReveal = useCallback(() => {
+    if (!currentCard) {
+      return
+    }
+
+    setRevealed((current) => !current)
+    setReviewedCardIds((current) => (current.includes(currentCard.id) ? current : [...current, currentCard.id]))
+  }, [currentCard])
+
+  const handlePrevious = useCallback(() => {
+    setCurrentIndex((current) => Math.max(0, current - 1))
+    setRevealed(false)
+  }, [])
 
   const handleNext = useCallback(() => {
     if (!deck) {
       return
     }
 
-    const nextIndex = (currentIndex + 1) % deck.cards.length
-    setCurrentIndex(nextIndex)
+    setCurrentIndex((current) => Math.min(deck.cards.length - 1, current + 1))
     setRevealed(false)
-  }, [currentIndex, deck])
+  }, [deck])
 
-  const handleShare = useCallback(() => {
+  const handleFinish = useCallback(() => {
     if (!deck || !runtimeContext) {
       return
     }
@@ -108,75 +263,145 @@ export function FlashcardsAppPage() {
         appSessionId: runtimeContext.appSessionId,
         toolCallId: invocationMessage?.payload.toolCallId,
         deck,
-        reviewedCount: reviewedIndices.length,
+        reviewedCount,
       })
     )
-  }, [deck, invocationMessage?.payload.toolCallId, reviewedIndices.length, runtimeContext, sendCompletion])
+  }, [deck, invocationMessage?.payload.toolCallId, reviewedCount, runtimeContext, sendCompletion])
 
   return (
-    <Box p="md" bg="linear-gradient(180deg, #fff7ed 0%, #ffffff 100%)" mih="100vh">
+    <Box
+      data-testid="flashcards-app-root"
+      p="md"
+      mih="100vh"
+      c="#e5eefb"
+      style={{
+        background: 'linear-gradient(180deg, #071120 0%, #0f172a 52%, #111827 100%)',
+        overflowX: 'hidden',
+      }}
+    >
       <Stack gap="md">
-        <Group justify="space-between">
+        <Group justify="space-between" align="flex-start">
           <div>
-            <Title order={3}>Flashcards Coach</Title>
-            <Text c="dimmed" size="sm">
-              Public study cards that help students review a topic without leaving the chat.
+            <Title order={3} c="white">
+              Flashcards Coach
+            </Title>
+            <Text c="rgba(226,232,240,0.78)" size="sm">
+              Review the live card here while TutorMeAI keeps the session synced with the conversation.
             </Text>
           </div>
           <Badge color={deck ? 'teal' : 'blue'} variant="light">
-            {deck ? `${reviewedIndices.length}/${deck.cards.length} reviewed` : 'Waiting'}
+            {deck ? `Card ${currentCardNumber}/${deck.cards.length}` : 'Waiting'}
           </Badge>
         </Group>
 
         {!deck && (
-          <Alert color="blue" variant="light">
-            Waiting for the host to send a study topic.
-          </Alert>
+          <Paper
+            withBorder
+            radius="xl"
+            p="lg"
+            style={{
+              background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(17,24,39,0.88) 100%)',
+              borderColor: 'rgba(96, 165, 250, 0.18)',
+            }}
+          >
+            <Stack gap="sm">
+              <Alert color="blue" variant="light">
+                Waiting for the host to send a study topic.
+              </Alert>
+              <Text size="sm" c="rgba(226,232,240,0.74)">
+                When TutorMeAI starts a flashcard session, the deck, progress, and completion summary will appear here.
+              </Text>
+            </Stack>
+          </Paper>
         )}
 
         {deck && currentCard && (
-          <>
-            <Paper withBorder radius="lg" p="md">
-              <Stack gap="sm">
-                <Text fw={700}>{deck.topic}</Text>
-                <Text size="sm" c="dimmed">
-                  {deck.studyTip}
-                </Text>
-                <Badge variant="light" color="orange" w="fit-content">
+          <Paper
+            withBorder
+            radius="xl"
+            p="lg"
+            style={{
+              background: 'linear-gradient(180deg, rgba(15,23,42,0.96) 0%, rgba(30,41,59,0.92) 100%)',
+              borderColor: 'rgba(148, 163, 184, 0.22)',
+            }}
+          >
+            <Stack gap="lg">
+              <Group justify="space-between" align="center">
+                <Stack gap={2}>
+                  <Text size="xs" tt="uppercase" fw={700} c="rgba(148,163,184,0.9)">
+                    Current deck
+                  </Text>
+                  <Text fw={700} c="white">
+                    {deck.topic}
+                  </Text>
+                </Stack>
+                <Badge variant="light" color="orange">
                   {currentCard.focus}
                 </Badge>
-                <Text fw={600}>{currentCard.question}</Text>
-                {revealed ? (
-                  <Alert color="teal" variant="light">
-                    {currentCard.answer}
-                  </Alert>
-                ) : (
-                  <Text size="sm" c="dimmed">
-                    Reveal the answer when you are ready to check your understanding.
+              </Group>
+
+              <Stack gap="xs">
+                <Progress value={reviewPercent} radius="xl" color="blue" />
+                <Group justify="space-between" gap="sm">
+                  <Text size="sm" c="rgba(226,232,240,0.82)">
+                    Reviewed {reviewedCount} of {deck.cards.length} cards
                   </Text>
-                )}
-                <Group>
-                  <Button onClick={handleReveal}>{revealed ? 'Reviewed' : 'Reveal answer'}</Button>
-                  <Button variant="default" onClick={handleNext}>
-                    Next card
-                  </Button>
-                  <Button variant="light" onClick={handleShare}>
-                    Send study summary to chat
-                  </Button>
+                  <Text size="sm" c="rgba(148,163,184,0.82)">
+                    {deck.studyTip}
+                  </Text>
                 </Group>
               </Stack>
-            </Paper>
 
-            <Paper withBorder radius="lg" p="md">
-              <Stack gap="xs">
-                <Text fw={600}>Session summary</Text>
-                <Text size="sm">{deck.summary}</Text>
-                <Text size="sm" c="dimmed">
-                  Reviewed {reviewedIndices.length} of {deck.cards.length} cards so far.
-                </Text>
-              </Stack>
-            </Paper>
-          </>
+              <Paper
+                withBorder
+                radius="xl"
+                p="xl"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(8,15,32,0.92) 0%, rgba(15,23,42,0.86) 100%)',
+                  borderColor: revealed ? 'rgba(45, 212, 191, 0.28)' : 'rgba(96, 165, 250, 0.22)',
+                }}
+              >
+                <Stack gap="lg">
+                  <Stack gap="sm">
+                    <Text size="xs" tt="uppercase" fw={700} c="rgba(125,211,252,0.9)">
+                      Prompt
+                    </Text>
+                    <Text fw={700} fz="xl" c="white">
+                      {currentCard.question}
+                    </Text>
+                  </Stack>
+
+                  <Stack
+                    gap="sm"
+                    style={{
+                      paddingTop: '1rem',
+                      borderTop: '1px solid rgba(148, 163, 184, 0.16)',
+                    }}
+                  >
+                    <Text size="xs" tt="uppercase" fw={700} c={revealed ? 'rgba(94,234,212,0.9)' : 'rgba(148,163,184,0.88)'}>
+                      {revealed ? 'Answer' : 'Answer hidden'}
+                    </Text>
+                    <Text c={revealed ? 'white' : 'rgba(226,232,240,0.72)'} fz="md">
+                      {revealed ? currentCard.answer : 'Reveal the answer when you are ready to check your understanding.'}
+                    </Text>
+                  </Stack>
+                </Stack>
+              </Paper>
+
+              <Group gap="sm" wrap="wrap">
+                <Button variant="default" onClick={handlePrevious} disabled={!canMovePrevious}>
+                  Previous card
+                </Button>
+                <Button onClick={handleToggleReveal}>{revealed ? 'Hide answer' : 'Reveal answer'}</Button>
+                <Button variant="default" onClick={handleNext} disabled={!canMoveNext}>
+                  Next card
+                </Button>
+                <Button variant="light" onClick={handleFinish}>
+                  Finish session
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
         )}
       </Stack>
     </Box>

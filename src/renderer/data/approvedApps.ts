@@ -1,5 +1,7 @@
 import {
+  exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
+  exampleChessMakeMoveToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
 } from '@shared/contracts/v1'
@@ -10,8 +12,16 @@ const DEFAULT_MODE_CAPABILITIES = {
   'partner-embed': ['Approved in-app embed', 'Manual launch URL support', 'Teacher-friendly panel preview'],
   'api-adapter': ['ChatBridge-owned UI shell', 'Structured tool calls', 'API-backed state and context retention'],
   'district-adapter': ['District launch support', 'School-managed auth path', 'K-12 workflow shell inside ChatBridge'],
-  'browser-session': ['Governed browser-session shell', 'In-product vendor launch target', 'Policy-aware fallback surface'],
-  'native-replacement': ['ChatBridge-native workflow shell', 'Focused learning flow', 'Conversation-aware replacement UX'],
+  'browser-session': [
+    'Governed browser-session shell',
+    'In-product vendor launch target',
+    'Policy-aware fallback surface',
+  ],
+  'native-replacement': [
+    'ChatBridge-native workflow shell',
+    'Focused learning flow',
+    'Conversation-aware replacement UX',
+  ],
 } as const
 
 const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['integrationConfig']>>> = {
@@ -30,7 +40,8 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
     helpUrl: 'https://www.classdojo.com/',
     helpLabel: 'ClassDojo product site',
     authModel: 'vendor-session',
-    statusNote: 'ClassDojo does not expose a friendly third-party API path, so this stays on the governed browser-session track.',
+    statusNote:
+      'ClassDojo does not expose a friendly third-party API path, so this stays on the governed browser-session track.',
   },
   'canvas-student': {
     authModel: 'district-sso',
@@ -70,7 +81,8 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
     authModel: 'district-sso',
   },
   splashlearn: {
-    helpUrl: 'https://support.splashlearn.com/hc/en-us/articles/12274707283346-Enhancing-platform-compatibility-SplashLearn-integration',
+    helpUrl:
+      'https://support.splashlearn.com/hc/en-us/articles/12274707283346-Enhancing-platform-compatibility-SplashLearn-integration',
     helpLabel: 'SplashLearn integration guide',
     authModel: 'district-sso',
   },
@@ -81,6 +93,24 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
       'Launch the Desmos workspace and help me reason through this graph.',
       'Keep Desmos open while we work through a function problem.',
     ],
+  },
+  miro: {
+    helpUrl: 'https://developers.miro.com/docs/miro-live-embed-with-boardspicker-registered',
+    helpLabel: 'Miro Live Embed docs',
+    authModel: 'vendor-session',
+    capabilities: ['Official live embed path', 'BoardsPicker-based board selection', 'Collaborative whiteboard beside chat'],
+    setupChecklist: [
+      'Create a Miro developer app and request BoardsPicker enablement for your app.',
+      'Allowlist the ChatBridge domain in the Miro app settings for BoardsPicker.',
+      'Save a Miro live-embed URL that includes usePostAuth=true for our Electron-style shell.',
+    ],
+    samplePrompts: [
+      'Open our Miro board beside chat.',
+      'Launch the Miro workspace and keep the whiteboard visible while we brainstorm.',
+      'Use Miro in the panel while we review the board together.',
+    ],
+    statusNote:
+      'Miro works best through Live Embed plus BoardsPicker selection. For ChatBridge, prefer a saved live-embed board URL with usePostAuth=true over the generic Miro homepage.',
   },
   newsela: {
     helpUrl: 'https://newsela.com/',
@@ -122,7 +152,8 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
     authModel: 'district-sso',
   },
   quizizz: {
-    helpUrl: 'https://support.quizizz.com/hc/en-us/articles/37222826330265-All-LMS-Platforms-You-Can-Integrate-With-Quizizz',
+    helpUrl:
+      'https://support.quizizz.com/hc/en-us/articles/37222826330265-All-LMS-Platforms-You-Can-Integrate-With-Quizizz',
     helpLabel: 'Quizizz LMS integrations',
     authModel: 'district-sso',
   },
@@ -211,7 +242,11 @@ function buildDefaultSetupChecklist(app: ApprovedApp) {
         'Wire the replacement UI back into chat context and completion summaries.',
       ]
     case 'runtime':
-      return ['Open the runtime beside chat.', 'Invoke the app tool flow.', 'Return completion context to the conversation.']
+      return [
+        'Open the runtime beside chat.',
+        'Invoke the app tool flow.',
+        'Return completion context to the conversation.',
+      ]
   }
 }
 
@@ -249,7 +284,7 @@ function buildIntegrationConfig(app: ApprovedApp): NonNullable<ApprovedApp['inte
     (app.integrationMode === 'partner-embed' ||
     app.integrationMode === 'district-adapter' ||
     app.integrationMode === 'browser-session'
-      ? app.vendorUrl ?? app.launchUrl
+      ? (app.vendorUrl ?? app.launchUrl)
       : undefined)
 
   return {
@@ -432,6 +467,32 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
       defaultLaunchUrl: 'https://www.desmos.com/calculator',
       helpUrl: 'https://www.desmos.com/api/v1.6/docs/index.html',
       helpLabel: 'Desmos API docs',
+    },
+  },
+  {
+    id: 'miro',
+    name: 'Miro',
+    icon: '/icons/apps/miro.png',
+    shortSummary:
+      'A collaborative digital whiteboard for brainstorming, diagramming, planning, and project work that can stay beside chat.',
+    category: 'Creativity, Coding & Projects',
+    gradeRanges: ['Multi-level'],
+    launchUrl: 'https://miro.com/',
+    launchMode: 'iframe',
+    integrationMode: 'partner-embed',
+    isApproved: true,
+    tags: ['whiteboard', 'collaboration', 'brainstorming', 'diagramming'],
+    integrationConfig: {
+      defaultLaunchUrl: '',
+      configurableLaunchUrl: true,
+      launchUrlLabel: 'Miro live embed URL',
+      launchUrlPlaceholder: 'https://miro.com/app/live-embed/{board_id}/?usePostAuth=true',
+      helpUrl: 'https://developers.miro.com/docs/miro-live-embed-with-boardspicker-registered',
+      helpLabel: 'Miro Live Embed docs',
+    },
+    loadingFallback: {
+      title: 'Miro needs a live-embed board URL',
+      body: 'Use Miro Live Embed or BoardsPicker to generate a board-specific embed link, then save that URL here so the whiteboard can render beside chat.',
     },
   },
   {
@@ -652,9 +713,16 @@ const tutorMeAiApps: ApprovedApp[] = [
     experience: 'tutormeai-runtime',
     runtimeBridge: {
       appId: 'chess.internal',
+      sidebarMode: 'direct-iframe',
       authState: 'not-required',
       grantedPermissions: ['session:write', 'tool:invoke'],
-      availableTools: [exampleChessLaunchToolSchema],
+      initialState: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+        mode: 'practice',
+      },
+      availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
       pendingInvocation: {
         toolName: exampleChessLaunchToolSchema.name,
         arguments: { mode: 'practice' },
@@ -667,7 +735,7 @@ const tutorMeAiApps: ApprovedApp[] = [
     name: 'Flashcards Coach',
     icon: '/icons/apps/flashcards-coach.png',
     shortSummary:
-      'A TutorMeAI flashcards session that keeps study topics, progress, and completion summaries connected to the conversation.',
+      'A TutorMeAI flashcards study surface that keeps the current card, progress, and session context connected to the conversation.',
     category: 'Study, Assessment & Engagement',
     gradeRanges: ['3-5', '6-8', '9-12'],
     launchUrl: '/embedded-apps/flashcards',
@@ -678,6 +746,7 @@ const tutorMeAiApps: ApprovedApp[] = [
     experience: 'tutormeai-runtime',
     runtimeBridge: {
       appId: 'flashcards.public',
+      sidebarMode: 'direct-iframe',
       authState: 'not-required',
       grantedPermissions: ['tool:invoke'],
       availableTools: [exampleFlashcardsStartToolSchema],
@@ -722,6 +791,7 @@ export const APP_MILESTONE_ORDER = [
   'planner-connect',
   'desmos',
   'padlet',
+  'miro',
   'google-classroom',
   'canvas-student',
   'schoology',
@@ -746,7 +816,6 @@ export const APP_MILESTONE_ORDER = [
   'khan-academy-kids',
   'scratchjr',
 ] as const
-
 export const approvedApps: ApprovedApp[] = [
   ...tutorMeAiApps,
   ...curatedApprovedAppCatalog.map((app) => {
@@ -766,7 +835,20 @@ export const approvedApps: ApprovedApp[] = [
 ]
 
 export const approvedAppsById = new Map(approvedApps.map((app) => [app.id, app] as const))
+export const approvedAppsByRuntimeAppId = new Map(
+  approvedApps.reduce<[string, ApprovedApp][]>((entries, app) => {
+    if (app.runtimeBridge?.appId) {
+      entries.push([app.runtimeBridge.appId, app])
+    }
+
+    return entries
+  }, [])
+)
 
 export function getApprovedAppById(appId: string) {
   return approvedAppsById.get(appId)
+}
+
+export function getApprovedAppByRuntimeAppId(runtimeAppId: string) {
+  return approvedAppsByRuntimeAppId.get(runtimeAppId)
 }

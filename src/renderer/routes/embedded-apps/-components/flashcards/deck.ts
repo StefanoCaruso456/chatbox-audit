@@ -68,6 +68,8 @@ export function buildFlashcardsCompletionSignal(input: {
   deck: DeterministicStudyDeck
   reviewedCount: number
 }): CompletionSignal {
+  const reviewedLabel = `${input.reviewedCount} of ${input.deck.cards.length}`
+
   return {
     version: 'v1',
     conversationId: input.conversationId,
@@ -75,7 +77,7 @@ export function buildFlashcardsCompletionSignal(input: {
     appId: 'flashcards.public',
     toolCallId: input.toolCallId,
     status: 'succeeded',
-    resultSummary: `Flashcard session on ${input.deck.topic} is ready with ${input.deck.cards.length} cards.`,
+    resultSummary: `Flashcard session on ${input.deck.topic} finished with ${reviewedLabel} cards reviewed.`,
     result: {
       topic: input.deck.topic,
       cardCount: input.deck.cards.length,
@@ -83,9 +85,9 @@ export function buildFlashcardsCompletionSignal(input: {
     },
     completedAt: new Date().toISOString(),
     followUpContext: {
-      summary: 'Use the flashcard deck to quiz the student, reinforce the topic, or choose the next study step.',
-      userVisibleSummary: `Flashcards on ${input.deck.topic} are ready in chat.`,
-      recommendedPrompts: ['Quiz me on this topic.', 'Which card should I review first?'],
+      summary: 'Use the flashcard session results to quiz the student, review missed ideas, or choose the next study step.',
+      userVisibleSummary: `Finished ${input.deck.topic} flashcards with ${reviewedLabel} cards reviewed.`,
+      recommendedPrompts: ['Quiz me on the cards I still need to practice.', 'Give me a quick recap of this topic.'],
       stateDigest: {
         topic: input.deck.topic,
         cardCount: input.deck.cards.length,

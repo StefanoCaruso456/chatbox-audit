@@ -9,6 +9,8 @@ import { StrictMode, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import i18n from './i18n'
+import { installBuildFreshnessWatcher } from './lib/build-freshness'
+import { isEmbeddedAppPath } from './lib/root-layout-utils'
 import { getLogger } from './lib/utils'
 import platform from './platform'
 import reportWebVitals from './reportWebVitals'
@@ -109,6 +111,30 @@ function InitPage() {
   )
 }
 
+function finishSplashScreen() {
+  if (platform.type === 'mobile') {
+    SplashScreen.hide()
+  }
+
+  const el = document.querySelector('.splash-screen')
+  if (el) {
+    el.addEventListener('animationend', () => {
+      el.parentNode?.removeChild(el)
+    })
+    el.classList.add('splash-screen-fade-out')
+  }
+}
+
+function persistBrowserStorage() {
+  if (window?.navigator?.storage) {
+    navigator.storage?.persisted().then((persisted) => {
+      if (!persisted) {
+        navigator.storage?.persist()
+      }
+    })
+  }
+}
+
 // initializeApp执行时间少于1s的话，将不会看到log
 const tid = setTimeout(() => {
   ReactDOM.createRoot(document.getElementById('log-root') as HTMLElement).render(
@@ -123,50 +149,68 @@ const tid = setTimeout(() => {
   }
 }, 1000)
 
-// 等待初始化完成后再渲染
-initializeApp()
-  .catch((e) => {
-    // 初始化中的各个步骤已经捕获了错误，这里防止未来添加未捕获的逻辑
-    Sentry.captureException(e)
-    log.error('initializeApp error', e)
+const shouldFastBootEmbeddedApps =
+  typeof window !== 'undefined' && isEmbeddedAppPath(window.location.pathname)
+
+let hasRenderedAppRoot = false
+let stopBuildFreshnessWatcher: (() => void) | null = null
+
+async function hydrateAppStores() {
+  const [settings] = await Promise.all([initSettingsStore(), initLastUsedModelStore()])
+  i18n.changeLanguage(settings.language)
+  return settings
+}
+
+async function renderAppRoot(options?: { deferStoreHydration?: boolean }) {
+  if (hasRenderedAppRoot) {
+    return
+  }
+
+  hasRenderedAppRoot = true
+  clearTimeout(tid)
+
+  ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+    <StrictMode>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </StrictMode>
+  )
+
+  finishSplashScreen()
+  persistBrowserStorage()
+
+  if (!import.meta.env.DEV && stopBuildFreshnessWatcher === null) {
+    stopBuildFreshnessWatcher = installBuildFreshnessWatcher()
+  }
+
+  if (options?.deferStoreHydration) {
+    void hydrateAppStores().catch((e) => {
+      Sentry.captureException(e)
+      log.error('hydrateAppStores error', e)
+    })
+    return
+  }
+
+  await hydrateAppStores()
+}
+
+const initializationPromise = initializeApp().catch((e) => {
+  // 初始化中的各个步骤已经捕获了错误，这里防止未来添加未捕获的逻辑
+  Sentry.captureException(e)
+  log.error('initializeApp error', e)
+})
+
+if (shouldFastBootEmbeddedApps) {
+  void renderAppRoot({ deferStoreHydration: true })
+  void initializationPromise
+} else {
+  void initializationPromise.finally(async () => {
+    await renderAppRoot()
   })
-  .finally(async () => {
-    clearTimeout(tid)
-
-    // 等待settings初始化完成，避免闪屏
-    const [settings] = await Promise.all([initSettingsStore(), initLastUsedModelStore()])
-
-    i18n.changeLanguage(settings.language)
-    // 初始化完成，可以开始渲染
-    ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-      <StrictMode>
-        <ErrorBoundary>
-          <QueryClientProvider client={queryClient}>
-            <RouterProvider router={router} />
-          </QueryClientProvider>
-        </ErrorBoundary>
-      </StrictMode>
-    )
-
-    if (platform.type === 'mobile') {
-      SplashScreen.hide()
-    }
-    const el = document.querySelector('.splash-screen')
-    if (el) {
-      el.addEventListener('animationend', () => {
-        el.parentNode?.removeChild(el)
-      })
-      el.classList.add('splash-screen-fade-out')
-    }
-
-    if (window?.navigator?.storage) {
-      navigator.storage?.persisted().then((persisted) => {
-        if (!persisted) {
-          navigator.storage?.persist()
-        }
-      })
-    }
-  })
+}
 
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))

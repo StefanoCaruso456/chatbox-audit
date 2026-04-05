@@ -1,6 +1,7 @@
 import { IdentifierSchema, JsonObjectSchema } from '@shared/contracts/v1'
 import { z } from 'zod'
 import { failureResult, toApiErrorBody } from '../errors'
+import { toPublicOAuthConnectionRecord } from './public'
 import type { OAuthAuthService, PlatformAuthService } from './service'
 import type { OAuthAuthFailure, OAuthAuthResult, OAuthProviderAdapter, PlatformAuthFailure, PlatformAuthResult } from './types'
 
@@ -332,7 +333,16 @@ export function createAuthApi(
         appId,
         provider,
       })
-      return toAuthResponse(result, 200)
+      if (!result.ok) {
+        return toAuthResponse(result, 200)
+      }
+
+      return jsonResponse<AuthApiSuccessBody<{ connection: ReturnType<typeof toPublicOAuthConnectionRecord> }>>(200, {
+        ok: true,
+        data: {
+          connection: toPublicOAuthConnectionRecord(result.value),
+        },
+      })
     },
 
     listOAuthConnections: async (request: Request): Promise<Response> => {
@@ -377,10 +387,10 @@ export function createAuthApi(
         return true
       })
 
-      return jsonResponse<AuthApiSuccessBody<{ connections: typeof filtered }>>(200, {
+      return jsonResponse<AuthApiSuccessBody<{ connections: Array<ReturnType<typeof toPublicOAuthConnectionRecord>> }>>(200, {
         ok: true,
         data: {
-          connections: filtered,
+          connections: filtered.map((connection) => toPublicOAuthConnectionRecord(connection)),
         },
       })
     },

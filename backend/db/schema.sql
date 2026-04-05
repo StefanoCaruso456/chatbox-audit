@@ -11,17 +11,30 @@ $$;
 CREATE TABLE users (
   user_id text PRIMARY KEY,
   email text,
+  username text,
   display_name text NOT NULL,
+  role text,
+  onboarding_completed_at timestamptz,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   updated_at timestamptz NOT NULL DEFAULT NOW(),
   deleted_at timestamptz,
-  CONSTRAINT users_email_present CHECK (email IS NULL OR LENGTH(TRIM(email)) > 0)
+  CONSTRAINT users_email_present CHECK (email IS NULL OR LENGTH(TRIM(email)) > 0),
+  CONSTRAINT users_username_present CHECK (username IS NULL OR LENGTH(TRIM(username)) > 0),
+  CONSTRAINT users_role_valid CHECK (role IS NULL OR role IN ('student', 'teacher', 'school_admin', 'district_Director')),
+  CONSTRAINT users_onboarding_requires_profile CHECK (
+    onboarding_completed_at IS NULL
+    OR (role IS NOT NULL AND username IS NOT NULL)
+  )
 );
 
 CREATE UNIQUE INDEX idx_users_email_unique
   ON users (LOWER(email))
   WHERE email IS NOT NULL AND deleted_at IS NULL;
+
+CREATE UNIQUE INDEX idx_users_username_unique
+  ON users (LOWER(username))
+  WHERE username IS NOT NULL AND deleted_at IS NULL;
 
 CREATE TABLE platform_sessions (
   platform_session_id text PRIMARY KEY,
@@ -115,7 +128,9 @@ CREATE TABLE apps (
   distribution text NOT NULL,
   auth_type text NOT NULL,
   review_status text NOT NULL DEFAULT 'pending',
+  review_state text NOT NULL DEFAULT 'submitted',
   current_version_id text,
+  last_review_record_id text,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   updated_at timestamptz NOT NULL DEFAULT NOW(),
@@ -125,6 +140,7 @@ CREATE TABLE apps (
   CONSTRAINT apps_distribution_valid CHECK (distribution IN ('internal', 'public-external', 'authenticated-external')),
   CONSTRAINT apps_auth_type_valid CHECK (auth_type IN ('none', 'platform-session', 'oauth2')),
   CONSTRAINT apps_review_status_valid CHECK (review_status IN ('pending', 'approved', 'blocked')),
+  CONSTRAINT apps_review_state_valid CHECK (review_state IN ('draft', 'submitted', 'validation-failed', 'review-pending', 'approved-staging', 'approved-production', 'rejected', 'suspended', 'retired')),
   CONSTRAINT apps_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
 
@@ -134,25 +150,39 @@ ALTER TABLE apps
 CREATE INDEX idx_apps_review_distribution
   ON apps (review_status, distribution, auth_type);
 
+CREATE INDEX idx_apps_review_state
+  ON apps (review_state, distribution, auth_type);
+
 CREATE TABLE app_versions (
   app_version_id text PRIMARY KEY,
   app_id text NOT NULL REFERENCES apps (app_id),
   version text NOT NULL,
   manifest_json jsonb NOT NULL,
+  submission_package_json jsonb NOT NULL DEFAULT '{}'::jsonb,
   tool_definitions_json jsonb NOT NULL,
   ui_embed_config_json jsonb NOT NULL,
   allowed_origins_json jsonb NOT NULL,
   auth_config_json jsonb,
   safety_metadata_json jsonb NOT NULL,
+  review_state text NOT NULL DEFAULT 'submitted',
+  runtime_review_status text NOT NULL DEFAULT 'pending',
+  reviewed_by_user_id text REFERENCES users (user_id),
+  reviewer_notes text,
+  last_review_record_id text,
+  submitted_at timestamptz NOT NULL DEFAULT NOW(),
+  decided_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   published_at timestamptz,
   CONSTRAINT app_versions_version_present CHECK (LENGTH(TRIM(version)) > 0),
   CONSTRAINT app_versions_manifest_is_object CHECK (jsonb_typeof(manifest_json) = 'object'),
+  CONSTRAINT app_versions_submission_is_object CHECK (jsonb_typeof(submission_package_json) = 'object'),
   CONSTRAINT app_versions_tools_is_array CHECK (jsonb_typeof(tool_definitions_json) = 'array'),
   CONSTRAINT app_versions_embed_is_object CHECK (jsonb_typeof(ui_embed_config_json) = 'object'),
   CONSTRAINT app_versions_origins_is_array CHECK (jsonb_typeof(allowed_origins_json) = 'array'),
   CONSTRAINT app_versions_auth_is_object_or_null CHECK (auth_config_json IS NULL OR jsonb_typeof(auth_config_json) = 'object'),
-  CONSTRAINT app_versions_safety_is_object CHECK (jsonb_typeof(safety_metadata_json) = 'object')
+  CONSTRAINT app_versions_safety_is_object CHECK (jsonb_typeof(safety_metadata_json) = 'object'),
+  CONSTRAINT app_versions_review_state_valid CHECK (review_state IN ('draft', 'submitted', 'validation-failed', 'review-pending', 'approved-staging', 'approved-production', 'rejected', 'suspended', 'retired')),
+  CONSTRAINT app_versions_runtime_review_status_valid CHECK (runtime_review_status IN ('pending', 'approved', 'blocked'))
 );
 
 ALTER TABLE app_versions
@@ -163,6 +193,9 @@ ALTER TABLE app_versions
 
 CREATE INDEX idx_app_versions_app_created
   ON app_versions (app_id, created_at DESC);
+
+CREATE INDEX idx_app_versions_review_state
+  ON app_versions (review_state, runtime_review_status, created_at DESC);
 
 ALTER TABLE apps
   ADD CONSTRAINT fk_apps_current_version
@@ -176,16 +209,23 @@ CREATE TABLE app_review_records (
   app_version_id text,
   reviewed_by_user_id text REFERENCES users (user_id),
   review_status text NOT NULL,
+  review_state text NOT NULL DEFAULT 'submitted',
+  decision_action text,
+  decision_summary text,
   age_rating text NOT NULL,
   data_access_level text NOT NULL,
+  remediation_items_json jsonb NOT NULL DEFAULT '[]'::jsonb,
   permissions_snapshot_json jsonb NOT NULL DEFAULT '[]'::jsonb,
   notes text,
   created_at timestamptz NOT NULL DEFAULT NOW(),
   decided_at timestamptz,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT app_review_records_status_valid CHECK (review_status IN ('pending', 'approved', 'blocked')),
+  CONSTRAINT app_review_records_review_state_valid CHECK (review_state IN ('draft', 'submitted', 'validation-failed', 'review-pending', 'approved-staging', 'approved-production', 'rejected', 'suspended', 'retired')),
+  CONSTRAINT app_review_records_decision_action_valid CHECK (decision_action IS NULL OR decision_action IN ('start-review', 'approve-staging', 'approve-production', 'request-remediation', 'reject', 'suspend')),
   CONSTRAINT app_review_records_age_rating_valid CHECK (age_rating IN ('all-ages', '13+', '16+', '18+')),
   CONSTRAINT app_review_records_data_access_valid CHECK (data_access_level IN ('minimal', 'moderate', 'sensitive')),
+  CONSTRAINT app_review_records_remediation_items_is_array CHECK (jsonb_typeof(remediation_items_json) = 'array'),
   CONSTRAINT app_review_records_permissions_is_array CHECK (jsonb_typeof(permissions_snapshot_json) = 'array'),
   CONSTRAINT app_review_records_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
@@ -196,10 +236,25 @@ CREATE INDEX idx_app_review_records_app_created
 CREATE INDEX idx_app_review_records_status_created
   ON app_review_records (review_status, created_at DESC);
 
+CREATE INDEX idx_app_review_records_state_created
+  ON app_review_records (review_state, created_at DESC);
+
 ALTER TABLE app_review_records
   ADD CONSTRAINT fk_app_review_records_app_version
   FOREIGN KEY (app_id, app_version_id)
   REFERENCES app_versions (app_id, app_version_id)
+  DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE apps
+  ADD CONSTRAINT fk_apps_last_review_record
+  FOREIGN KEY (last_review_record_id)
+  REFERENCES app_review_records (app_review_record_id)
+  DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE app_versions
+  ADD CONSTRAINT fk_app_versions_last_review_record
+  FOREIGN KEY (last_review_record_id)
+  REFERENCES app_review_records (app_review_record_id)
   DEFERRABLE INITIALLY DEFERRED;
 
 CREATE TABLE oauth_connections (
@@ -232,6 +287,43 @@ CREATE TABLE oauth_connections (
   CONSTRAINT oauth_connections_authorization_url_present CHECK (LENGTH(TRIM(authorization_url)) > 0),
   CONSTRAINT oauth_connections_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object')
 );
+
+CREATE TABLE app_access_requests (
+  app_access_request_id text PRIMARY KEY,
+  app_id text NOT NULL,
+  app_name text NOT NULL,
+  student_user_id text NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
+  student_display_name text NOT NULL,
+  student_email text,
+  student_role text,
+  status text NOT NULL DEFAULT 'pending',
+  decision_reason text,
+  decided_by_user_id text REFERENCES users (user_id),
+  decided_by_display_name text,
+  requested_at timestamptz NOT NULL DEFAULT NOW(),
+  decided_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT NOW(),
+  updated_at timestamptz NOT NULL DEFAULT NOW(),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT app_access_requests_app_id_present CHECK (LENGTH(TRIM(app_id)) > 0),
+  CONSTRAINT app_access_requests_app_name_present CHECK (LENGTH(TRIM(app_name)) > 0),
+  CONSTRAINT app_access_requests_student_display_name_present CHECK (LENGTH(TRIM(student_display_name)) > 0),
+  CONSTRAINT app_access_requests_student_role_valid CHECK (
+    student_role IS NULL OR student_role IN ('student', 'teacher', 'school_admin', 'district_Director')
+  ),
+  CONSTRAINT app_access_requests_status_valid CHECK (status IN ('pending', 'approved', 'declined')),
+  CONSTRAINT app_access_requests_metadata_is_object CHECK (jsonb_typeof(metadata) = 'object'),
+  CONSTRAINT app_access_requests_decision_requires_reviewer CHECK (
+    status = 'pending'
+    OR (decided_by_user_id IS NOT NULL AND decided_by_display_name IS NOT NULL AND decided_at IS NOT NULL)
+  )
+);
+
+CREATE INDEX idx_app_access_requests_student_app_created
+  ON app_access_requests (student_user_id, app_id, created_at DESC);
+
+CREATE INDEX idx_app_access_requests_status_updated
+  ON app_access_requests (status, updated_at DESC);
 
 ALTER TABLE oauth_connections
   ADD CONSTRAINT uq_oauth_connections_user_app_provider UNIQUE (user_id, app_id, provider);

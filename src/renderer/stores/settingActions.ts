@@ -1,6 +1,5 @@
 import { ModelProviderEnum } from '@shared/types'
-import { getDefaultStore } from 'jotai'
-import * as atoms from './atoms'
+import { remoteConfigStore } from './remoteConfigStore'
 import { settingsStore } from './settingsStore'
 
 export function needEditSetting() {
@@ -59,8 +58,7 @@ export function isPro() {
 }
 
 export function getRemoteConfig() {
-  const store = getDefaultStore()
-  return store.get(atoms.remoteConfigAtom)
+  return remoteConfigStore.getState().getRemoteConfig()
 }
 
 export function getAutoGenerateTitle() {

@@ -4,13 +4,22 @@ import { describe, expect, it } from 'vitest'
 import type { AppRegistryRecord, AppRegistryVersionRecord } from '../registry/types'
 import { InMemoryAppSecurityRepository } from './repository'
 import { AppSecurityService } from './service'
+import { buildLegacyPlatformSeedSubmissionPackage } from './submission-package'
 
 function makeRegistryRecord(manifest = exampleInternalChessManifest, category = 'games'): AppRegistryRecord {
+  const createdAt = '2026-04-01T12:00:00.000Z'
   const version: AppRegistryVersionRecord = {
     appVersionId: `${manifest.appId}@${manifest.appVersion}`,
     appVersion: manifest.appVersion,
     manifest,
-    createdAt: '2026-04-01T12:00:00.000Z',
+    submission: buildLegacyPlatformSeedSubmissionPackage(manifest, category, createdAt),
+    review: {
+      reviewState: manifest.safetyMetadata.reviewStatus === 'approved' ? 'approved-production' : 'submitted',
+      runtimeReviewStatus: manifest.safetyMetadata.reviewStatus,
+      submittedAt: createdAt,
+      validationFindings: [],
+    },
+    createdAt,
   }
 
   return {
@@ -21,11 +30,12 @@ function makeRegistryRecord(manifest = exampleInternalChessManifest, category = 
     distribution: manifest.distribution,
     authType: manifest.authType,
     reviewStatus: manifest.safetyMetadata.reviewStatus,
+    reviewState: version.review.reviewState,
     currentVersionId: version.appVersionId,
     currentVersion: version,
     versions: [version],
-    createdAt: version.createdAt,
-    updatedAt: version.createdAt,
+    createdAt,
+    updatedAt: createdAt,
   }
 }
 

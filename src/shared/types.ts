@@ -1,3 +1,4 @@
+import type { JsonObject } from './contracts/v1/shared'
 import { v4 as uuidv4 } from 'uuid'
 import {
   type CompactionPoint,
@@ -28,10 +29,15 @@ export function isPictureSession(session: Session) {
   return session.type === 'picture'
 }
 
-export function createMessage(role: MessageRole = MessageRoleEnum.User, content: string = ''): Message {
+export function createMessage(
+  role: MessageRole = MessageRoleEnum.User,
+  content: string = '',
+  clientData?: JsonObject
+): Message {
   return {
     id: uuidv4(),
     contentParts: content ? [{ type: 'text', text: content }] : [],
+    ...(clientData ? { clientData } : {}),
     role: role,
     timestamp: Date.now(),
   }

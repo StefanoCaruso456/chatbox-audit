@@ -49,9 +49,20 @@
         );
       }
     </script>
+    <script>
+      if (
+        window.location.pathname.startsWith("/embedded-apps/")
+      ) {
+        document.documentElement.setAttribute("data-embedded-app-route", "true");
+      }
+    </script>
     <style>
       html[data-theme="dark"] {
         background-color: #242424;
+      }
+
+      html[data-embedded-app-route="true"] {
+        background-color: #11131b;
       }
 
       .splash-screen {
@@ -71,6 +82,9 @@
       }
       html[data-theme="dark"] .splash-screen {
         background-color: #242424;
+      }
+      html[data-embedded-app-route="true"] .splash-screen {
+        display: none;
       }
 
       .splash-screen-top {
@@ -261,4 +275,3 @@
     <script type="module" src="./index.tsx"></script>
   </body>
 </html>
-

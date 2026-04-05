@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
+import { useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import storage, { StorageKey } from '@/storage'
 
@@ -24,6 +24,13 @@ export function useProjects() {
   const [projects, setProjects] = useAtom(projectsAtom)
 
   const sortedProjects = useMemo(() => sortProjects(projects), [projects])
+  const getProjectById = (projectId?: string | null) => {
+    if (!projectId) {
+      return undefined
+    }
+
+    return sortedProjects.find((project) => project.id === projectId)
+  }
 
   const createProject = (name: string) => {
     const trimmedName = name.trim()
@@ -52,5 +59,6 @@ export function useProjects() {
   return {
     projects: sortedProjects,
     createProject,
+    getProjectById,
   }
 }
