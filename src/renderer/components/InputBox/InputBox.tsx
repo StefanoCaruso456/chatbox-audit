@@ -24,15 +24,18 @@ import { formatNumber } from '@shared/utils'
 import {
   IconAdjustmentsHorizontal,
   IconAlertCircle,
+  IconArrowBackUp,
   IconArrowUp,
   IconChevronRight,
   IconCirclePlus,
+  IconFilePencil,
   IconFolder,
   IconHammer,
   IconLink,
   IconMicrophone,
   IconPhoto,
   IconPlayerStopFilled,
+  IconPlus,
   IconSettings,
   IconVocabulary,
   IconWorldWww,
@@ -136,6 +139,8 @@ export type InputBoxProps = {
   onSelectModel?(provider: string, model: string): void
   onSubmit?(payload: InputBoxPayload): Promise<void>
   onStopGenerating?(): boolean
+  onStartNewThread?(): boolean
+  onRollbackThread?(): boolean
   onClickSessionSettings?(): boolean | Promise<boolean>
 }
 
@@ -150,6 +155,8 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       onSelectModel,
       onSubmit,
       onStopGenerating,
+      onStartNewThread,
+      onRollbackThread,
       onClickSessionSettings,
     },
     ref
@@ -157,6 +164,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const { t } = useTranslation()
     const navigate = useNavigate()
     const isSmallScreen = useIsSmallScreen()
+    const toolbarButtonClassName = 'cb-neumo-toolbar-button flex items-center gap-1 px-2 py-1'
     const { height: viewportHeight } = useViewportSize()
     const language = useSettingsStore((state) => state.language)
     const pasteLongTextAsAFile = useSettingsStore((state) => state.pasteLongTextAsAFile)
@@ -218,6 +226,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     const { knowledgeBase, setKnowledgeBase } = useKnowledgeBase({ isNewSession })
 
     const [showCompressionModal, setShowCompressionModal] = useState(false)
+    const [showRollbackThreadButton, setShowRollbackThreadButton] = useState(false)
     const [conversationModeHintActive, setConversationModeHintActive] = useState(false)
     const [conversationModeHintVisible, setConversationModeHintVisible] = useState(false)
     const handledConversationModeHintIdRef = useRef<number | null>(null)
@@ -263,6 +272,19 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       clearConversationModeHint(pendingConversationModeHintId)
       return onClickSessionSettings?.()
     }, [clearConversationModeHint, onClickSessionSettings, pendingConversationModeHintId])
+
+    useEffect(() => {
+      if (!showRollbackThreadButton) {
+        return
+      }
+
+      const tid = setTimeout(() => {
+        setShowRollbackThreadButton(false)
+      }, 5000)
+      return () => {
+        clearTimeout(tid)
+      }
+    }, [showRollbackThreadButton])
 
     useEffect(() => {
       const constructedMessage = sessionHelpers.constructUserMessage(
@@ -656,6 +678,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               },
               message: undefined,
             })
+            setShowRollbackThreadButton(false)
             if (platform.type !== 'mobile' && messageTextForHistory) {
               addInputBoxHistory(messageTextForHistory)
             }
@@ -700,14 +723,14 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
           return
         }
         event.preventDefault()
-        handleSubmit()
+        void handleSubmit()
         return
       }
 
       // 发送消息但不生成回复
       if (isPressedHash[shortcuts.inputBoxSendMessageWithoutResponse]) {
         event.preventDefault()
-        handleSubmit(false)
+        void handleSubmit(false)
         return
       }
 
@@ -732,6 +755,20 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             setTimeout(() => inputRef.current?.select(), 10)
           }
         }
+      }
+    }
+
+    const startNewThread = () => {
+      const res = onStartNewThread?.()
+      if (res) {
+        setShowRollbackThreadButton(true)
+      }
+    }
+
+    const rollbackThread = () => {
+      const res = onRollbackThread?.()
+      if (res) {
+        setShowRollbackThreadButton(false)
       }
     }
 
@@ -872,7 +909,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       if (!event.target.files) {
         return
       }
-      insertFiles(Array.from(event.target.files))
+      void insertFiles(Array.from(event.target.files))
       event.target.value = ''
       dom.focusMessageInput()
     }
@@ -884,7 +921,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       fileInputRef.current?.click()
     }
 
-    const onImageDeleteClick = async (picKey: string) => {
+    const onImageDeleteClick = (picKey: string) => {
       setPreConstructedMessage((prev) => ({
         ...prev,
         pictureKeys: (prev.pictureKeys || []).filter((k) => k !== picKey),
@@ -909,7 +946,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             // Insert files and images
             const file = item.getAsFile()
             if (file) {
-              insertFiles([file])
+              void insertFiles([file])
             }
             continue
           }
@@ -929,7 +966,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                 const file = new File([text], `pasted_text_${attachments?.length || 0}.txt`, {
                   type: 'text/plain',
                 })
-                insertFiles([file])
+                void insertFiles([file])
                 setMessageInput(messageInput) // 删除掉默认粘贴进去的长文本
               }
             })
@@ -952,7 +989,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     // 拖拽上传
     const { getRootProps, getInputProps } = useDropzone({
       onDrop: (acceptedFiles: File[], fileRejections) => {
-        insertFiles(acceptedFiles)
+        void insertFiles(acceptedFiles)
         // Show toast for rejected files
         if (fileRejections.length > 0) {
           const rejectedNames = fileRejections.map((r) => r.file.name).join(', ')
@@ -1004,7 +1041,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       return (
         <Box pt={0} pb={isSmallScreen ? 'md' : 'sm'} px="sm" id={dom.InputBoxID}>
           <Stack
-            className={cn('rounded-2xl bg-chatbox-background-secondary', widthFull ? 'w-full' : 'max-w-4xl mx-auto')}
+            className={cn('cb-neumo-card rounded-[24px]', widthFull ? 'w-full' : 'max-w-4xl mx-auto')}
             gap="xs"
             p="md"
             align="center"
@@ -1026,11 +1063,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
         <Stack ref={composerContainerRef} className={cn(widthFull ? 'w-full' : 'max-w-4xl mx-auto')} gap="xs">
           {currentSessionId && <CompactionStatus sessionId={currentSessionId} />}
           <Stack
-            className={cn(
-              'rounded-md bg-chatbox-background-secondary justify-between px-3 py-2',
-              !isSmallScreen && 'min-h-[92px]'
-            )}
-            style={{ border: '1px solid var(--chatbox-border-primary)' }}
+            className={cn('cb-neumo-card rounded-[28px] justify-between px-3 py-3', !isSmallScreen && 'min-h-[92px]')}
             gap="xs"
           >
             {/* Input Row */}
@@ -1041,7 +1074,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   root: 'flex-1',
                   wrapper: 'flex-1',
                   input:
-                    'block w-full outline-none border-none px-2 py-1 resize-none bg-transparent text-chatbox-tint-primary',
+                    'block w-full resize-none rounded-2xl border-none bg-transparent px-2 py-1 text-chatbox-tint-primary outline-none',
                 }}
                 size="sm"
                 id={dom.messageInputID}
@@ -1192,7 +1225,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                 {featureFlags.mcp && (
                   <MCPMenu>
                     {(enabledTools) => (
-                      <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
+                      <UnstyledButton className={toolbarButtonClassName}>
                         <IconHammer
                           size={toolbarIconSize}
                           strokeWidth={1.8}
@@ -1214,7 +1247,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
 
                 {featureFlags.knowledgeBase && !isCompactComposer && (
                   <KnowledgeBaseMenu currentKnowledgeBaseId={knowledgeBase?.id} onSelect={handleKnowledgeBaseSelect}>
-                    <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
+                    <UnstyledButton className={toolbarButtonClassName}>
                       <IconVocabulary
                         size={toolbarIconSize}
                         strokeWidth={1.8}
@@ -1232,7 +1265,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       setWebBrowsingMode(!webBrowsingMode)
                       dom.focusMessageInput()
                     }}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors"
+                    className={toolbarButtonClassName}
                   >
                     <IconWorldWww
                       size={toolbarIconSize}
@@ -1243,6 +1276,33 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     />
                   </UnstyledButton>
                 </Tooltip>
+
+                {!isCompactComposer &&
+                  (showRollbackThreadButton ? (
+                    <Tooltip label={t('Rollback Thread')} position="top" withArrow>
+                      <UnstyledButton onClick={rollbackThread} className={toolbarButtonClassName}>
+                        <IconArrowBackUp
+                          size={toolbarIconSize}
+                          strokeWidth={1.8}
+                          className="text-[var(--chatbox-tint-secondary)]"
+                        />
+                      </UnstyledButton>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip label={t('New Thread')} position="top" withArrow>
+                      <UnstyledButton
+                        onClick={startNewThread}
+                        disabled={!onStartNewThread}
+                        className={cn(toolbarButtonClassName, 'disabled:opacity-50')}
+                      >
+                        <IconFilePencil
+                          size={toolbarIconSize}
+                          strokeWidth={1.8}
+                          className="text-[var(--chatbox-tint-secondary)]"
+                        />
+                      </UnstyledButton>
+                    </Tooltip>
+                  ))}
 
                 {!isCompactComposer && (
                   <Tooltip
@@ -1255,10 +1315,11 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       onClick={handleConversationModeClick}
                       disabled={!onClickSessionSettings}
                       className={cn(
-                        'flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-700 disabled:opacity-50',
+                        toolbarButtonClassName,
+                        'transition-all duration-700 disabled:opacity-50',
                         conversationModeHintVisible
                           ? 'bg-[var(--chatbox-background-tertiary)] ring-1 ring-[var(--chatbox-tint-brand)] shadow-[0_0_0_4px_rgba(59,130,246,0.12)] scale-[1.03]'
-                          : 'hover:bg-[var(--chatbox-background-tertiary)]'
+                          : undefined
                       )}
                     >
                       <IconAdjustmentsHorizontal
@@ -1290,10 +1351,11 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     onClick={handleVoiceInputToggle}
                     disabled={!voiceInputSupported}
                     className={cn(
-                      'flex items-center gap-1 px-2 py-1 rounded-lg transition-colors disabled:opacity-50',
+                      toolbarButtonClassName,
+                      'transition-colors disabled:opacity-50',
                       isVoiceInputListening
                         ? 'bg-[var(--chatbox-background-tertiary)]'
-                        : 'hover:bg-[var(--chatbox-background-tertiary)]'
+                        : undefined
                     )}
                   >
                     <IconMicrophone
@@ -1319,7 +1381,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     }}
                   >
                     <Menu.Target>
-                      <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
+                      <UnstyledButton className={toolbarButtonClassName}>
                         <IconSettings
                           size={toolbarIconSize}
                           strokeWidth={1.8}
@@ -1328,6 +1390,9 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       </UnstyledButton>
                     </Menu.Target>
                     <Menu.Dropdown>
+                      <Menu.Item leftSection={<ScalableIcon icon={IconPlus} size={16} />} onClick={startNewThread}>
+                        {t('New Thread')}
+                      </Menu.Item>
                       <Menu.Item
                         leftSection={<ScalableIcon icon={IconAdjustmentsHorizontal} size={16} />}
                         onClick={handleConversationModeClick}
@@ -1364,7 +1429,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                   <Flex
                     align="center"
                     gap="2"
-                    className={`text-xs cursor-pointer hover:text-chatbox-tint-secondary transition-colors px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] ${
+                    className={`${toolbarButtonClassName} cursor-pointer text-xs ${
                       tokenPercentage && tokenPercentage > 80 ? 'text-red-500' : 'text-chatbox-tint-tertiary'
                     }`}
                   >
@@ -1402,7 +1467,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       duration: 200,
                     }}
                   >
-                    <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
+                    <UnstyledButton className={toolbarButtonClassName}>
                       {!!model && <ProviderImageIcon size={18} provider={model.provider} />}
                       <Text
                         size="sm"
@@ -1445,6 +1510,7 @@ const AttachmentMenu: React.FC<{
   t: (key: string) => string
 }> = ({ compact, onImageUploadClick, onFileUploadClick, handleAttachLink, t }) => {
   const toolbarIconSize = compact ? 22 : 18
+  const toolbarButtonClassName = 'cb-neumo-toolbar-button flex items-center gap-1 px-2 py-1'
   return (
     <Menu
       shadow="md"
@@ -1459,7 +1525,7 @@ const AttachmentMenu: React.FC<{
       }}
     >
       <Menu.Target>
-        <UnstyledButton className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-[var(--chatbox-background-tertiary)] transition-colors">
+        <UnstyledButton className={toolbarButtonClassName}>
           <IconCirclePlus size={toolbarIconSize} strokeWidth={1.8} className="text-[var(--chatbox-tint-secondary)]" />
         </UnstyledButton>
       </Menu.Target>

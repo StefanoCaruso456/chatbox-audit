@@ -136,15 +136,16 @@ function RouteComponent() {
   }, [currentSession?.settings?.provider, currentSession?.settings?.modelId])
 
   return currentSession ? (
-    <main className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0)_18%,rgba(255,255,255,0.03)_100%)]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-chatbox-background-brand-secondary/20 to-transparent" />
+    <main className="relative flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-chatbox-background-brand-secondary/30 to-transparent" />
+      <div className="pointer-events-none absolute left-6 top-10 h-32 w-32 rounded-full bg-chatbox-background-brand-secondary/30 blur-3xl" />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <Header session={currentSession} />
         <ApprovedAppCoachController sessionId={currentSession.id} session={currentSession} />
 
         <div className="relative flex min-h-0 flex-1 flex-col px-2 pb-2 pt-1 sm:px-3 sm:pb-3">
           <AppsWorkspace>
-            <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-chatbox-border-primary/70 bg-chatbox-background-primary shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
+            <section className="cb-neumo-shell relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px]">
               <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-chatbox-tint-brand/60 to-transparent" />
               <div className="relative flex min-h-0 flex-1 flex-col">
                 <MessageList
@@ -155,7 +156,7 @@ function RouteComponent() {
                 />
               </div>
               <ErrorBoundary name="session-inputbox">
-                <div className="border-t border-chatbox-border-primary/60 bg-chatbox-background-secondary/80 px-2 py-2 backdrop-blur-sm sm:px-3">
+                <div className="border-t border-chatbox-border-primary/50 bg-[var(--chatbox-surface-overlay)] px-2 py-2 backdrop-blur-md sm:px-3">
                   <InputBox
                     key={`input-box${currentSession.id}`}
                     sessionId={currentSession.id}

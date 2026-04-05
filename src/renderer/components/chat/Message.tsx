@@ -443,7 +443,12 @@ const _Message: FC<Props> = (props) => {
           <Flex direction="column" align={layout.contentAlign}>
             <MessageStatuses statuses={msg.status} />
             <div
-              className={cn(layout.bubbleClassName)}
+              className={cn(
+                layout.bubbleClassName,
+                msg.role !== 'assistant'
+                  ? 'cb-neumo-card-soft rounded-[22px] px-4 py-1'
+                  : 'cb-neumo-card rounded-[26px] px-4 py-3 w-full'
+              )}
             >
               <Box
                 className={cn('msg-content', { 'msg-content-small': small })}
@@ -489,7 +494,7 @@ const _Message: FC<Props> = (props) => {
                       ) : item.type === 'info' ? (
                         <Flex key={`info-${item.text}`} className="mb-2 ">
                           <Flex
-                            className="bg-chatbox-background-brand-secondary border-0 border-l-2 border-solid border-chatbox-tint-brand rounded-r-md"
+                            className="cb-neumo-card-soft rounded-r-md border-0 border-l-2 border-solid border-chatbox-tint-brand"
                             align="center"
                             gap="xxs"
                             px="xs"
@@ -515,7 +520,7 @@ const _Message: FC<Props> = (props) => {
                             />
                             {item.ocrResult && (
                               <div
-                                className="my-2 p-2 bg-chatbox-background-brand-secondary rounded-md cursor-pointer hover:bg-chatbox-background-brand-secondary-hover transition-colors"
+                                className="cb-neumo-card-soft my-2 cursor-pointer rounded-[18px] p-3 transition-colors hover:bg-chatbox-background-brand-secondary-hover"
                                 onClick={async (e) => {
                                   e.stopPropagation()
                                   await NiceModal.show('content-viewer', {
@@ -613,14 +618,7 @@ const _Message: FC<Props> = (props) => {
                 )}
                 align="center"
               >
-                <Flex
-                  gap={0}
-                  className={
-                    isSamllScreen
-                      ? 'p-xxs bg-chatbox-background-primary rounded-md border-[0.5px] border-solid border-chatbox-border-primary shadow-sm'
-                      : ''
-                  }
-                >
+                <Flex gap={0} className={isSamllScreen ? 'cb-neumo-card-soft rounded-full p-xxs' : ''}>
                   {!msg.generating && msg.role === 'assistant' && (
                     <MessageActionIcon icon={IconReload} tooltip={t('Reply Again')} onClick={handleRefresh} />
                   )}
@@ -841,6 +839,7 @@ export const MessageActionIcon = forwardRef<
       p={4}
       bd={0}
       color="chatbox-secondary"
+      className="cb-neumo-toolbar-button"
       {...props}
     >
       <ScalableIcon icon={icon} size={isSmallScreen ? 20 : 16} />
