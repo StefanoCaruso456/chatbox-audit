@@ -2,6 +2,9 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
+import { InMemoryAppAccessRepository } from '../app-access'
+import { PlatformAuthService } from '../auth'
+import { InMemoryAuthRepository } from '../auth/repository'
 import { createRailwayWebApp } from './railway-web-app'
 
 async function createStaticRoot() {
@@ -355,6 +358,166 @@ describe('createRailwayWebApp', () => {
     expect(lookupBody.data.connection.hasAccessToken).toBe(true)
     expect(lookupBody.data.connection.hasRefreshToken).toBe(true)
     expect(lookupBody.data.connection.externalAccountId).toBe('google-user-123')
+  })
+
+  it('lets a teacher approve a student app request and makes the updated request visible to the student immediately', async () => {
+    const staticRootDir = await createStaticRoot()
+    const repository = new InMemoryAuthRepository()
+    const appAccessRepository = new InMemoryAppAccessRepository()
+    const authService = new PlatformAuthService(repository, {
+      now: () => '2026-04-05T05:00:00.000Z',
+    })
+
+    await repository.saveUser({
+      userId: 'student.user',
+      email: 'student@example.com',
+      username: 'student.demo',
+      displayName: 'Student Demo',
+      role: 'student',
+      onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      metadata: {},
+      createdAt: '2026-04-05T05:00:00.000Z',
+      updatedAt: '2026-04-05T05:00:00.000Z',
+      deletedAt: null,
+    })
+    await repository.saveUser({
+      userId: 'teacher.user',
+      email: 'teacher@example.com',
+      username: 'teacher.demo',
+      displayName: 'Teacher Demo',
+      role: 'teacher',
+      onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+      metadata: {},
+      createdAt: '2026-04-05T05:00:00.000Z',
+      updatedAt: '2026-04-05T05:00:00.000Z',
+      deletedAt: null,
+    })
+
+    const studentSession = await authService.issuePlatformSession({ userId: 'student.user' })
+    const teacherSession = await authService.issuePlatformSession({ userId: 'teacher.user' })
+    expect(studentSession.ok).toBe(true)
+    expect(teacherSession.ok).toBe(true)
+    if (!studentSession.ok || !teacherSession.ok) {
+      return
+    }
+
+    const app = createRailwayWebApp({
+      staticRootDir,
+      repository,
+      appAccessRepository,
+    })
+
+    const requestResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/app-access/requests', {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${studentSession.value.sessionToken}`,
+          'content-type': 'application/json',
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+        body: JSON.stringify({
+          appId: 'chess-tutor',
+          appName: 'Chess Tutor',
+        }),
+      })
+    )
+
+    expect(requestResponse.status).toBe(200)
+    const requestBody = (await requestResponse.json()) as {
+      ok: true
+      data: {
+        access: 'pending'
+        request: {
+          appAccessRequestId: string
+          studentUserId: string
+          appId: string
+        }
+      }
+    }
+    expect(requestBody.data.access).toBe('pending')
+    expect(requestBody.data.request.studentUserId).toBe('student.user')
+    expect(requestBody.data.request.appId).toBe('chess-tutor')
+
+    const pendingResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/app-access/requests/pending', {
+        headers: {
+          authorization: `Bearer ${teacherSession.value.sessionToken}`,
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+      })
+    )
+
+    expect(pendingResponse.status).toBe(200)
+    const pendingBody = (await pendingResponse.json()) as {
+      ok: true
+      data: {
+        requests: Array<{
+          appAccessRequestId: string
+          studentDisplayName: string
+          appName: string
+        }>
+      }
+    }
+    expect(pendingBody.data.requests).toHaveLength(1)
+    expect(pendingBody.data.requests[0].studentDisplayName).toBe('Student Demo')
+    expect(pendingBody.data.requests[0].appName).toBe('Chess Tutor')
+
+    const approveResponse = await app.handleRequest(
+      new Request(
+        `https://chatbox-audit-production.up.railway.app/api/app-access/requests/${requestBody.data.request.appAccessRequestId}/decision`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${teacherSession.value.sessionToken}`,
+            'content-type': 'application/json',
+            origin: 'https://chatbox-audit.vercel.app',
+          },
+          body: JSON.stringify({
+            status: 'approved',
+          }),
+        }
+      )
+    )
+
+    expect(approveResponse.status).toBe(200)
+    const approveBody = (await approveResponse.json()) as {
+      ok: true
+      data: {
+        request: {
+          status: 'approved'
+          decidedByUserId: string | null
+          decidedByDisplayName: string | null
+        }
+      }
+    }
+    expect(approveBody.data.request.status).toBe('approved')
+    expect(approveBody.data.request.decidedByUserId).toBe('teacher.user')
+    expect(approveBody.data.request.decidedByDisplayName).toBe('Teacher Demo')
+
+    const myRequestResponse = await app.handleRequest(
+      new Request(
+        'https://chatbox-audit-production.up.railway.app/api/app-access/requests/mine?appId=chess-tutor',
+        {
+          headers: {
+            authorization: `Bearer ${studentSession.value.sessionToken}`,
+            origin: 'https://chatbox-audit.vercel.app',
+          },
+        }
+      )
+    )
+
+    expect(myRequestResponse.status).toBe(200)
+    const myRequestBody = (await myRequestResponse.json()) as {
+      ok: true
+      data: {
+        request: {
+          status: 'approved'
+          decidedByUserId: string | null
+        } | null
+      }
+    }
+    expect(myRequestBody.data.request?.status).toBe('approved')
+    expect(myRequestBody.data.request?.decidedByUserId).toBe('teacher.user')
   })
 })
 
