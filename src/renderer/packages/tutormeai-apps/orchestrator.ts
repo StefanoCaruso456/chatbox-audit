@@ -651,6 +651,37 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
   }
 }
 
+function buildInitialChessBoardStateResult(input: {
+  appSessionId: string
+  mode?: string
+  moveExecutionAvailable: boolean
+}): ChessBoardStateToolResult {
+  const chess = new Chess()
+  const candidateMoves = buildChessCandidateMoves(chess)
+  const recommendedMove = candidateMoves[0] ?? null
+
+  return {
+    appSessionId: input.appSessionId,
+    fen: chess.fen(),
+    turn: 'white',
+    moveCount: 0,
+    lastMove: 'No moves yet',
+    moveHistory: [],
+    legalMoveCount: chess.moves().length,
+    legalMoves: chess.moves().slice(0, 20),
+    candidateMoves,
+    phase: inferChessPhase(chess),
+    status: describeChessStatus(chess),
+    summary: `Current board FEN: ${chess.fen()}. White to move.`,
+    moveExecutionAvailable: input.moveExecutionAvailable,
+    recommendedMove,
+    recommendationReason: recommendedMove ? buildChessMoveExplanation(recommendedMove) : null,
+    coachingTip: recommendedMove ? buildChessCoachingTip(recommendedMove, 'Opening', 'white') : null,
+    alternativeMoves: candidateMoves.slice(1, 3),
+    ...(input.mode ? { mode: input.mode } : {}),
+  }
+}
+
 function buildChessLiveBoardSummary(result: ChessBoardStateToolResult) {
   return `Current live Chess board: ${result.turn === 'white' ? 'White' : 'Black'} to move. ${result.status}. Last move: ${result.lastMove}.`
 }
@@ -868,6 +899,25 @@ function extractLastSuggestedChessMove(previousMessages: Message[]) {
   }
 
   return null
+}
+
+function hasInteractiveChessLaunchPrompt(previousMessages: Message[], appSessionId: string) {
+  return previousMessages.some((message) => {
+    if (message.role !== 'assistant') {
+      return false
+    }
+
+    const hasMatchingEmbeddedApp = message.contentParts.some(
+      (part) => part.type === 'embedded-app' && (part.bridge?.appSessionId ?? part.appSessionId) === appSessionId
+    )
+    if (!hasMatchingEmbeddedApp) {
+      return false
+    }
+
+    return message.contentParts.some(
+      (part) => part.type === 'tool-call' && part.toolName === exampleChessGetBoardStateToolSchema.name
+    )
+  })
 }
 
 function selectRequestedChessMove(
@@ -1194,31 +1244,23 @@ function buildChessBoardStateMessageFromSidebarSnapshot(
   return message
 }
 
-async function buildChessMoveMessageFromSidebarSnapshot(
-  snapshot: SidebarAppRuntimeSnapshot,
-  input: {
-    conversationId: string
-    userRequest: string
-    requestedMoveOverride?: string
-  }
-): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
-  const boardState = buildLiveChessBoardStateResult({
-    conversationId: input.conversationId,
-    appSessionId: snapshot.appSessionId,
-    summary: snapshot.summary,
-    latestStateDigest: snapshot.latestStateDigest,
-    availableToolNames: snapshot.availableToolNames,
-  })
-  if (!boardState || !boardState.moveExecutionAvailable) {
+async function buildChessMoveMessageFromBoardState(input: {
+  conversationId: string
+  appSessionId: string
+  boardState: ChessBoardStateToolResult
+  userRequest: string
+  requestedMoveOverride?: string
+}): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+  if (!input.boardState.moveExecutionAvailable) {
     return null
   }
 
-  const requestedMove = selectRequestedChessMove(input.userRequest, boardState, input.requestedMoveOverride)
+  const requestedMove = selectRequestedChessMove(input.userRequest, input.boardState, input.requestedMoveOverride)
   if (!requestedMove) {
     return null
   }
 
-  const previewMove = validateRequestedChessMove(boardState, requestedMove)
+  const previewMove = validateRequestedChessMove(input.boardState, requestedMove)
   if (!previewMove) {
     return {
       kind: 'clarify',
@@ -1228,8 +1270,8 @@ async function buildChessMoveMessageFromSidebarSnapshot(
 
   const commandResult = await attemptSidebarChessMove({
     conversationId: input.conversationId,
-    appSessionId: snapshot.appSessionId,
-    boardState,
+    appSessionId: input.appSessionId,
+    boardState: input.boardState,
     requestedMove,
   })
 
@@ -1238,7 +1280,7 @@ async function buildChessMoveMessageFromSidebarSnapshot(
       kind: 'invoke-tool',
       message: buildChessMoveAssistantMessage({
         toolCallId: commandResult.toolCallId,
-        boardState,
+        boardState: input.boardState,
         requestedMove,
         moveResult: commandResult.moveResult,
       }),
@@ -1249,18 +1291,24 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     const refreshedSnapshot = getSidebarAppRuntimeSnapshot(input.conversationId, exampleInternalChessManifest.appId)
     const refreshedBoardState = buildLiveChessBoardStateResult({
       conversationId: input.conversationId,
-      appSessionId: refreshedSnapshot?.appSessionId ?? snapshot.appSessionId,
-      summary: refreshedSnapshot?.summary ?? snapshot.summary,
-      latestStateDigest: refreshedSnapshot?.latestStateDigest ?? snapshot.latestStateDigest,
-      availableToolNames: refreshedSnapshot?.availableToolNames ?? snapshot.availableToolNames,
+      appSessionId: refreshedSnapshot?.appSessionId ?? input.appSessionId,
+      summary: refreshedSnapshot?.summary ?? input.boardState.summary,
+      latestStateDigest: refreshedSnapshot?.latestStateDigest ?? buildChessStateDigestFromSharedSession({
+        fen: input.boardState.fen,
+        turn: input.boardState.turn === 'white' ? 'w' : 'b',
+        moveCount: input.boardState.moveCount,
+        lastMove: input.boardState.lastMove,
+        mode: input.boardState.mode,
+      }),
+      availableToolNames: refreshedSnapshot?.availableToolNames ?? [exampleChessMakeMoveToolSchema.name],
     })
 
     if (
       refreshedBoardState &&
       refreshedBoardState.moveExecutionAvailable &&
-      refreshedBoardState.fen !== boardState.fen
+      refreshedBoardState.fen !== input.boardState.fen
     ) {
-      const refreshedRequestedMove = selectRequestedChessMove(input.userRequest, refreshedBoardState)
+      const refreshedRequestedMove = selectRequestedChessMove(input.userRequest, refreshedBoardState, input.requestedMoveOverride)
       if (refreshedRequestedMove) {
         const refreshedPreviewMove = validateRequestedChessMove(refreshedBoardState, refreshedRequestedMove)
         if (refreshedPreviewMove) {
@@ -1298,6 +1346,64 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     kind: 'clarify',
     message: buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`),
   }
+}
+
+async function buildChessMoveMessageFromSidebarSnapshot(
+  snapshot: SidebarAppRuntimeSnapshot,
+  input: {
+    conversationId: string
+    userRequest: string
+    requestedMoveOverride?: string
+  }
+): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+  const boardState = buildLiveChessBoardStateResult({
+    conversationId: input.conversationId,
+    appSessionId: snapshot.appSessionId,
+    summary: snapshot.summary,
+    latestStateDigest: snapshot.latestStateDigest,
+    availableToolNames: snapshot.availableToolNames,
+  })
+  if (!boardState) {
+    return null
+  }
+
+  return buildChessMoveMessageFromBoardState({
+    conversationId: input.conversationId,
+    boardState,
+    appSessionId: snapshot.appSessionId,
+    userRequest: input.userRequest,
+    requestedMoveOverride: input.requestedMoveOverride,
+  })
+}
+
+async function buildChessMoveMessageFromReference(
+  reference: EmbeddedAppReference,
+  input: {
+    conversationId: string
+    userRequest: string
+    requestedMoveOverride?: string
+  }
+): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+  const boardState = buildLiveChessBoardStateResult({
+    conversationId: input.conversationId,
+    appSessionId: reference.appSessionId,
+    summary: reference.part.summary,
+    latestStateDigest:
+      toJsonObject(reference.part.bridge?.completion?.result) ?? reference.part.bridge?.bootstrap?.initialState,
+    availableToolNames:
+      reference.part.bridge?.bootstrap?.availableTools?.map((tool) => tool.name) ?? [exampleChessMakeMoveToolSchema.name],
+  })
+  if (!boardState) {
+    return null
+  }
+
+  return buildChessMoveMessageFromBoardState({
+    conversationId: input.conversationId,
+    appSessionId: reference.appSessionId,
+    boardState,
+    userRequest: input.userRequest,
+    requestedMoveOverride: input.requestedMoveOverride,
+  })
 }
 
 function buildToolArguments(tool: ToolSchema, userRequest: string): JsonObject {
@@ -1612,6 +1718,12 @@ function buildLaunchCopy(appName: string, authState: AppSessionAuthState) {
   return `Launching ${appName} in the right sidebar.`
 }
 
+function buildChessLaunchCopy(result: ChessBoardStateToolResult) {
+  const recommendedMove = result.recommendedMove ?? 'd4'
+  const reason = result.recommendationReason ?? 'claims the center and gets your pieces into the game'
+  return `Chess Tutor is on the board. Ready to play some chess? I’d start with ${recommendedMove} because it ${reason}. Tap Play ${recommendedMove} and I’ll coach you move by move.`
+}
+
 function buildEmbeddedAppMessagePart(input: {
   app: AppRegistryRecord
   conversationId: string
@@ -1629,6 +1741,23 @@ function buildEmbeddedAppMessagePart(input: {
     input.authState === 'required'
       ? `Connect ${input.app.name} to continue with ${input.tool.displayName ?? input.tool.name}.`
       : `${input.app.name} is preparing ${input.tool.displayName ?? input.tool.name}.`
+  const initialState: JsonObject = {
+    requestedByUser: input.userRequest,
+    toolName: input.tool.name,
+    toolArguments: input.toolArguments,
+  }
+
+  if (input.tool.name === 'chess.launch-game') {
+    const startingChess = new Chess()
+    const requestedMode = typeof input.toolArguments.mode === 'string' ? input.toolArguments.mode : undefined
+    initialState.fen = startingChess.fen()
+    initialState.turn = startingChess.turn()
+    initialState.moveCount = 0
+    initialState.lastMove = 'No moves yet'
+    if (requestedMode) {
+      initialState.mode = requestedMode
+    }
+  }
 
   return {
     type: 'embedded-app',
@@ -1655,11 +1784,7 @@ function buildEmbeddedAppMessagePart(input: {
         grantedPermissions: manifest.permissions,
         messageId: `bootstrap.${input.app.slug}.${uuidv4()}`,
         correlationId,
-        initialState: {
-          requestedByUser: input.userRequest,
-          toolName: input.tool.name,
-          toolArguments: input.toolArguments,
-        },
+        initialState,
         availableTools: manifest.toolDefinitions,
       },
       pendingInvocation: {
@@ -1674,6 +1799,35 @@ function buildEmbeddedAppMessagePart(input: {
   }
 }
 
+function buildChessLaunchCoachParts(input: {
+  appSessionId: string
+  mode?: string
+  moveExecutionAvailable: boolean
+}): Message['contentParts'] {
+  const result = buildInitialChessBoardStateResult({
+    appSessionId: input.appSessionId,
+    mode: input.mode,
+    moveExecutionAvailable: input.moveExecutionAvailable,
+  })
+
+  return [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: `tool-call.chess.get-board-state.${uuidv4()}`,
+      toolName: exampleChessGetBoardStateToolSchema.name,
+      args: {
+        scope: 'current-position',
+      },
+      result,
+    },
+    {
+      type: 'text',
+      text: buildChessLaunchCopy(result),
+    },
+  ]
+}
+
 function buildLaunchMessage(input: {
   app: AppRegistryRecord
   conversationId: string
@@ -1682,13 +1836,34 @@ function buildLaunchMessage(input: {
   toolArguments: JsonObject
   authState: AppSessionAuthState
 }): Message {
-  const launchMessage = createMessage('assistant', buildLaunchCopy(input.app.name, input.authState))
+  const embeddedAppPart = buildEmbeddedAppMessagePart(input)
+  const launchText =
+    input.app.appId === exampleInternalChessManifest.appId && input.authState === 'connected'
+      ? null
+      : buildLaunchCopy(input.app.name, input.authState)
+  const launchMessage = createMessage('assistant', launchText ?? '')
+  const chessLaunchCoachParts =
+    input.app.appId === exampleInternalChessManifest.appId &&
+    input.authState === 'connected' &&
+    input.tool.name === 'chess.launch-game'
+      ? buildChessLaunchCoachParts({
+          appSessionId: embeddedAppPart.appSessionId,
+          mode: typeof input.toolArguments.mode === 'string' ? input.toolArguments.mode : undefined,
+          moveExecutionAvailable: true,
+        })
+      : []
+
   launchMessage.contentParts = [
-    {
-      type: 'text',
-      text: buildLaunchCopy(input.app.name, input.authState),
-    },
-    buildEmbeddedAppMessagePart(input),
+    ...(launchText
+      ? [
+          {
+            type: 'text' as const,
+            text: launchText,
+          },
+        ]
+      : []),
+    ...chessLaunchCoachParts,
+    embeddedAppPart,
   ]
   launchMessage.generating = false
   launchMessage.status = []
@@ -1758,6 +1933,20 @@ export async function routeTutorMeAiAppRequest(
 
       if (activeSidebarChessSnapshot) {
         const moveMessage = await buildChessMoveMessageFromSidebarSnapshot(activeSidebarChessSnapshot, {
+          conversationId: input.conversationId,
+          userRequest: input.userRequest,
+          requestedMoveOverride: suggestedChessMove ?? undefined,
+        })
+        if (moveMessage) {
+          return moveMessage
+        }
+      }
+
+      if (
+        selectedReference?.appId === exampleInternalChessManifest.appId &&
+        hasInteractiveChessLaunchPrompt(input.previousMessages, selectedReference.appSessionId)
+      ) {
+        const moveMessage = await buildChessMoveMessageFromReference(selectedReference, {
           conversationId: input.conversationId,
           userRequest: input.userRequest,
           requestedMoveOverride: suggestedChessMove ?? undefined,
