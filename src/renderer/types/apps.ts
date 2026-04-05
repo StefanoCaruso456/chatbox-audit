@@ -54,6 +54,10 @@ export interface ApprovedAppIntegrationConfig {
   statusNote?: string
 }
 
+export interface ApprovedAppAccessPolicy {
+  requiresTeacherApproval?: boolean
+}
+
 export interface ApprovedApp {
   id: string
   name: string
@@ -71,6 +75,7 @@ export interface ApprovedApp {
   experience?: AppExperience
   runtimeBridge?: ApprovedAppRuntimeBridge
   integrationConfig?: ApprovedAppIntegrationConfig
+  accessPolicy?: ApprovedAppAccessPolicy
   loadingFallback?: {
     title: string
     body: string
