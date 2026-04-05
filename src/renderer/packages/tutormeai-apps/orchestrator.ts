@@ -16,6 +16,7 @@ import { createMessage, type Message, type MessageEmbeddedAppPart } from '@share
 import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
 import {
+  getChessSessionHistory,
   getChessSessionSnapshot,
   getLatestChessSessionSnapshotForConversation,
 } from '@/stores/chessSessionStore'
@@ -319,6 +320,26 @@ function toJsonObject(value: unknown): JsonObject | undefined {
   return isJsonObject(value) ? value : undefined
 }
 
+function isChessMoveHistoryIntent(userRequest: string) {
+  const normalized = normalizeComparable(userRequest)
+  const historyPhrases = [
+    'move history',
+    'moves so far',
+    'move list',
+    'last five moves',
+    'last 5 moves',
+    'last few moves',
+    'last piece',
+    'piece you moved',
+    'last thing you moved',
+    'what did you move',
+    'what was the last piece',
+    'what was the last move you made',
+  ]
+
+  return historyPhrases.some((phrase) => normalized.includes(phrase))
+}
+
 function isChessBoardReadIntent(userRequest: string) {
   const normalized = normalizeComparable(userRequest)
   const boardPhrases = [
@@ -336,6 +357,13 @@ function isChessBoardReadIntent(userRequest: string) {
     'black to move',
     'last move',
     'recent move',
+    'last piece',
+    'piece you moved',
+    'move history',
+    'moves so far',
+    'move list',
+    'last five moves',
+    'last 5 moves',
     'see the board',
     'current game',
   ]
@@ -346,6 +374,10 @@ function isChessBoardReadIntent(userRequest: string) {
 function isChessMoveIntent(userRequest: string) {
   const normalized = normalizeComparable(userRequest)
 
+  if (isChessMoveHistoryIntent(userRequest)) {
+    return false
+  }
+
   if (extractRequestedChessMove(userRequest)) {
     return true
   }
@@ -354,13 +386,10 @@ function isChessMoveIntent(userRequest: string) {
     return true
   }
 
-  const moveKeywords = ['move', 'castle', 'capture', 'take', 'advance', 'push', 'play']
+  const moveKeywordPattern = /\b(move|castle|capture|take|advance|push|play)\b/u
   const pieceKeywords = ['piece', 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king']
 
-  return (
-    moveKeywords.some((keyword) => normalized.includes(keyword)) &&
-    pieceKeywords.some((keyword) => normalized.includes(keyword))
-  )
+  return moveKeywordPattern.test(normalized) && pieceKeywords.some((keyword) => normalized.includes(keyword))
 }
 
 function shouldUseChessBoardStateTool(userRequest: string) {
@@ -373,6 +402,7 @@ type ChessBoardStateToolResult = {
   turn: 'white' | 'black'
   moveCount: number
   lastMove: string
+  moveHistory: string[]
   legalMoveCount: number
   legalMoves: string[]
   candidateMoves: string[]
@@ -402,6 +432,7 @@ type ChessBoardStateSource = {
   appSessionId: string
   summary?: string
   latestStateDigest?: JsonObject
+  moveHistory?: string[]
   availableToolNames?: string[]
 }
 
@@ -444,6 +475,7 @@ function buildChessBoardStateSourceFromSharedSession(input: {
       lastMove: sharedSnapshot.lastMove,
       mode: sharedSnapshot.mode,
     }),
+    moveHistory: getChessSessionHistory(input.conversationId, sharedSnapshot.appSessionId),
     availableToolNames: input.availableToolNames,
   }
 }
@@ -508,6 +540,7 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
       typeof stateDigest.lastMove === 'string' && stateDigest.lastMove.trim().length > 0
         ? stateDigest.lastMove
         : 'No moves yet',
+    moveHistory: source.moveHistory?.filter((move): move is string => typeof move === 'string' && move.trim().length > 0) ?? [],
     legalMoveCount: legalMoves.length,
     legalMoves: legalMoves.slice(0, 20),
     candidateMoves: buildChessCandidateMoves(chess),
@@ -522,14 +555,74 @@ function buildChessBoardStateResult(source: ChessBoardStateSource): ChessBoardSt
   }
 }
 
-function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest: string) {
+function buildChessLiveBoardSummary(result: ChessBoardStateToolResult) {
   const candidateMoves =
     result.candidateMoves.length > 0 ? ` Candidate moves: ${result.candidateMoves.join(', ')}.` : ''
-  const sharedSummary = `Current live Chess board: ${result.turn === 'white' ? 'White' : 'Black'} to move. ${result.status}. Last move: ${result.lastMove}. Legal moves: ${result.legalMoveCount}.${candidateMoves}`
+  return `Current live Chess board: ${result.turn === 'white' ? 'White' : 'Black'} to move. ${result.status}. Last move: ${result.lastMove}. Legal moves: ${result.legalMoveCount}.${candidateMoves}`
+}
+
+function describeChessMovedPiece(lastMove: string) {
+  if (!lastMove || lastMove === 'No moves yet') {
+    return 'no piece yet'
+  }
+
+  if (lastMove.startsWith('O-O')) {
+    return 'king (castling)'
+  }
+
+  switch (lastMove[0]) {
+    case 'K':
+      return 'king'
+    case 'Q':
+      return 'queen'
+    case 'R':
+      return 'rook'
+    case 'B':
+      return 'bishop'
+    case 'N':
+      return 'knight'
+    default:
+      return 'pawn'
+  }
+}
+
+function buildChessHistoryText(result: ChessBoardStateToolResult, userRequest: string) {
+  const normalized = normalizeComparable(userRequest)
+  const boardSummary = buildChessLiveBoardSummary(result)
+
+  if (result.moveHistory.length === 0 || result.lastMove === 'No moves yet') {
+    return `No moves have been played on the live Chess board yet. ${boardSummary}`
+  }
+
+  if (
+    normalized.includes('last piece') ||
+    normalized.includes('piece you moved') ||
+    normalized.includes('last thing you moved') ||
+    normalized.includes('what did you move') ||
+    normalized.includes('what was the last move you made')
+  ) {
+    return `The last move on the live Chess board was ${result.lastMove}, so the last piece moved was a ${describeChessMovedPiece(result.lastMove)}. ${boardSummary}`
+  }
+
+  const requestedMoveCount =
+    normalized.includes('last five moves') || normalized.includes('last 5 moves') || normalized.includes('last few moves')
+      ? 5
+      : Math.min(5, result.moveHistory.length)
+  const recentMoves = result.moveHistory.slice(-requestedMoveCount)
+
+  return `The last ${recentMoves.length} move${recentMoves.length === 1 ? '' : 's'} on the live Chess board ${recentMoves.length === 1 ? 'is' : 'are'}: ${recentMoves.join(', ')}. ${boardSummary}`
+}
+
+function buildChessBoardStateText(result: ChessBoardStateToolResult, userRequest: string) {
+  const sharedSummary = buildChessLiveBoardSummary(result)
   const recommendation =
     result.candidateMoves.length > 0
       ? ` Recommended next move: ${result.candidateMoves[0]} because it ${buildChessMoveExplanation(result.candidateMoves[0])}.`
       : ''
+
+  if (isChessMoveHistoryIntent(userRequest)) {
+    return buildChessHistoryText(result, userRequest)
+  }
 
   if (isChessMoveIntent(userRequest) && !result.moveExecutionAvailable) {
     return `I can read the live Chess board now, but direct move execution from chat is not wired yet. ${sharedSummary}${recommendation}`
