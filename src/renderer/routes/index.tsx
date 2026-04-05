@@ -100,42 +100,39 @@ function Index() {
     }
   }, [routerState.location.search])
 
-  const createDraftSessionAndSwitch = useCallback(
-    async () => {
-      const newSession = await createSessionStore({
-        name: session.name,
-        type: 'chat',
-        assistantAvatarKey: session.assistantAvatarKey,
-        picUrl: session.picUrl,
-        messages: session.messages,
-        copilotId: session.copilotId,
-        settings: session.settings,
-      })
+  const createDraftSessionAndSwitch = useCallback(async () => {
+    const newSession = await createSessionStore({
+      name: session.name,
+      type: 'chat',
+      assistantAvatarKey: session.assistantAvatarKey,
+      picUrl: session.picUrl,
+      messages: session.messages,
+      copilotId: session.copilotId,
+      settings: session.settings,
+    })
 
-      if (newSessionState.knowledgeBase) {
-        addSessionKnowledgeBase(newSession.id, newSessionState.knowledgeBase)
-        setNewSessionState({})
-      }
+    if (newSessionState.knowledgeBase) {
+      addSessionKnowledgeBase(newSession.id, newSessionState.knowledgeBase)
+      setNewSessionState({})
+    }
 
-      const newSessionWebBrowsing = sessionWebBrowsingMap['new']
-      if (newSessionWebBrowsing !== undefined) {
-        setSessionWebBrowsing(newSession.id, newSessionWebBrowsing)
-        clearSessionWebBrowsing('new')
-      }
+    const newSessionWebBrowsing = sessionWebBrowsingMap.new
+    if (newSessionWebBrowsing !== undefined) {
+      setSessionWebBrowsing(newSession.id, newSessionWebBrowsing)
+      clearSessionWebBrowsing('new')
+    }
 
-      switchCurrentSession(newSession.id)
-      return newSession
-    },
-    [
-      session,
-      addSessionKnowledgeBase,
-      newSessionState.knowledgeBase,
-      setNewSessionState,
-      sessionWebBrowsingMap,
-      setSessionWebBrowsing,
-      clearSessionWebBrowsing,
-    ]
-  )
+    switchCurrentSession(newSession.id)
+    return newSession
+  }, [
+    session,
+    addSessionKnowledgeBase,
+    newSessionState.knowledgeBase,
+    setNewSessionState,
+    sessionWebBrowsingMap,
+    setSessionWebBrowsing,
+    clearSessionWebBrowsing,
+  ])
 
   const handleSubmit = useCallback(
     async ({ constructedMessage, needGenerating = true, onUserMessageReady }: InputBoxPayload) => {
@@ -276,7 +273,7 @@ function Index() {
                 showCopilotsInNewSession && (
                   <CopilotPicker onSelect={(copilot) => setSession((old) => ({ ...old, copilotId: copilot?.id }))} />
                 )
-              )
+              )}
 
               <InputBox
                 sessionType="chat"

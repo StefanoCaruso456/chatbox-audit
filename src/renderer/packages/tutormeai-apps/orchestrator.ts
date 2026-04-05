@@ -1731,11 +1731,7 @@ async function buildChessMoveMessageFromBoardState(input: {
       availableToolNames: refreshedSnapshot?.availableToolNames ?? [exampleChessMakeMoveToolSchema.name],
     })
 
-    if (
-      refreshedBoardState &&
-      refreshedBoardState.moveExecutionAvailable &&
-      refreshedBoardState.fen !== input.boardState.fen
-    ) {
+    if (refreshedBoardState?.moveExecutionAvailable && refreshedBoardState.fen !== input.boardState.fen) {
       const refreshedRequestedMove = selectRequestedChessMove(
         input.userRequest,
         refreshedBoardState,
@@ -1780,11 +1776,11 @@ async function buildChessMoveMessageFromBoardState(input: {
   }
 }
 
-async function buildChessMoveMessageFromBoundCoachAction(input: {
+function buildChessMoveMessageFromBoundCoachAction(input: {
   conversationId: string
   userRequest: string
   action: ChessCoachActionClientData
-}): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+}): Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null {
   const boardState = buildChessBoardStateResult({
     appSessionId: input.action.appSessionId,
     summary: input.action.boardState.summary,
@@ -1821,14 +1817,14 @@ async function buildChessMoveMessageFromBoundCoachAction(input: {
   })
 }
 
-async function buildChessMoveMessageFromSidebarSnapshot(
+function buildChessMoveMessageFromSidebarSnapshot(
   snapshot: SidebarAppRuntimeSnapshot,
   input: {
     conversationId: string
     userRequest: string
     requestedMoveOverride?: string
   }
-): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+): Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null {
   const boardState = buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot)
   if (!boardState) {
     return null
@@ -1843,14 +1839,14 @@ async function buildChessMoveMessageFromSidebarSnapshot(
   })
 }
 
-async function buildChessMoveMessageFromReference(
+function buildChessMoveMessageFromReference(
   reference: EmbeddedAppReference,
   input: {
     conversationId: string
     userRequest: string
     requestedMoveOverride?: string
   }
-): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
+): Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null {
   const boardState = buildLiveChessBoardStateResult({
     conversationId: input.conversationId,
     appSessionId: reference.appSessionId,
@@ -2186,10 +2182,10 @@ function buildLaunchCopy(appName: string, authState: AppSessionAuthState) {
   return `Launching ${appName} in the right sidebar.`
 }
 
-function buildChessLaunchCopy(result: ChessBoardStateToolResult) {
+function buildChessLaunchCopy(result: ChessBoardStateToolResult, appLabel = 'Chess Tutor') {
   const recommendedMove = result.recommendedMove ?? 'd4'
   const reason = result.recommendationReason ?? 'claims the center and gets your pieces into the game'
-  return `Chess Tutor is on the board. Ready to play some chess? I’d start with ${recommendedMove} because it ${reason}. Tap Play ${recommendedMove} and I’ll coach you move by move.`
+  return `${appLabel} is on the board. Ready to play some chess? I’d start with ${recommendedMove} because it ${reason}. Tap Play ${recommendedMove} and I’ll coach you move by move.`
 }
 
 export function buildChessApprovedAppKickoffToolCallId(appSessionId: string) {
@@ -2203,6 +2199,7 @@ export function buildChessApprovedAppKickoffMessage(input: {
   summary: string
   latestStateDigest?: JsonObject
   availableToolNames: string[]
+  appLabel?: string
 }): Message | null {
   const result = buildChessBoardStateResult({
     appSessionId: input.appSessionId,
@@ -2214,7 +2211,8 @@ export function buildChessApprovedAppKickoffMessage(input: {
     return null
   }
 
-  const message = createMessage('assistant', buildChessLaunchCopy(result))
+  const launchCopy = buildChessLaunchCopy(result, input.appLabel)
+  const message = createMessage('assistant', launchCopy)
   message.contentParts = [
     {
       type: 'tool-call',
@@ -2228,7 +2226,7 @@ export function buildChessApprovedAppKickoffMessage(input: {
     },
     {
       type: 'text',
-      text: buildChessLaunchCopy(result),
+      text: launchCopy,
     },
   ]
   message.generating = false
