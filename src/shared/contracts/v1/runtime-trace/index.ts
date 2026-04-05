@@ -4,6 +4,7 @@ import {
   IdentifierSchema,
   IsoDatetimeSchema,
   JsonObjectSchema,
+  JsonValueSchema,
   NonEmptyStringSchema,
 } from '../shared'
 import { toValidationResult } from '../validation'
@@ -106,8 +107,10 @@ export const RuntimeTraceSpanSchema = z
     state: RuntimeTraceStateSnapshotSchema.optional(),
     agentReturn: RuntimeTraceAgentReturnSchema.optional(),
     model: RuntimeTraceModelUsageSchema.optional(),
-    input: JsonObjectSchema.optional(),
-    output: JsonObjectSchema.optional(),
+    input: JsonValueSchema.optional(),
+    output: JsonValueSchema.optional(),
+    expected: JsonValueSchema.optional(),
+    tags: z.array(NonEmptyStringSchema).max(16).optional(),
     metadata: JsonObjectSchema.optional(),
     error: RuntimeTraceErrorSchema.optional(),
   })
@@ -221,6 +224,9 @@ export const exampleRuntimeTraceSpans: RuntimeTraceSpan[] = [
       layer: 'host',
       source: 'runtime-trace-store',
     },
+    input: 'Initialize chess tutor runtime trace',
+    output: 'Runtime trace opened for chess tutor sidebar session.',
+    tags: ['trace-root', 'host', 'chess-tutor', 'chess.internal'],
     metadata: {
       purpose: 'braintrust-debugging',
     },
@@ -246,6 +252,9 @@ export const exampleRuntimeTraceSpans: RuntimeTraceSpan[] = [
       layer: 'host',
       source: 'app-iframe-panel',
     },
+    input: 'Sync latest chess runtime snapshot from app.state',
+    output: 'Played c6. White to move.',
+    tags: ['runtime-snapshot', 'host', 'chess-tutor', 'chess.internal'],
     state: {
       source: 'runtime.message.app.state',
       status: 'active',

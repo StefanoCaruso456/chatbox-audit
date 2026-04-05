@@ -2,7 +2,6 @@ import {
   type RuntimeTraceSpan,
   type RuntimeTraceSpanKind,
   RuntimeTraceSpanSchema,
-  type RuntimeTraceSpanStatus,
   type RuntimeTraceTree,
   RuntimeTraceTreeSchema,
 } from '@shared/contracts/v1'
@@ -28,6 +27,17 @@ type RuntimeTraceState = {
 }
 
 const MAX_TRACE_SPANS = 800
+
+function buildRuntimeTraceTags(input: {
+  kind: RuntimeTraceSpanKind
+  actorLayer?: RuntimeTraceSpan['actor']['layer']
+  approvedAppId?: string
+  runtimeAppId?: string
+}) {
+  return [input.kind, input.actorLayer, input.approvedAppId, input.runtimeAppId].filter((value): value is string =>
+    Boolean(value)
+  )
+}
 
 function normalizeTraceIdentifier(input: string) {
   return input
@@ -82,6 +92,14 @@ function createRootTraceSpan(input: {
       layer: 'store',
       source: 'runtime-trace-store',
     },
+    input: input.approvedAppId ? `Initialize runtime trace for ${input.approvedAppId}` : 'Initialize runtime trace',
+    output: input.appSessionId ? `Runtime trace opened for ${input.appSessionId}.` : 'Runtime trace opened.',
+    tags: buildRuntimeTraceTags({
+      kind: 'trace-root',
+      actorLayer: 'store',
+      approvedAppId: input.approvedAppId,
+      runtimeAppId: input.runtimeAppId,
+    }),
     metadata: {
       autoCreated: true,
     },

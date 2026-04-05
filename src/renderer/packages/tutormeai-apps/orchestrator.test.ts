@@ -5,11 +5,7 @@ import {
 } from '@shared/contracts/v1'
 import { createMessage } from '@shared/types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  applyChessSessionMove,
-  initializeChessSession,
-  resetChessSessions,
-} from '@/stores/chessSessionStore'
+import { applyChessSessionMove, initializeChessSession, resetChessSessions } from '@/stores/chessSessionStore'
 import { getRuntimeTraceSpans, resetRuntimeTraceStore } from '@/stores/runtimeTraceStore'
 import { resetSidebarAppRuntimeSnapshots, upsertSidebarAppRuntimeSnapshot } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
@@ -257,7 +253,11 @@ describe('routeTutorMeAiAppRequest', () => {
               moveCount: 2,
               lastMove: 'e5',
             },
-            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
+            availableTools: [
+              exampleChessLaunchToolSchema,
+              exampleChessGetBoardStateToolSchema,
+              exampleChessMakeMoveToolSchema,
+            ],
           },
         },
       },
@@ -310,7 +310,11 @@ describe('routeTutorMeAiAppRequest', () => {
               moveCount: 2,
               lastMove: 'e5',
             },
-            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
+            availableTools: [
+              exampleChessLaunchToolSchema,
+              exampleChessGetBoardStateToolSchema,
+              exampleChessMakeMoveToolSchema,
+            ],
           },
         },
       },
@@ -349,9 +353,7 @@ describe('routeTutorMeAiAppRequest', () => {
       result.message.contentParts.find((part) => part.type === 'text' && part.text.includes('Current live Chess board'))
     ).toBeTruthy()
     expect(
-      result.message.contentParts.find(
-        (part) => part.type === 'text' && part.text.includes('Recommended next move:')
-      )
+      result.message.contentParts.find((part) => part.type === 'text' && part.text.includes('Recommended next move:'))
     ).toBeTruthy()
   })
 
@@ -403,6 +405,19 @@ describe('routeTutorMeAiAppRequest', () => {
     })
     expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Move played: d4')
     expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(
+      getRuntimeTraceSpans().find(
+        (span) =>
+          span.kind === 'runtime-command' &&
+          span.conversationId === 'conversation.8' &&
+          span.approvedAppId === 'chess-tutor'
+      )
+    ).toMatchObject({
+      input: 'Requested move: d4',
+      output: 'Move played: d4. Black to move.',
+      expected: 'Expected FEN before move: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      tags: ['runtime-command', 'agent', 'chess-tutor', 'chess.internal', 'chess.make-move'],
+    })
   })
 
   it('plays the last structured chess recommendation when the user says play it', async () => {
@@ -600,7 +615,10 @@ describe('routeTutorMeAiAppRequest', () => {
       userId: 'user.8.no-recommendation',
       userRequest: 'do it now',
       requestMessageId: 'message.8.no-recommendation',
-      previousMessages: [createMessage('user', "let's play chess"), createMessage('assistant', 'Sure, ready when you are.')],
+      previousMessages: [
+        createMessage('user', "let's play chess"),
+        createMessage('assistant', 'Sure, ready when you are.'),
+      ],
     })
 
     expect(result.kind).toBe('clarify')
@@ -1391,7 +1409,11 @@ describe('routeTutorMeAiAppRequest', () => {
               moveCount: 2,
               lastMove: 'e5',
             },
-            availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
+            availableTools: [
+              exampleChessLaunchToolSchema,
+              exampleChessGetBoardStateToolSchema,
+              exampleChessMakeMoveToolSchema,
+            ],
           },
         },
       },

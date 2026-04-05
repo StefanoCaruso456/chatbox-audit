@@ -7,13 +7,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { getDefaultStore } from 'jotai'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { currentSessionIdAtom } from '@/stores/atoms'
 import { approvedAppEventStore, resetApprovedAppOpenedEvents } from '@/stores/approvedAppEventStore'
-import {
-  enqueueSidebarAppRuntimeCommand,
-  resetSidebarAppRuntimeCommands,
-} from '@/stores/sidebarAppRuntimeCommandStore'
+import { currentSessionIdAtom } from '@/stores/atoms'
 import { getRuntimeTraceSpans, resetRuntimeTraceStore } from '@/stores/runtimeTraceStore'
+import { enqueueSidebarAppRuntimeCommand, resetSidebarAppRuntimeCommands } from '@/stores/sidebarAppRuntimeCommandStore'
 import { getSidebarAppRuntimeSnapshot, resetSidebarAppRuntimeSnapshots } from '@/stores/sidebarAppRuntimeStore'
 import { uiStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
@@ -313,6 +310,18 @@ describe('AppIframePanel', () => {
       appSessionId: bootstrapMessage.appSessionId,
       status: 'active',
     })
+    expect(
+      getRuntimeTraceSpans().find(
+        (span) =>
+          span.kind === 'runtime-snapshot' &&
+          span.approvedAppId === 'chess-tutor' &&
+          span.state?.source === 'runtime.message.app.state'
+      )
+    ).toMatchObject({
+      input: 'Sync chess-tutor runtime snapshot from runtime.message.app.state',
+      output: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+      tags: ['runtime-snapshot', 'host', 'chess-tutor', 'chess.internal', 'active'],
+    })
   })
 
   it('publishes an approved-app-opened event when Chess Tutor opens in the sidebar', () => {
@@ -337,7 +346,7 @@ describe('AppIframePanel', () => {
     ).toBe(true)
   })
 
-  it('publishes a chess board-changed event when a manual board move updates the live runtime state', async () => {
+  it('publishes a chess board-changed event when a manual board move updates the live runtime state', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 
     renderPanel(<AppIframePanel />)
@@ -349,7 +358,7 @@ describe('AppIframePanel', () => {
 
     const bootstrapMessage = postMessage.mock.calls[0]?.[0]
 
-    await act(async () => {
+    act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: (iframe as HTMLIFrameElement).contentWindow,

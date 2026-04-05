@@ -98,6 +98,11 @@ describe('braintrust runtime telemetry', () => {
     expect(mockStartSpan.mock.calls[0]?.[0]).toMatchObject({
       name: exampleRuntimeTraceSpans[0]?.name,
       spanId: exampleRuntimeTraceSpans[0]?.spanId,
+      event: expect.objectContaining({
+        input: 'Initialize chess tutor runtime trace',
+        output: 'Runtime trace opened for chess tutor sidebar session.',
+        tags: ['trace-root', 'host', 'chess-tutor', 'chess.internal'],
+      }),
     })
     expect(mockStartSpan.mock.calls[1]?.[0]).toMatchObject({
       name: exampleRuntimeTraceSpans[1]?.name,
@@ -106,8 +111,57 @@ describe('braintrust runtime telemetry', () => {
         rootSpanId: exampleRuntimeTraceSpans[0]?.spanId,
         spanId: exampleRuntimeTraceSpans[0]?.spanId,
       },
+      event: expect.objectContaining({
+        input: 'Sync latest chess runtime snapshot from app.state',
+        output: 'Played c6. White to move.',
+        tags: ['runtime-snapshot', 'host', 'chess-tutor', 'chess.internal'],
+      }),
     })
     expect(mockEnd).toHaveBeenCalledTimes(2)
     expect(mockFlush).toHaveBeenCalledTimes(1)
+  })
+
+  it('synthesizes row-friendly fields for spans that only carry metadata and state', async () => {
+    const rootSpan = exampleRuntimeTraceSpans[0]
+    const snapshotSpan = exampleRuntimeTraceSpans[1]
+    if (!rootSpan || !snapshotSpan) {
+      throw new Error('Missing runtime trace fixtures for Braintrust tests.')
+    }
+
+    await exportRuntimeTraceSpansToBraintrust({
+      spans: [
+        {
+          ...rootSpan,
+          input: undefined,
+          output: undefined,
+          tags: undefined,
+        },
+        {
+          ...snapshotSpan,
+          input: undefined,
+          output: undefined,
+          tags: undefined,
+          expected: undefined,
+        },
+      ],
+      env: {
+        BRAINTRUST_API_KEY: 'test-api-key',
+      },
+    })
+
+    expect(mockStartSpan.mock.calls[0]?.[0]).toMatchObject({
+      event: expect.objectContaining({
+        input: 'Initialize runtime trace for chess-tutor',
+        output: 'Runtime trace opened.',
+        tags: ['trace-root', 'host', 'chess-tutor', 'chess.internal'],
+      }),
+    })
+    expect(mockStartSpan.mock.calls[1]?.[0]).toMatchObject({
+      event: expect.objectContaining({
+        input: 'Sync runtime snapshot for chess-tutor',
+        output: 'Played c6. White to move.',
+        tags: ['runtime-snapshot', 'host', 'chess-tutor', 'chess.internal'],
+      }),
+    })
   })
 })

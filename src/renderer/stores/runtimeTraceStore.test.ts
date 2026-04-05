@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildRuntimeTraceId,
   getPendingRuntimeTraceSpans,
-  getRuntimeTraceTree,
   getRuntimeTraceSpans,
+  getRuntimeTraceTree,
   markRuntimeTraceSpansExported,
   recordRuntimeTraceSpan,
   resetRuntimeTraceStore,
@@ -47,6 +47,11 @@ describe('runtimeTraceStore', () => {
     expect(spans).toHaveLength(2)
     expect(spans.some((item) => item.kind === 'trace-root')).toBe(true)
     expect(spans.some((item) => item.spanId === span.spanId)).toBe(true)
+    expect(spans.find((item) => item.kind === 'trace-root')).toMatchObject({
+      input: 'Initialize runtime trace for chess-tutor',
+      output: 'Runtime trace opened for app-session.chess.1.',
+      tags: ['trace-root', 'store', 'chess-tutor', 'chess.internal'],
+    })
 
     const tree = getRuntimeTraceTree(traceId)
     expect(tree).not.toBeNull()
@@ -79,8 +84,10 @@ describe('runtimeTraceStore', () => {
 
     const pendingBeforeExport = getPendingRuntimeTraceSpans().filter((item) => item.traceId === traceId)
     expect(pendingBeforeExport.map((item) => item.kind)).toEqual(['trace-root', 'runtime-open'])
+    const rootSpan = pendingBeforeExport.find((item) => item.kind === 'trace-root')
+    expect(rootSpan).toBeDefined()
 
-    markRuntimeTraceSpansExported([span.spanId, pendingBeforeExport[0]!.spanId])
+    markRuntimeTraceSpansExported([span.spanId, rootSpan?.spanId ?? ''])
 
     const pendingAfterExport = getPendingRuntimeTraceSpans().filter((item) => item.traceId === traceId)
     expect(pendingAfterExport).toHaveLength(0)
