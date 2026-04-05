@@ -66,6 +66,8 @@ describe('TutorMeAIAuthGate', () => {
       </MantineProvider>
     )
 
+    expect(screen.getByText('Authenticated content')).toBeTruthy()
+    expect(screen.getByTestId('tutormeai-auth-overlay')).toBeTruthy()
     expect(screen.getByRole('button', { name: /continue with google/i })).toBeTruthy()
   })
 
