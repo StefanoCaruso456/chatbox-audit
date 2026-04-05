@@ -1214,17 +1214,61 @@ function buildChessBoardStateMessageFromSharedSession(input: {
   return message
 }
 
-function buildChessBoardStateMessageFromSidebarSnapshot(
-  snapshot: SidebarAppRuntimeSnapshot,
-  userRequest: string
-): Message | null {
-  const result = buildLiveChessBoardStateResult({
-    conversationId: snapshot.hostSessionId,
+function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: SidebarAppRuntimeSnapshot) {
+  const sidebarResult = buildChessBoardStateResult({
     appSessionId: snapshot.appSessionId,
     summary: snapshot.summary,
     latestStateDigest: snapshot.latestStateDigest,
     availableToolNames: snapshot.availableToolNames,
   })
+
+  const sharedSnapshot =
+    getChessSessionSnapshot(snapshot.hostSessionId, snapshot.appSessionId) ??
+    getLatestChessSessionSnapshotForConversation(snapshot.hostSessionId)
+
+  const sharedResult = sharedSnapshot
+    ? buildChessBoardStateResult({
+        appSessionId: sharedSnapshot.appSessionId,
+        summary: sharedSnapshot.summary,
+        latestStateDigest: buildChessStateDigestFromSharedSession({
+          fen: sharedSnapshot.fen,
+          turn: sharedSnapshot.turn,
+          moveCount: sharedSnapshot.moveCount,
+          lastMove: sharedSnapshot.lastMove,
+          lastUpdateSource: sharedSnapshot.lastUpdateSource,
+          mode: sharedSnapshot.mode,
+        }),
+        moveHistory: getChessSessionHistory(snapshot.hostSessionId, sharedSnapshot.appSessionId),
+        availableToolNames: snapshot.availableToolNames,
+      })
+    : null
+
+  if (!sidebarResult) {
+    return sharedResult
+  }
+
+  if (!sharedResult || !sharedSnapshot) {
+    return sidebarResult
+  }
+
+  if (sidebarResult.moveCount !== sharedResult.moveCount) {
+    return sidebarResult.moveCount > sharedResult.moveCount ? sidebarResult : sharedResult
+  }
+
+  const sidebarUpdatedAtMs = Date.parse(snapshot.updatedAt)
+  const sharedUpdatedAtMs = Date.parse(sharedSnapshot.updatedAt)
+  if (Number.isFinite(sidebarUpdatedAtMs) && Number.isFinite(sharedUpdatedAtMs) && sidebarUpdatedAtMs !== sharedUpdatedAtMs) {
+    return sidebarUpdatedAtMs > sharedUpdatedAtMs ? sidebarResult : sharedResult
+  }
+
+  return sidebarResult
+}
+
+function buildChessBoardStateMessageFromSidebarSnapshot(
+  snapshot: SidebarAppRuntimeSnapshot,
+  userRequest: string
+): Message | null {
+  const result = buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot)
   if (!result) {
     return null
   }
@@ -1363,13 +1407,7 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     requestedMoveOverride?: string
   }
 ): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
-  const boardState = buildLiveChessBoardStateResult({
-    conversationId: input.conversationId,
-    appSessionId: snapshot.appSessionId,
-    summary: snapshot.summary,
-    latestStateDigest: snapshot.latestStateDigest,
-    availableToolNames: snapshot.availableToolNames,
-  })
+  const boardState = buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot)
   if (!boardState) {
     return null
   }
