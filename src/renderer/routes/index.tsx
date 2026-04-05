@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
+import ApprovedAppDraftSessionBootstrapController from '@/components/apps/ApprovedAppDraftSessionBootstrapController'
 import AppsTrigger from '@/components/apps/AppsTrigger'
 import AppsWorkspace from '@/components/apps/AppsWorkspace'
 import { ScalableIcon } from '@/components/common/ScalableIcon'
@@ -99,8 +100,8 @@ function Index() {
     }
   }, [routerState.location.search])
 
-  const handleSubmit = useCallback(
-    async ({ constructedMessage, needGenerating = true, onUserMessageReady }: InputBoxPayload) => {
+  const createDraftSessionAndSwitch = useCallback(
+    async () => {
       const newSession = await createSessionStore({
         name: session.name,
         type: 'chat',
@@ -111,14 +112,11 @@ function Index() {
         settings: session.settings,
       })
 
-      // Transfer knowledge base from newSessionState to the actual session
       if (newSessionState.knowledgeBase) {
         addSessionKnowledgeBase(newSession.id, newSessionState.knowledgeBase)
-        // Clear newSessionState after transfer
         setNewSessionState({})
       }
 
-      // Transfer web browsing setting from "new" session to the actual session
       const newSessionWebBrowsing = sessionWebBrowsingMap['new']
       if (newSessionWebBrowsing !== undefined) {
         setSessionWebBrowsing(newSession.id, newSessionWebBrowsing)
@@ -126,12 +124,7 @@ function Index() {
       }
 
       switchCurrentSession(newSession.id)
-
-      void submitNewUserMessage(newSession.id, {
-        newUserMsg: constructedMessage,
-        needGenerating,
-        onUserMessageReady,
-      })
+      return newSession
     },
     [
       session,
@@ -142,6 +135,19 @@ function Index() {
       setSessionWebBrowsing,
       clearSessionWebBrowsing,
     ]
+  )
+
+  const handleSubmit = useCallback(
+    async ({ constructedMessage, needGenerating = true, onUserMessageReady }: InputBoxPayload) => {
+      const newSession = await createDraftSessionAndSwitch()
+
+      void submitNewUserMessage(newSession.id, {
+        newUserMsg: constructedMessage,
+        needGenerating,
+        onUserMessageReady,
+      })
+    },
+    [createDraftSessionAndSwitch]
   )
 
   const onSelectModel = useCallback((p: string, m: string) => {
@@ -171,6 +177,7 @@ function Index() {
 
   return (
     <Page title="" right={<AppsTrigger />}>
+      <ApprovedAppDraftSessionBootstrapController onRuntimeAppOpened={createDraftSessionAndSwitch} />
       <AppsWorkspace>
         <div className="p-0 flex h-full min-h-0 flex-col">
           <Stack align="center" justify="center" gap="sm" flex={1}>
