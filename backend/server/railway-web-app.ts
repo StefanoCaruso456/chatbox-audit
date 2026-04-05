@@ -17,8 +17,11 @@ import {
   createRuntimeAuthRepository,
   createGoogleOAuthAdapter,
   createHashedTokenCipher,
+  isTutorMeAIReviewerRole,
   OAuthAuthService,
   PlatformAuthService,
+  readAssignedStudentIds,
+  sanitizeAssignedStudentIds,
   fetchGoogleUserProfile,
   loadGoogleOAuthRuntimeConfig,
   toPublicOAuthConnectionRecord,
@@ -44,6 +47,7 @@ const OAUTH_CONNECTION_PATH = '/api/auth/oauth'
 const PLATFORM_GOOGLE_START_PATH = '/api/auth/platform/google/start'
 const PLATFORM_GOOGLE_CALLBACK_PATH = '/api/auth/platform/google/callback'
 const PLATFORM_ME_PATH = '/api/auth/me'
+const PLATFORM_STUDENTS_PATH = '/api/auth/students'
 const PLATFORM_PROFILE_PATH = '/api/auth/profile'
 const PLATFORM_REFRESH_PATH = '/api/auth/platform/refresh'
 const PLATFORM_LOGOUT_PATH = '/api/auth/platform/logout'
@@ -86,6 +90,7 @@ const PlatformProfileBodySchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   username: PlatformUsernameSchema,
   role: TutorMeAIUserRoleSchema,
+  students: z.array(IdentifierSchema).max(200).default([]),
 })
 
 const AppAccessRequestBodySchema = z.object({
@@ -141,6 +146,14 @@ interface PublicPlatformUser {
   role: TutorMeAIUserRole | null
   pictureUrl: string | null
   onboardingCompletedAt: string | null
+  students: string[]
+}
+
+interface PublicPlatformStudent {
+  userId: string
+  email: string | null
+  username: string | null
+  displayName: string
 }
 
 interface PlatformGoogleCookiePayload {
@@ -198,7 +211,7 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
     now,
     tokenCipher: tokenSecret ? createHashedTokenCipher(tokenSecret) : undefined,
   })
-  const appAccessService = new AppAccessService(appAccessRepository, now)
+  const appAccessService = new AppAccessService(appAccessRepository, repository, now)
   const platformAuthService = new PlatformAuthService(repository, {
     now,
     sessionTtlMs: parsePositiveInteger(env.TUTORMEAI_PLATFORM_SESSION_TTL_MS),
@@ -255,6 +268,10 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
 
       if (url.pathname === PLATFORM_ME_PATH && request.method === 'GET') {
         return withCors(request, await handleGetPlatformProfile(request, { platformAuthService, repository }), env)
+      }
+
+      if (url.pathname === PLATFORM_STUDENTS_PATH && request.method === 'GET') {
+        return withCors(request, await handleListPlatformStudents(request, { platformAuthService, repository }), env)
       }
 
       if (url.pathname === PLATFORM_PROFILE_PATH && request.method === 'POST') {
@@ -729,6 +746,34 @@ async function handleGetPlatformProfile(
   })
 }
 
+async function handleListPlatformStudents(
+  request: Request,
+  input: {
+    platformAuthService: PlatformAuthService
+    repository: AuthRepository
+  }
+): Promise<Response> {
+  const session = await authenticatePlatformRequest(request, input.platformAuthService)
+  if (session instanceof Response) {
+    return session
+  }
+  if (!session) {
+    return jsonResponse(
+      401,
+      toApiErrorBody(failureResult('auth', 'platform-session-invalid-token', 'A TutorMeAI platform session is required.'))
+    )
+  }
+
+  const students = await input.repository.listUsersByRole('student')
+
+  return jsonResponse(200, {
+    ok: true,
+    data: {
+      students: students.map(toPublicPlatformStudent),
+    },
+  })
+}
+
 async function handleUpsertPlatformProfile(
   request: Request,
   input: {
@@ -769,6 +814,33 @@ async function handleUpsertPlatformProfile(
     )
   }
 
+  const selectedStudentIds = isTutorMeAIReviewerRole(parsedBody.data.role)
+    ? sanitizeAssignedStudentIds(parsedBody.data.students)
+    : []
+
+  if (isTutorMeAIReviewerRole(parsedBody.data.role) && selectedStudentIds.length === 0) {
+    return jsonResponse(
+      400,
+      toApiErrorBody(
+        failureResult('api', 'invalid-request', 'Select at least one student for this teacher or administrator profile.')
+      )
+    )
+  }
+
+  if (selectedStudentIds.length > 0) {
+    const registeredStudentIds = new Set((await input.repository.listUsersByRole('student')).map((student) => student.userId))
+    const invalidStudentIds = selectedStudentIds.filter((studentId) => !registeredStudentIds.has(studentId))
+
+    if (invalidStudentIds.length > 0) {
+      return jsonResponse(
+        400,
+        toApiErrorBody(
+          failureResult('api', 'invalid-request', 'One or more selected students are not registered TutorMeAI students.')
+        )
+      )
+    }
+  }
+
   const now = input.now()
   const updatedUser: UserRecord = {
     ...existingUser,
@@ -782,6 +854,7 @@ async function handleUpsertPlatformProfile(
       onboardingCompleted: true,
       onboardingCompletedAt: existingUser.onboardingCompletedAt ?? now,
       onboardingSource: existingUser.onboardingCompletedAt ? 'profile-update' : 'signup',
+      students: selectedStudentIds,
     },
   }
 
@@ -1950,6 +2023,16 @@ function toPublicPlatformUser(user: UserRecord): PublicPlatformUser {
     role: user.role,
     pictureUrl,
     onboardingCompletedAt: user.onboardingCompletedAt,
+    students: readAssignedStudentIds(user),
+  }
+}
+
+function toPublicPlatformStudent(user: UserRecord): PublicPlatformStudent {
+  return {
+    userId: user.userId,
+    email: user.email,
+    username: user.username,
+    displayName: user.displayName,
   }
 }
 

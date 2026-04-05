@@ -88,6 +88,7 @@ describe('TutorMeAIAuthGate', () => {
                   role: null,
                   pictureUrl: null,
                   onboardingCompletedAt: null,
+                  students: [],
                 },
                 session: {
                   platformSessionId: 'platform-session.demo',
@@ -119,6 +120,7 @@ describe('TutorMeAIAuthGate', () => {
                 role: 'student',
                 pictureUrl: null,
                 onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+                students: [],
               },
             },
           }),
@@ -169,6 +171,7 @@ describe('TutorMeAIAuthGate', () => {
             role: null,
             pictureUrl: null,
             onboardingCompletedAt: null,
+            students: [],
           },
         },
       })

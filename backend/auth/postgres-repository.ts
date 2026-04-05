@@ -1,4 +1,5 @@
 import type { JsonObject } from '@shared/contracts/v1'
+import type { TutorMeAIUserRole } from '@shared/types/settings'
 import { Pool, type PoolConfig } from 'pg'
 import { InMemoryAuthRepository, type AuthRepository } from './repository'
 import type {
@@ -147,6 +148,20 @@ export class PostgresAuthRepository implements AuthRepository {
     )
 
     return result.rows[0] ? mapUserRow(result.rows[0]) : undefined
+  }
+
+  async listUsersByRole(role: TutorMeAIUserRole): Promise<UserRecord[]> {
+    const result = await this.pool.query<UserRow>(
+      `SELECT user_id, email, username, display_name, role, onboarding_completed_at, metadata, created_at, updated_at, deleted_at
+      FROM users
+      WHERE role = $1
+        AND deleted_at IS NULL
+        AND onboarding_completed_at IS NOT NULL
+      ORDER BY LOWER(display_name), LOWER(COALESCE(email, '')), user_id`,
+      [role]
+    )
+
+    return result.rows.map(mapUserRow)
   }
 
   async savePlatformSession(session: PlatformSessionRecord): Promise<void> {

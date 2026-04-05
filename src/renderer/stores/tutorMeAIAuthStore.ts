@@ -99,6 +99,16 @@ export const tutorMeAIAuthStore = createStore<TutorMeAIAuthState & TutorMeAIAuth
                   username: user.username ?? null,
                   role: user.role ?? null,
                   onboardingCompletedAt: user.onboardingCompletedAt ?? null,
+                  students: Array.isArray(user.students)
+                    ? [
+                        ...new Set(
+                          user.students.filter(
+                            (studentId): studentId is string =>
+                              typeof studentId === 'string' && studentId.trim().length > 0
+                          )
+                        ),
+                      ]
+                    : [],
                 }
               : null,
           }
