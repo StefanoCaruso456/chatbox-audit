@@ -7,6 +7,7 @@ export type BackendErrorDomain =
   | 'app-context'
   | 'auth'
   | 'oauth'
+  | 'app-access'
   | 'security'
 
 export interface BackendSuccess<T> {

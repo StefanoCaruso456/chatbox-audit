@@ -29,6 +29,12 @@ import {
   type PlatformAuthErrorCode,
   type UserRecord,
 } from '../auth'
+import {
+  AppAccessService,
+  createRuntimeAppAccessRepository,
+  type AppAccessErrorCode,
+  type AppAccessRepository,
+} from '../app-access'
 
 const DEFAULT_STATIC_ROOT_DIR = resolve(process.cwd(), 'release/app/dist/renderer')
 const DEFAULT_ALLOWED_ORIGINS = ['https://chatbox-audit.vercel.app', 'http://localhost:1212', 'http://localhost:3000']
@@ -43,6 +49,9 @@ const PLATFORM_REFRESH_PATH = '/api/auth/platform/refresh'
 const PLATFORM_LOGOUT_PATH = '/api/auth/platform/logout'
 const RUNTIME_TRACE_BOOTSTRAP_PATH = '/api/telemetry/runtime-traces/bootstrap'
 const RUNTIME_TRACE_EXPORT_PATH = '/api/telemetry/runtime-traces'
+const APP_ACCESS_REQUESTS_PATH = '/api/app-access/requests'
+const APP_ACCESS_PENDING_REQUESTS_PATH = '/api/app-access/requests/pending'
+const APP_ACCESS_MY_REQUESTS_PATH = '/api/app-access/requests/mine'
 const PLATFORM_GOOGLE_COOKIE_NAME = 'tutormeai_platform_google'
 
 const OAuthConnectionQuerySchema = z.object({
@@ -77,6 +86,20 @@ const PlatformProfileBodySchema = z.object({
   displayName: z.string().trim().min(1).max(120),
   username: PlatformUsernameSchema,
   role: TutorMeAIUserRoleSchema,
+})
+
+const AppAccessRequestBodySchema = z.object({
+  appId: IdentifierSchema,
+  appName: z.string().trim().min(1).max(120),
+})
+
+const AppAccessRequestQuerySchema = z.object({
+  appId: IdentifierSchema,
+})
+
+const AppAccessDecisionBodySchema = z.object({
+  status: z.enum(['approved', 'declined']),
+  decisionReason: z.string().trim().max(500).optional(),
 })
 
 type CallbackPayload =
@@ -132,6 +155,7 @@ export interface RailwayWebAppOptions {
   fetchImpl?: typeof fetch
   now?: () => string
   repository?: AuthRepository
+  appAccessRepository?: AppAccessRepository
   staticRootDir?: string
 }
 
@@ -162,6 +186,7 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
   const now = options.now ?? (() => new Date().toISOString())
   const fetchImpl = options.fetchImpl ?? fetch
   const repository = options.repository ?? createRuntimeAuthRepository(env)
+  const appAccessRepository = options.appAccessRepository ?? createRuntimeAppAccessRepository(env)
   const staticRootDir = resolve(options.staticRootDir ?? DEFAULT_STATIC_ROOT_DIR)
   const indexFile = join(staticRootDir, 'index.html')
   const googleConfig = loadGoogleOAuthRuntimeConfig(env)
@@ -173,6 +198,7 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
     now,
     tokenCipher: tokenSecret ? createHashedTokenCipher(tokenSecret) : undefined,
   })
+  const appAccessService = new AppAccessService(appAccessRepository, now)
   const platformAuthService = new PlatformAuthService(repository, {
     now,
     sessionTtlMs: parsePositiveInteger(env.TUTORMEAI_PLATFORM_SESSION_TTL_MS),
@@ -190,7 +216,12 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
     async handleRequest(request) {
       const url = new URL(request.url)
 
-      if (request.method === 'OPTIONS' && (url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/api/telemetry/'))) {
+      if (
+        request.method === 'OPTIONS' &&
+        (url.pathname.startsWith('/api/auth/') ||
+          url.pathname.startsWith('/api/telemetry/') ||
+          url.pathname.startsWith('/api/app-access/'))
+      ) {
         return withCors(request, new Response(null, { status: 204 }), env)
       }
 
@@ -261,7 +292,53 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
       if (url.pathname === RUNTIME_TRACE_EXPORT_PATH && request.method === 'POST') {
         return withCors(request, await handleExportRuntimeTelemetry(request, { env, fetchImpl }), env)
       }
+      if (url.pathname === APP_ACCESS_REQUESTS_PATH && request.method === 'POST') {
+        return withCors(
+          request,
+          await handleCreateAppAccessRequest(request, {
+            platformAuthService,
+            repository,
+            appAccessService,
+          }),
+          env
+        )
+      }
 
+      if (url.pathname === APP_ACCESS_MY_REQUESTS_PATH && request.method === 'GET') {
+        return withCors(
+          request,
+          await handleGetStudentAppAccessRequest(request, {
+            platformAuthService,
+            repository,
+            appAccessService,
+          }),
+          env
+        )
+      }
+
+      if (url.pathname === APP_ACCESS_PENDING_REQUESTS_PATH && request.method === 'GET') {
+        return withCors(
+          request,
+          await handleListPendingAppAccessRequests(request, {
+            platformAuthService,
+            repository,
+            appAccessService,
+          }),
+          env
+        )
+      }
+
+      if (url.pathname.startsWith(`${APP_ACCESS_REQUESTS_PATH}/`) && url.pathname.endsWith('/decision') && request.method === 'POST') {
+        return withCors(
+          request,
+          await handleDecideAppAccessRequest(request, {
+            platformAuthService,
+            repository,
+            appAccessService,
+          }),
+          env
+        )
+      }
       if (url.pathname === GOOGLE_START_PATH && request.method === 'GET') {
         return await handleGoogleOAuthStart(request, {
           env,
@@ -797,6 +874,154 @@ async function handleLogoutPlatformSession(
     ok: true,
     data: {
       revoked: true,
+    },
+  })
+}
+
+async function handleCreateAppAccessRequest(
+  request: Request,
+  input: {
+    platformAuthService: PlatformAuthService
+    repository: AuthRepository
+    appAccessService: AppAccessService
+  }
+): Promise<Response> {
+  const authenticated = await authenticatePlatformUser(request, input.platformAuthService, input.repository)
+  if (authenticated instanceof Response) {
+    return authenticated
+  }
+
+  const parsedBody = await parseJsonBody(request, AppAccessRequestBodySchema)
+  if (!parsedBody.ok) {
+    return parsedBody.response
+  }
+
+  const created = await input.appAccessService.requestStudentAccess({
+    student: authenticated.user,
+    appId: parsedBody.data.appId,
+    appName: parsedBody.data.appName,
+  })
+  if (!created.ok) {
+    return jsonResponse(statusForAppAccessFailure(created.code), toApiErrorBody(created))
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    data: created.value,
+  })
+}
+
+async function handleGetStudentAppAccessRequest(
+  request: Request,
+  input: {
+    platformAuthService: PlatformAuthService
+    repository: AuthRepository
+    appAccessService: AppAccessService
+  }
+): Promise<Response> {
+  const authenticated = await authenticatePlatformUser(request, input.platformAuthService, input.repository)
+  if (authenticated instanceof Response) {
+    return authenticated
+  }
+
+  const url = new URL(request.url)
+  const query = AppAccessRequestQuerySchema.safeParse({
+    appId: url.searchParams.get('appId'),
+  })
+  if (!query.success) {
+    return jsonResponse(
+      400,
+      toApiErrorBody(
+        failureResult('app-access', 'invalid-request', 'A valid appId query parameter is required.')
+      )
+    )
+  }
+
+  const latest = await input.appAccessService.getStudentRequest({
+    student: authenticated.user,
+    appId: query.data.appId,
+  })
+  if (!latest.ok) {
+    return jsonResponse(statusForAppAccessFailure(latest.code), toApiErrorBody(latest))
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    data: {
+      request: latest.value,
+    },
+  })
+}
+
+async function handleListPendingAppAccessRequests(
+  request: Request,
+  input: {
+    platformAuthService: PlatformAuthService
+    repository: AuthRepository
+    appAccessService: AppAccessService
+  }
+): Promise<Response> {
+  const authenticated = await authenticatePlatformUser(request, input.platformAuthService, input.repository)
+  if (authenticated instanceof Response) {
+    return authenticated
+  }
+
+  const pending = await input.appAccessService.listPendingRequests({
+    reviewer: authenticated.user,
+  })
+  if (!pending.ok) {
+    return jsonResponse(statusForAppAccessFailure(pending.code), toApiErrorBody(pending))
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    data: {
+      requests: pending.value,
+    },
+  })
+}
+
+async function handleDecideAppAccessRequest(
+  request: Request,
+  input: {
+    platformAuthService: PlatformAuthService
+    repository: AuthRepository
+    appAccessService: AppAccessService
+  }
+): Promise<Response> {
+  const authenticated = await authenticatePlatformUser(request, input.platformAuthService, input.repository)
+  if (authenticated instanceof Response) {
+    return authenticated
+  }
+
+  const parsedBody = await parseJsonBody(request, AppAccessDecisionBodySchema)
+  if (!parsedBody.ok) {
+    return parsedBody.response
+  }
+
+  const match = /^\/api\/app-access\/requests\/([^/]+)\/decision$/u.exec(new URL(request.url).pathname)
+  const appAccessRequestId = match?.[1]
+  if (!appAccessRequestId) {
+    return jsonResponse(
+      400,
+      toApiErrorBody(failureResult('app-access', 'invalid-request', 'A valid app access request id is required.'))
+    )
+  }
+
+  const decided = await input.appAccessService.decideRequest({
+    reviewer: authenticated.user,
+    appAccessRequestId,
+    status: parsedBody.data.status,
+    decisionReason: parsedBody.data.decisionReason,
+  })
+  if (!decided.ok) {
+    return jsonResponse(statusForAppAccessFailure(decided.code), toApiErrorBody(decided))
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    data: {
+      request: decided.value,
     },
   })
 }
@@ -1487,6 +1712,36 @@ async function authenticatePlatformRequest(
   return validated.value
 }
 
+async function authenticatePlatformUser(
+  request: Request,
+  platformAuthService: PlatformAuthService,
+  repository: AuthRepository
+) {
+  const session = await authenticatePlatformRequest(request, platformAuthService)
+  if (session instanceof Response) {
+    return session
+  }
+  if (!session) {
+    return jsonResponse(
+      401,
+      toApiErrorBody(failureResult('auth', 'platform-session-invalid-token', 'A TutorMeAI platform session is required.'))
+    )
+  }
+
+  const user = await repository.getUserById(session.userId)
+  if (!user) {
+    return jsonResponse(
+      404,
+      toApiErrorBody(failureResult('auth', 'platform-session-not-found', 'TutorMeAI user account was not found.'))
+    )
+  }
+
+  return {
+    session,
+    user,
+  }
+}
+
 function readBearerToken(request: Request) {
   const authorization = normalizeNonEmptyString(request.headers.get('authorization'))
   if (!authorization || !authorization.toLowerCase().startsWith('bearer ')) {
@@ -1531,6 +1786,19 @@ function statusForOAuthFailure(code: OAuthAuthErrorCode | 'invalid-query' | 'inv
     case 'oauth-token-exchange-failed':
     case 'oauth-token-refresh-failed':
     case 'oauth-token-missing':
+      return 409
+  }
+}
+
+function statusForAppAccessFailure(code: AppAccessErrorCode): number {
+  switch (code) {
+    case 'invalid-request':
+      return 400
+    case 'app-access-forbidden':
+      return 403
+    case 'app-access-request-not-found':
+      return 404
+    case 'app-access-request-already-decided':
       return 409
   }
 }
