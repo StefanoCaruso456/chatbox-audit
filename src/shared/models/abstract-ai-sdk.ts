@@ -9,6 +9,8 @@ import {
   type LanguageModelUsage,
   type ModelMessage,
   type Provider,
+  type ProviderMetadata,
+  type StepResult,
   simulateStreamingMiddleware,
   stepCountIs,
   streamText,
@@ -20,6 +22,7 @@ import {
   wrapLanguageModel,
 } from 'ai'
 import { createRetryable, isErrorAttempt, type RetryContext } from 'ai-retry'
+import type { JsonObject, JsonValue } from '../contracts/v1/shared'
 import type {
   MessageContentParts,
   MessageReasoningPart,
@@ -69,6 +72,93 @@ interface ToolExecutionResult {
   toolCallId: string
   result: unknown
   isError?: boolean
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function sanitizeJsonValue(value: unknown): JsonValue | undefined {
+  if (value === null) {
+    return null
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString()
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeJsonValue(item))
+      .filter((item): item is Exclude<typeof item, undefined> => item !== undefined)
+  }
+
+  if (isRecord(value)) {
+    const entries = Object.entries(value)
+      .map(([key, entryValue]) => [key, sanitizeJsonValue(entryValue)] as const)
+      .filter((entry): entry is readonly [string, JsonValue] => entry[1] !== undefined)
+
+    return Object.fromEntries(entries) as JsonObject
+  }
+
+  return undefined
+}
+
+function sanitizeJsonObject(value: unknown): JsonObject | undefined {
+  const sanitized = sanitizeJsonValue(value)
+  return sanitized && !Array.isArray(sanitized) && typeof sanitized === 'object' ? (sanitized as JsonObject) : undefined
+}
+
+function buildTracePreview(text: string | undefined, maxLength = 280) {
+  const normalized = text?.trim()
+  if (!normalized) {
+    return undefined
+  }
+
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 1)}...`
+}
+
+function buildStreamTextTraceSteps<T extends ToolSet>(steps: StepResult<T>[]) {
+  return steps.map((step, index) => ({
+    stepNumber: index + 1,
+    finishReason: step.finishReason,
+    rawFinishReason: step.rawFinishReason,
+    inputTokens: step.usage.inputTokens,
+    outputTokens: step.usage.outputTokens,
+    totalTokens: step.usage.totalTokens,
+    reasoningTokens: step.usage.outputTokenDetails.reasoningTokens ?? step.usage.reasoningTokens,
+    cachedInputTokens: step.usage.inputTokenDetails.cacheReadTokens ?? step.usage.cachedInputTokens,
+    toolCallCount: step.toolCalls.length,
+    toolResultCount: step.toolResults.length,
+    warningCount: step.warnings?.length ?? 0,
+    textPreview: buildTracePreview(step.text),
+    reasoningPreview: buildTracePreview(step.reasoningText),
+    responseId: step.response.id,
+    responseModelId: step.response.modelId,
+    providerMetadata: sanitizeJsonObject(step.providerMetadata),
+  }))
+}
+
+function buildStreamTextTrace<T extends ToolSet>(input: {
+  steps: StepResult<T>[]
+  providerMetadata?: ProviderMetadata
+}) {
+  const steps = buildStreamTextTraceSteps(input.steps)
+  const providerMetadata = sanitizeJsonObject(input.providerMetadata)
+
+  if (!steps.length && !providerMetadata) {
+    return undefined
+  }
+
+  return {
+    stepCount: steps.length,
+    providerMetadata,
+    steps,
+  }
 }
 
 export default abstract class AbstractAISDKModel implements ModelInterface {
@@ -458,6 +548,7 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
     result: {
       usage?: LanguageModelUsage
       finishReason?: FinishReason
+      trace?: StreamTextResult['trace']
     },
     options: CallChatCompletionOptions
   ): StreamTextResult {
@@ -476,7 +567,7 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
       tokenCount: result.usage?.outputTokens,
       tokensUsed: result.usage?.totalTokens,
     })
-    return { contentParts, usage: result.usage, finishReason: result.finishReason }
+    return { contentParts, usage: result.usage, finishReason: result.finishReason, trace: result.trace }
   }
 
   private async handleStreamingCompletion<T extends ToolSet>(
@@ -532,6 +623,10 @@ export default abstract class AbstractAISDKModel implements ModelInterface {
       {
         usage: await result.totalUsage,
         finishReason: await result.finishReason,
+        trace: buildStreamTextTrace({
+          steps: await result.steps,
+          providerMetadata: await result.providerMetadata,
+        }),
       },
       options
     )

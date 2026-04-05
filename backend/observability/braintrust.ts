@@ -157,6 +157,82 @@ function normalizeNonEmptyString(input: string | undefined) {
   return value ? value : null
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function pickNumericMetadataValue(metadata: RuntimeTraceSpan['metadata'], key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function buildBraintrustMetrics(span: RuntimeTraceSpan) {
+  return Object.fromEntries(
+    Object.entries({
+      latencyMs: span.latencyMs,
+      recordedAtMs: new Date(span.recordedAt).getTime(),
+      firstTokenLatencyMs: span.model?.firstTokenLatencyMs,
+      tokenCountInput: span.model?.tokenCountInput,
+      tokenCountOutput: span.model?.tokenCountOutput,
+      totalTokens: span.model?.totalTokens,
+      reasoningTokens: span.model?.reasoningTokens,
+      cachedInputTokens: span.model?.cachedInputTokens,
+      cacheWriteTokens: span.model?.cacheWriteTokens,
+      textOutputTokens: span.model?.textOutputTokens,
+      costUsd: span.model?.costUsd,
+      retryCount: pickNumericMetadataValue(span.metadata, 'retryCount'),
+      stepCount: pickNumericMetadataValue(span.metadata, 'stepCount'),
+      toolCallCount: pickNumericMetadataValue(span.metadata, 'toolCallCount'),
+      toolEventCount: pickNumericMetadataValue(span.metadata, 'toolEventCount'),
+      toolResultCount: pickNumericMetadataValue(span.metadata, 'toolResultCount'),
+      toolErrorCount: pickNumericMetadataValue(span.metadata, 'toolErrorCount'),
+      toolPendingCount: pickNumericMetadataValue(span.metadata, 'toolPendingCount'),
+    }).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))
+  )
+}
+
+function buildBraintrustMetadata(span: RuntimeTraceSpan) {
+  const retryCount = pickNumericMetadataValue(span.metadata, 'retryCount')
+  const stepCount = pickNumericMetadataValue(span.metadata, 'stepCount')
+  const toolCallCount = pickNumericMetadataValue(span.metadata, 'toolCallCount')
+  const toolResultCount = pickNumericMetadataValue(span.metadata, 'toolResultCount')
+  const toolErrorCount = pickNumericMetadataValue(span.metadata, 'toolErrorCount')
+  const toolPendingCount = pickNumericMetadataValue(span.metadata, 'toolPendingCount')
+  const finishReason =
+    typeof span.metadata?.finishReason === 'string'
+      ? span.metadata.finishReason
+      : isRecord(span.output) && typeof span.output.finishReason === 'string'
+        ? span.output.finishReason
+        : null
+
+  return {
+    runtimeTraceVersion: span.version,
+    runtimeTraceKind: span.kind,
+    runtimeTraceStatus: span.status,
+    recordedAt: span.recordedAt,
+    conversationId: span.conversationId ?? null,
+    sessionId: span.sessionId ?? null,
+    appSessionId: span.appSessionId ?? null,
+    approvedAppId: span.approvedAppId ?? null,
+    runtimeAppId: span.runtimeAppId ?? null,
+    actor: span.actor,
+    state: span.state ?? null,
+    agentReturn: span.agentReturn ?? null,
+    model: span.model ?? null,
+    modelProvider: span.model?.provider ?? null,
+    modelId: span.model?.modelId ?? null,
+    finishReason,
+    retryCount: retryCount ?? null,
+    stepCount: stepCount ?? null,
+    toolCallCount: toolCallCount ?? null,
+    toolResultCount: toolResultCount ?? null,
+    toolErrorCount: toolErrorCount ?? null,
+    toolPendingCount: toolPendingCount ?? null,
+    metadata: span.metadata ?? null,
+    error: span.error ?? null,
+  }
+}
+
 function buildBraintrustSpanEvent(span: RuntimeTraceSpan) {
   const rowFields = buildBraintrustRowFields(span)
 
@@ -166,27 +242,8 @@ function buildBraintrustSpanEvent(span: RuntimeTraceSpan) {
     expected: rowFields.expected,
     tags: rowFields.tags,
     error: span.error?.message,
-    metadata: {
-      runtimeTraceVersion: span.version,
-      runtimeTraceKind: span.kind,
-      runtimeTraceStatus: span.status,
-      recordedAt: span.recordedAt,
-      conversationId: span.conversationId ?? null,
-      sessionId: span.sessionId ?? null,
-      appSessionId: span.appSessionId ?? null,
-      approvedAppId: span.approvedAppId ?? null,
-      runtimeAppId: span.runtimeAppId ?? null,
-      actor: span.actor,
-      state: span.state ?? null,
-      agentReturn: span.agentReturn ?? null,
-      model: span.model ?? null,
-      metadata: span.metadata ?? null,
-      error: span.error ?? null,
-    },
-    metrics: {
-      latencyMs: span.latencyMs,
-      recordedAtMs: new Date(span.recordedAt).getTime(),
-    },
+    metadata: buildBraintrustMetadata(span),
+    metrics: buildBraintrustMetrics(span),
   }
 }
 

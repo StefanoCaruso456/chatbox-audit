@@ -39,6 +39,21 @@ export function getSidebarAppRuntimeSnapshot(hostSessionId: string, runtimeAppId
   return getSessionBucket(hostSessionId)?.get(runtimeAppId) ?? null
 }
 
+export function getSidebarAppRuntimeSnapshotByAppSessionId(hostSessionId: string, appSessionId: string) {
+  const bucket = getSessionBucket(hostSessionId)
+  if (!bucket) {
+    return null
+  }
+
+  for (const snapshot of bucket.values()) {
+    if (snapshot.appSessionId === appSessionId) {
+      return snapshot
+    }
+  }
+
+  return null
+}
+
 export function clearSidebarAppRuntimeSnapshot(hostSessionId: string, runtimeAppId?: string) {
   if (!runtimeAppId) {
     sidebarRuntimeSnapshots.delete(hostSessionId)

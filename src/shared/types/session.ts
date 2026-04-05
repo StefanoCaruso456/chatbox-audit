@@ -187,11 +187,37 @@ export const MessageContentPartSchema = z.discriminatedUnion('type', [
 
 export const MessageContentPartsSchema = z.array(MessageContentPartSchema)
 
+export const StreamTextTraceStepSchema = z.object({
+  stepNumber: z.number().int().positive(),
+  finishReason: z.string().optional(),
+  rawFinishReason: z.string().optional(),
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  totalTokens: z.number().int().nonnegative().optional(),
+  reasoningTokens: z.number().int().nonnegative().optional(),
+  cachedInputTokens: z.number().int().nonnegative().optional(),
+  toolCallCount: z.number().int().nonnegative(),
+  toolResultCount: z.number().int().nonnegative(),
+  warningCount: z.number().int().nonnegative(),
+  textPreview: z.string().optional(),
+  reasoningPreview: z.string().optional(),
+  responseId: z.string().optional(),
+  responseModelId: z.string().optional(),
+  providerMetadata: JsonObjectSchema.optional(),
+})
+
+export const StreamTextTraceSchema = z.object({
+  stepCount: z.number().int().nonnegative().optional(),
+  providerMetadata: JsonObjectSchema.optional(),
+  steps: z.array(StreamTextTraceStepSchema).optional(),
+})
+
 export const StreamTextResultSchema = z.object({
   contentParts: MessageContentPartsSchema,
   reasoningContent: z.string().optional(),
   usage: z.custom<LanguageModelUsage>().optional(),
   finishReason: z.string().optional(),
+  trace: StreamTextTraceSchema.optional(),
 })
 
 // Tool and provider schemas
@@ -375,6 +401,8 @@ export type MessageEmbeddedAppBridge = NonNullable<z.infer<typeof MessageEmbedde
 export type MessageEmbeddedAppPart = z.infer<typeof MessageEmbeddedAppPartSchema>
 export type MessageContentParts = z.infer<typeof MessageContentPartsSchema>
 export type StreamTextResult = z.infer<typeof StreamTextResultSchema>
+export type StreamTextTrace = z.infer<typeof StreamTextTraceSchema>
+export type StreamTextTraceStep = z.infer<typeof StreamTextTraceStepSchema>
 export type ToolUseScope = z.infer<typeof ToolUseScopeSchema>
 export type ModelProvider = z.infer<typeof ModelProviderSchema>
 export type MessageStatus = z.infer<typeof MessageStatusSchema>

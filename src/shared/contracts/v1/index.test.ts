@@ -308,4 +308,21 @@ describe('RuntimeTraceSchema', () => {
       expect(result.errors.some((error) => error.includes('traceId'))).toBe(true)
     }
   })
+
+  it('accepts model-call spans with richer model usage telemetry', () => {
+    const modelSpan = exampleRuntimeTraceSpans.find((span) => span.kind === 'model-call')
+    expect(modelSpan).toBeDefined()
+    expect(() => RuntimeTraceSpanSchema.parse(modelSpan)).not.toThrow()
+    expect(modelSpan?.model).toMatchObject({
+      provider: 'openai',
+      modelId: 'gpt-5.1',
+      tokenCountInput: 812,
+      tokenCountOutput: 164,
+      totalTokens: 976,
+      reasoningTokens: 62,
+      cachedInputTokens: 320,
+      textOutputTokens: 102,
+      firstTokenLatencyMs: 380,
+    })
+  })
 })

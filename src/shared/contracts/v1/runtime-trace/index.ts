@@ -19,6 +19,10 @@ export const RuntimeTraceSpanKindSchema = z.enum([
   'state-selection',
   'agent-return',
   'coach-message',
+  'model-call',
+  'model-retry',
+  'model-step',
+  'tool-call',
 ])
 export type RuntimeTraceSpanKind = z.infer<typeof RuntimeTraceSpanKindSchema>
 
@@ -72,8 +76,13 @@ export const RuntimeTraceModelUsageSchema = z.object({
   tokenCountInput: z.number().int().nonnegative().optional(),
   tokenCountOutput: z.number().int().nonnegative().optional(),
   totalTokens: z.number().int().nonnegative().optional(),
+  reasoningTokens: z.number().int().nonnegative().optional(),
+  cachedInputTokens: z.number().int().nonnegative().optional(),
+  cacheWriteTokens: z.number().int().nonnegative().optional(),
+  textOutputTokens: z.number().int().nonnegative().optional(),
   costUsd: z.number().nonnegative().optional(),
   latencyMs: z.number().nonnegative().optional(),
+  firstTokenLatencyMs: z.number().nonnegative().optional(),
 })
 export type RuntimeTraceModelUsage = z.infer<typeof RuntimeTraceModelUsageSchema>
 
@@ -308,6 +317,67 @@ export const exampleRuntimeTraceSpans: RuntimeTraceSpan[] = [
     metadata: {
       fallbackSource: 'shared-chess-session',
       reason: 'sidebar move count newer than shared state',
+    },
+  }),
+  RuntimeTraceSpanSchema.parse({
+    version: 'v1',
+    traceId: 'trace.conversation.1.app-session.chess.1',
+    spanId: 'span.model-call.1',
+    parentSpanId: 'span.trace-root.conversation.1',
+    name: 'generate chess coaching response',
+    kind: 'model-call',
+    status: 'succeeded',
+    recordedAt: '2026-04-05T05:10:05.000Z',
+    startedAt: '2026-04-05T05:10:05.000Z',
+    endedAt: '2026-04-05T05:10:06.240Z',
+    latencyMs: 1240,
+    conversationId: 'conversation.1',
+    sessionId: 'session.1',
+    appSessionId: 'app-session.chess.1',
+    approvedAppId: 'chess-tutor',
+    runtimeAppId: 'chess.internal',
+    actor: {
+      layer: 'model',
+      source: 'session-generation',
+    },
+    input: {
+      userRequest: 'why did black play c6',
+      promptMessageCount: 6,
+      webBrowsingEnabled: false,
+    },
+    output: {
+      textPreview: 'Black played c6 to reinforce d5 and prepare ...',
+      finishReason: 'stop',
+      toolCallCount: 1,
+      toolResultCount: 1,
+    },
+    tags: ['model-call', 'model', 'chess-tutor', 'chess.internal', 'openai', 'succeeded'],
+    model: {
+      provider: 'openai',
+      modelId: 'gpt-5.1',
+      tokenCountInput: 812,
+      tokenCountOutput: 164,
+      totalTokens: 976,
+      reasoningTokens: 62,
+      cachedInputTokens: 320,
+      textOutputTokens: 102,
+      latencyMs: 1240,
+      firstTokenLatencyMs: 380,
+    },
+    metadata: {
+      finishReason: 'stop',
+      retryCount: 1,
+      stepCount: 2,
+      toolCallCount: 1,
+      toolResultCount: 1,
+      toolErrorCount: 0,
+      retries: [
+        {
+          attempt: 2,
+          maxAttempts: 3,
+          error: 'upstream 502',
+        },
+      ],
     },
   }),
 ]

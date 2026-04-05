@@ -164,4 +164,48 @@ describe('braintrust runtime telemetry', () => {
       }),
     })
   })
+
+  it('exports model usage, retry, and tool metrics into queryable Braintrust fields', async () => {
+    const modelSpan = exampleRuntimeTraceSpans.find((span) => span.kind === 'model-call')
+    if (!modelSpan) {
+      throw new Error('Missing model-call fixture for Braintrust tests.')
+    }
+
+    await exportRuntimeTraceSpansToBraintrust({
+      spans: [exampleRuntimeTraceSpans[0]!, modelSpan],
+      env: {
+        BRAINTRUST_API_KEY: 'test-api-key',
+      },
+    })
+
+    expect(mockStartSpan.mock.calls[1]?.[0]).toMatchObject({
+      event: expect.objectContaining({
+        metadata: expect.objectContaining({
+          modelProvider: 'openai',
+          modelId: 'gpt-5.1',
+          finishReason: 'stop',
+          retryCount: 1,
+          stepCount: 2,
+          toolCallCount: 1,
+          toolResultCount: 1,
+          toolErrorCount: 0,
+        }),
+        metrics: expect.objectContaining({
+          latencyMs: 1240,
+          firstTokenLatencyMs: 380,
+          tokenCountInput: 812,
+          tokenCountOutput: 164,
+          totalTokens: 976,
+          reasoningTokens: 62,
+          cachedInputTokens: 320,
+          textOutputTokens: 102,
+          retryCount: 1,
+          stepCount: 2,
+          toolCallCount: 1,
+          toolResultCount: 1,
+          toolErrorCount: 0,
+        }),
+      }),
+    })
+  })
 })
