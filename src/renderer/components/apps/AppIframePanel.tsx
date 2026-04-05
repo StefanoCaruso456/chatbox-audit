@@ -28,7 +28,7 @@ import {
   getSidebarAppRuntimeSnapshot,
   upsertSidebarAppRuntimeSnapshot,
 } from '@/stores/sidebarAppRuntimeStore'
-import { publishApprovedAppOpenedEvent } from '@/stores/approvedAppEventStore'
+import { publishApprovedAppOpenedEvent, publishApprovedAppStateObservedEvent } from '@/stores/approvedAppEventStore'
 import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
 import { isSidebarDirectIframeStateMessage } from './sidebarDirectIframeState'
@@ -59,6 +59,23 @@ function toJsonObject(value: unknown): JsonObject | undefined {
   }
 
   return undefined
+}
+
+function getChessObservedBoardStateKey(stateDigest: JsonObject | undefined) {
+  if (!stateDigest) {
+    return null
+  }
+
+  const fen = typeof stateDigest.fen === 'string' ? stateDigest.fen : null
+  const moveCount = typeof stateDigest.moveCount === 'number' ? stateDigest.moveCount : null
+  const lastUpdateSource =
+    typeof stateDigest.lastUpdateSource === 'string' ? stateDigest.lastUpdateSource : null
+
+  if (!fen || moveCount === null || lastUpdateSource !== 'manual-board-move') {
+    return null
+  }
+
+  return `${fen}::${moveCount}::${lastUpdateSource}`
 }
 
 function hasRenderableIframeContent(iframe: HTMLIFrameElement | null) {
@@ -230,6 +247,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const runtimeReplayTimersRef = useRef<number[]>([])
   const directCommandReplayTimersRef = useRef<number[]>([])
   const publishedOpenEventIdRef = useRef<string | null>(null)
+  const publishedObservedStateKeyRef = useRef<string | null>(null)
   const hasRuntimeResponseRef = useRef(false)
   const lastSidebarCommandToolCallIdRef = useRef<string | null>(null)
   const activeSidebarCommandRef = useRef<{ toolCallId: string; toolName: string } | null>(null)
@@ -301,6 +319,29 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         updatedAt: new Date().toISOString(),
         errorMessage: input.errorMessage,
       })
+
+      if (app.id !== 'chess-tutor') {
+        return
+      }
+
+      const observedStateKey = getChessObservedBoardStateKey(input.latestStateDigest)
+      if (!observedStateKey || publishedObservedStateKeyRef.current === observedStateKey) {
+        return
+      }
+
+      publishedObservedStateKeyRef.current = observedStateKey
+      publishApprovedAppStateObservedEvent({
+        eventId: `${currentSessionId}:${app.id}:${embeddedRuntime.appSessionId}:${observedStateKey}`,
+        sessionId: currentSessionId,
+        approvedAppId: app.id,
+        runtimeAppId,
+        appSessionId: embeddedRuntime.appSessionId,
+        conversationId: embeddedRuntime.conversationId,
+        summary: input.summary,
+        latestStateDigest: input.latestStateDigest,
+        availableToolNames: embeddedRuntime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
+        observedAt: new Date().toISOString(),
+      })
     },
     [app.experience, app.id, currentSessionId, embeddedRuntime, resolvedLaunchUrl, runtimeAppId]
   )
@@ -369,6 +410,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     runtimeBootstrapKeyRef.current = null
     runtimeInvocationKeyRef.current = null
     publishedOpenEventIdRef.current = null
+    publishedObservedStateKeyRef.current = null
     hasRuntimeResponseRef.current = false
     lastSidebarCommandToolCallIdRef.current = null
     activeSidebarCommandRef.current = null

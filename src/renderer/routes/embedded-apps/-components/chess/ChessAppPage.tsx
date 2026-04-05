@@ -37,6 +37,7 @@ function buildSidebarRuntimeSnapshot(chess: Chess, mode?: 'practice' | 'analysis
     turn: 'w' | 'b'
     moveCount: number
     lastMove?: string
+    lastUpdateSource?: string
     mode?: 'practice' | 'analysis'
   }
 } {
@@ -290,10 +291,11 @@ export function ChessAppPage() {
         state: {
           fen: sharedChessSnapshot.fen,
           turn: sharedChessSnapshot.turn,
-          moveCount: sharedChessSnapshot.moveCount,
-          ...(sharedChessSnapshot.lastMove !== 'No moves yet' ? { lastMove: sharedChessSnapshot.lastMove } : {}),
-          ...(sharedChessSnapshot.mode ? { mode: sharedChessSnapshot.mode } : {}),
-        },
+        moveCount: sharedChessSnapshot.moveCount,
+        ...(sharedChessSnapshot.lastMove !== 'No moves yet' ? { lastMove: sharedChessSnapshot.lastMove } : {}),
+        ...(sharedChessSnapshot.lastUpdateSource ? { lastUpdateSource: sharedChessSnapshot.lastUpdateSource } : {}),
+        ...(sharedChessSnapshot.mode ? { mode: sharedChessSnapshot.mode } : {}),
+      },
       }
     }
 

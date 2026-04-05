@@ -705,6 +705,45 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
   })
 
+  it('treats natural-language next-move questions as board analysis, not as SAN move execution', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.8.next-move-question',
+      appSessionId: 'app-session.sidebar.chess.8.next-move-question',
+      fen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+      moveCount: 2,
+      lastMove: 'c6',
+      status: 'active',
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.next-move-question',
+      userId: 'user.8.next-move-question',
+      userRequest: 'okay the other opponent when they moved what should be my next move',
+      requestMessageId: 'message.8.next-move-question',
+      previousMessages: [createMessage('assistant', 'Move played: d4. Black to move.')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      appSessionId: 'app-session.sidebar.chess.8.next-move-question',
+      turn: 'white',
+      lastMove: 'c6',
+      moveCount: 2,
+    })
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('White to move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+  })
+
   it('reads the current live chess position from the shared session when the sidebar snapshot is stale', async () => {
     upsertSidebarAppRuntimeSnapshot({
       hostSessionId: 'conversation.shared.live-board',

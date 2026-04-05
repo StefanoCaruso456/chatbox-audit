@@ -10,9 +10,9 @@ import {
 } from '@/packages/tutormeai-apps/orchestrator'
 import {
   publishApprovedAppOpenedEvent,
+  publishApprovedAppStateObservedEvent,
   resetApprovedAppOpenedEvents,
 } from '@/stores/approvedAppEventStore'
-import { applyChessSessionMove, initializeChessSession, resetChessSessions } from '@/stores/chessSessionStore'
 import ApprovedAppCoachController from './ApprovedAppCoachController'
 
 const { mockInsertMessage, mockScrollToBottom } = vi.hoisted(() => ({
@@ -31,7 +31,6 @@ vi.mock('@/stores/scrollActions', () => ({
 describe('ApprovedAppCoachController', () => {
   beforeEach(() => {
     resetApprovedAppOpenedEvents()
-    resetChessSessions()
     mockInsertMessage.mockReset()
     mockInsertMessage.mockResolvedValue(undefined)
     mockScrollToBottom.mockReset()
@@ -241,12 +240,6 @@ describe('ApprovedAppCoachController', () => {
   })
 
   it('inserts a proactive coach message after a manual board move changes the live chess session', async () => {
-    initializeChessSession({
-      conversationId: 'conversation.sidebar.chess-tutor',
-      appSessionId: 'app-session.sidebar.chess-tutor',
-      status: 'waiting-user',
-    })
-
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
@@ -280,11 +273,23 @@ describe('ApprovedAppCoachController', () => {
       expect(mockInsertMessage).toHaveBeenCalledTimes(1)
     })
 
-    applyChessSessionMove({
-      conversationId: 'conversation.sidebar.chess-tutor',
+    publishApprovedAppStateObservedEvent({
+      eventId: 'state.chess.observe.1',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
       appSessionId: 'app-session.sidebar.chess-tutor',
-      requestedMove: 'd2d4',
-      source: 'manual-board-move',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      summary: 'Played d4. Black to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+        turn: 'b',
+        moveCount: 1,
+        lastMove: 'd4',
+        lastUpdateSource: 'manual-board-move',
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      observedAt: '2026-04-05T03:04:05.000Z',
     })
 
     await waitFor(() => {
@@ -302,12 +307,6 @@ describe('ApprovedAppCoachController', () => {
   })
 
   it('does not insert a proactive coach message for chat-executed tool moves', async () => {
-    initializeChessSession({
-      conversationId: 'conversation.sidebar.chess-tutor',
-      appSessionId: 'app-session.sidebar.chess-tutor',
-      status: 'waiting-user',
-    })
-
     render(
       <ApprovedAppCoachController
         sessionId="session.test"
@@ -341,11 +340,23 @@ describe('ApprovedAppCoachController', () => {
       expect(mockInsertMessage).toHaveBeenCalledTimes(1)
     })
 
-    applyChessSessionMove({
-      conversationId: 'conversation.sidebar.chess-tutor',
+    publishApprovedAppStateObservedEvent({
+      eventId: 'state.chess.observe.2',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
       appSessionId: 'app-session.sidebar.chess-tutor',
-      requestedMove: 'd2d4',
-      source: 'tool-move',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      summary: 'Played d4. Black to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+        turn: 'b',
+        moveCount: 1,
+        lastMove: 'd4',
+        lastUpdateSource: 'tool-move',
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      observedAt: '2026-04-05T03:05:05.000Z',
     })
 
     await Promise.resolve()

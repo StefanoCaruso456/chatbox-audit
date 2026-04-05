@@ -326,6 +326,65 @@ describe('AppIframePanel', () => {
     })
   })
 
+  it('publishes a chess board-changed event when a manual board move updates the live runtime state', async () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess Tutor app panel')
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    const bootstrapMessage = postMessage.mock.calls[0]?.[0]
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            version: 'v1',
+            source: 'app',
+            type: 'app.state',
+            messageId: 'app.state.manual-board-move',
+            conversationId: bootstrapMessage.conversationId,
+            appSessionId: bootstrapMessage.appSessionId,
+            appId: 'chess.internal',
+            sequence: 4,
+            sentAt: new Date().toISOString(),
+            security: bootstrapMessage.security,
+            payload: {
+              status: 'active',
+              summary: 'Played c6. White to move.',
+              state: {
+                fen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+                turn: 'w',
+                moveCount: 2,
+                lastMove: 'c6',
+                lastUpdateSource: 'manual-board-move',
+              },
+            },
+          },
+        })
+      )
+    })
+
+    expect(approvedAppEventStore.getState().latestObservedStateEvent).toMatchObject({
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: bootstrapMessage.appSessionId,
+      conversationId: bootstrapMessage.conversationId,
+      summary: 'Played c6. White to move.',
+      latestStateDigest: expect.objectContaining({
+        moveCount: 2,
+        lastMove: 'c6',
+        lastUpdateSource: 'manual-board-move',
+      }),
+    })
+  })
+
   it('preserves the live chess board snapshot after a recoverable move error instead of blocking the panel', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 

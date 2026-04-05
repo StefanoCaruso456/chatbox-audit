@@ -18,7 +18,7 @@ export type ParsedChessMove = ParsedCoordinateMove | ParsedSanMove
 const COORDINATE_MOVE_PATTERN = /\b(?:from\s+)?([a-h][1-8])\s*(?:to|-)\s*([a-h][1-8])(?:\s*=?\s*([qrbnQRBN]))?\b/iu
 const COMPACT_COORDINATE_MOVE_PATTERN = /\b([a-h][1-8])([a-h][1-8])([qrbnQRBN]?)\b/iu
 const SAN_MOVE_PATTERN =
-  /\b(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|[a-h]x[a-h][1-8](?:=[QRBN])?[+#]?|[KQRBN][a-h]?[1-8]?[+#]?|[a-h][1-8])\b/giu
+  /\b(O-O-O|O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?|[a-h]x[a-h][1-8](?:=[QRBN])?[+#]?|[a-h][1-8])\b/giu
 
 function normalizeComparableSanMove(move: string) {
   return move.replace(/0/g, 'O').replace(/\s+/g, '').toLowerCase()
