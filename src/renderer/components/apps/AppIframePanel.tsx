@@ -28,6 +28,7 @@ import {
   getSidebarAppRuntimeSnapshot,
   upsertSidebarAppRuntimeSnapshot,
 } from '@/stores/sidebarAppRuntimeStore'
+import { publishApprovedAppOpenedEvent } from '@/stores/approvedAppEventStore'
 import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
 import { isSidebarDirectIframeStateMessage } from './sidebarDirectIframeState'
@@ -228,6 +229,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const runtimeInvocationKeyRef = useRef<string | null>(null)
   const runtimeReplayTimersRef = useRef<number[]>([])
   const directCommandReplayTimersRef = useRef<number[]>([])
+  const publishedOpenEventIdRef = useRef<string | null>(null)
   const hasRuntimeResponseRef = useRef(false)
   const lastSidebarCommandToolCallIdRef = useRef<string | null>(null)
   const activeSidebarCommandRef = useRef<{ toolCallId: string; toolName: string } | null>(null)
@@ -366,6 +368,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     runtimeSequenceRef.current = 0
     runtimeBootstrapKeyRef.current = null
     runtimeInvocationKeyRef.current = null
+    publishedOpenEventIdRef.current = null
     hasRuntimeResponseRef.current = false
     lastSidebarCommandToolCallIdRef.current = null
     activeSidebarCommandRef.current = null
@@ -399,6 +402,36 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       errorMessage: embeddedRuntime.completion?.errorMessage,
     })
   }, [app.experience, app.name, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot])
+
+  useEffect(() => {
+    if (app.experience !== 'tutormeai-runtime' || !currentSessionId || !embeddedRuntime) {
+      return
+    }
+
+    const eventId = `${currentSessionId}:${app.id}:${embeddedRuntime.appSessionId}:${launchSessionKey}:${reloadNonce}`
+    if (publishedOpenEventIdRef.current === eventId) {
+      return
+    }
+
+    publishedOpenEventIdRef.current = eventId
+    publishApprovedAppOpenedEvent({
+      eventId,
+      sessionId: currentSessionId,
+      approvedAppId: app.id,
+      runtimeAppId,
+      appSessionId: embeddedRuntime.appSessionId,
+      conversationId: embeddedRuntime.conversationId,
+      summary:
+        embeddedRuntime.completion?.summary ??
+        (embeddedRuntime.pendingInvocation
+          ? `${app.name} is preparing ${embeddedRuntime.pendingInvocation.toolName}.`
+          : `${app.name} is open in the right sidebar.`),
+      latestStateDigest:
+        toJsonObject(embeddedRuntime.completion?.resultPayload) ?? embeddedRuntime.bootstrap?.initialState,
+      availableToolNames: embeddedRuntime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
+      openedAt: new Date().toISOString(),
+    })
+  }, [app.experience, app.id, app.name, currentSessionId, embeddedRuntime, launchSessionKey, reloadNonce, runtimeAppId])
 
   useEffect(() => {
     if (app.experience !== 'tutormeai-runtime' || !currentSessionId) {

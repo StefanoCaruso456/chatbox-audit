@@ -1724,6 +1724,50 @@ function buildChessLaunchCopy(result: ChessBoardStateToolResult) {
   return `Chess Tutor is on the board. Ready to play some chess? I’d start with ${recommendedMove} because it ${reason}. Tap Play ${recommendedMove} and I’ll coach you move by move.`
 }
 
+export function buildChessApprovedAppKickoffToolCallId(eventId: string) {
+  const normalizedEventId = eventId.replace(/[^a-zA-Z0-9._-]+/g, '-')
+  return `tool-call.chess.get-board-state.kickoff.${normalizedEventId}`
+}
+
+export function buildChessApprovedAppKickoffMessage(input: {
+  eventId: string
+  appSessionId: string
+  summary: string
+  latestStateDigest?: JsonObject
+  availableToolNames: string[]
+}): Message | null {
+  const result = buildChessBoardStateResult({
+    appSessionId: input.appSessionId,
+    summary: input.summary,
+    latestStateDigest: input.latestStateDigest,
+    availableToolNames: input.availableToolNames,
+  })
+  if (!result) {
+    return null
+  }
+
+  const message = createMessage('assistant', buildChessLaunchCopy(result))
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: buildChessApprovedAppKickoffToolCallId(input.eventId),
+      toolName: exampleChessGetBoardStateToolSchema.name,
+      args: {
+        scope: 'current-position',
+      },
+      result,
+    },
+    {
+      type: 'text',
+      text: buildChessLaunchCopy(result),
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
 function buildEmbeddedAppMessagePart(input: {
   app: AppRegistryRecord
   conversationId: string

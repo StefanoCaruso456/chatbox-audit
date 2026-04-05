@@ -8,6 +8,7 @@ import { getDefaultStore } from 'jotai'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { currentSessionIdAtom } from '@/stores/atoms'
+import { approvedAppEventStore, resetApprovedAppOpenedEvents } from '@/stores/approvedAppEventStore'
 import {
   enqueueSidebarAppRuntimeCommand,
   resetSidebarAppRuntimeCommands,
@@ -148,6 +149,7 @@ beforeAll(() => {
 beforeEach(() => {
   mockProbeForNewerBuild.mockResolvedValue(false)
   getDefaultStore().set(currentSessionIdAtom, 'session.test')
+  resetApprovedAppOpenedEvents()
   resetSidebarAppRuntimeSnapshots()
   resetSidebarAppRuntimeCommands()
   uiStore.setState({
@@ -158,6 +160,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
+  resetApprovedAppOpenedEvents()
   resetSidebarAppRuntimeSnapshots()
   resetSidebarAppRuntimeCommands()
   uiStore.setState(initialUiState)
@@ -306,6 +309,20 @@ describe('AppIframePanel', () => {
       approvedAppId: 'chess-tutor',
       appSessionId: bootstrapMessage.appSessionId,
       status: 'active',
+    })
+  })
+
+  it('publishes an approved-app-opened event when Chess Tutor opens in the sidebar', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    renderPanel(<AppIframePanel />)
+
+    expect(approvedAppEventStore.getState().latestOpenedEvent).toMatchObject({
+      sessionId: 'session.test',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess-tutor',
+      conversationId: 'conversation.sidebar.chess-tutor',
     })
   })
 
