@@ -45,6 +45,14 @@ type SelectionState = {
   from: Square | null
 }
 
+function shouldShowVendorReferenceByDefault() {
+  if (typeof window === 'undefined') {
+    return true
+  }
+
+  return new URLSearchParams(window.location.search).get('chatbridge_panel') !== '1'
+}
+
 const CHESS_COM_APP_ID = 'chess-com'
 const CHESS_COM_RUNTIME_APP_ID = 'chess.com.workspace'
 const DEFAULT_EMBED_URL = 'https://www.chess.com/emboard?id=10477955&_height=640'
@@ -292,9 +300,12 @@ export function ChessComAppPage() {
   const [savedEmbedUrl, setSavedEmbedUrl] = useState(
     () => getApprovedAppLaunchOverride(CHESS_COM_APP_ID) || defaultEmbedUrl
   )
+  const [showVendorReference, setShowVendorReference] = useState(() => shouldShowVendorReferenceByDefault())
   const [embedUrlError, setEmbedUrlError] = useState<string | null>(null)
   const [importValue, setImportValue] = useState('')
-  const [vendorFrameState, setVendorFrameState] = useState<'loading' | 'ready' | 'blocked'>('loading')
+  const [vendorFrameState, setVendorFrameState] = useState<'idle' | 'loading' | 'ready' | 'blocked'>(() =>
+    shouldShowVendorReferenceByDefault() ? 'loading' : 'idle'
+  )
   const handledToolCallIdsRef = useRef<Set<string>>(new Set())
 
   const sharedChessSnapshot = useSharedChessSessionSnapshot(
@@ -565,16 +576,24 @@ export function ChessComAppPage() {
     setSavedEmbedUrl(normalized)
     setDraftEmbedUrl(normalized)
     setEmbedUrlError(null)
-    setVendorFrameState('loading')
-  }, [approvedApp?.name, defaultEmbedUrl, draftEmbedUrl])
+    setVendorFrameState(showVendorReference ? 'loading' : 'idle')
+  }, [approvedApp?.name, defaultEmbedUrl, draftEmbedUrl, showVendorReference])
 
   const handleResetEmbedUrl = useCallback(() => {
     persistApprovedAppLaunchOverride(CHESS_COM_APP_ID, null)
     setSavedEmbedUrl(defaultEmbedUrl)
     setDraftEmbedUrl(defaultEmbedUrl)
     setEmbedUrlError(null)
-    setVendorFrameState('loading')
-  }, [defaultEmbedUrl])
+    setVendorFrameState(showVendorReference ? 'loading' : 'idle')
+  }, [defaultEmbedUrl, showVendorReference])
+
+  const handleToggleVendorReference = useCallback(() => {
+    setShowVendorReference((current) => {
+      const next = !current
+      setVendorFrameState(next ? 'loading' : 'idle')
+      return next
+    })
+  }, [])
 
   const handleImportPosition = useCallback(() => {
     const imported = importChessComPosition(importValue)
@@ -697,7 +716,7 @@ export function ChessComAppPage() {
               Chess.com Workspace
             </Title>
             <Text size="sm" c="rgba(226,232,240,0.72)">
-              Vendor board plus ChatBridge mirrored analysis board
+              ChatBridge mirrored board with optional Chess.com reference board
             </Text>
           </div>
           <Badge color={chess.isGameOver() ? 'teal' : 'blue'} variant="light">
@@ -706,8 +725,8 @@ export function ChessComAppPage() {
         </Group>
 
         <Alert color="blue" variant="light">
-          The Chess.com iframe is a visual reference surface. Chat, move execution, and board memory run against the
-          mirrored board below.
+          The mirrored ChatBridge board is the live surface for chat memory, move execution, and board analysis.
+          Chess.com stays as an optional visual reference board.
         </Alert>
 
         {feedback ? (
@@ -715,147 +734,6 @@ export function ChessComAppPage() {
             {feedback}
           </Alert>
         ) : null}
-
-        <Paper
-          withBorder
-          radius="xl"
-          p="sm"
-          style={{
-            background: 'rgba(15, 23, 42, 0.74)',
-            borderColor: 'rgba(148, 163, 184, 0.18)',
-          }}
-        >
-          <Stack gap="sm">
-            <Group justify="space-between" align="center">
-              <div>
-                <Text size="sm" fw={700} c="white">
-                  Chess.com embed
-                </Text>
-                <Text size="xs" c="rgba(226,232,240,0.7)">
-                  Saved emboard URL: {embedUrl}
-                </Text>
-              </div>
-              <Badge
-                variant="light"
-                color={vendorFrameState === 'ready' ? 'green' : vendorFrameState === 'blocked' ? 'red' : 'blue'}
-              >
-                {vendorFrameState === 'ready'
-                  ? 'Embed ready'
-                  : vendorFrameState === 'blocked'
-                    ? 'Embed blocked'
-                    : 'Loading embed'}
-              </Badge>
-            </Group>
-            <Box className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[#0b1120]">
-              <iframe
-                src={embedUrl}
-                title="Chess.com reference board"
-                className="h-[20rem] w-full border-0 bg-white"
-                sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
-                referrerPolicy={getPreviewReferrerPolicy({ id: CHESS_COM_APP_ID })}
-                onLoad={() => setVendorFrameState('ready')}
-                onError={() => setVendorFrameState('blocked')}
-              />
-              {vendorFrameState !== 'ready' ? (
-                <Box
-                  className="absolute inset-0 flex items-center justify-center px-4"
-                  style={{
-                    zIndex: 1,
-                    background:
-                      vendorFrameState === 'blocked'
-                        ? 'linear-gradient(180deg, rgba(127,29,29,0.22) 0%, rgba(11,17,32,0.94) 100%)'
-                        : 'linear-gradient(180deg, rgba(15,23,42,0.78) 0%, rgba(11,17,32,0.94) 100%)',
-                    backdropFilter: 'blur(3px)',
-                  }}
-                >
-                  <Stack gap="xs" align="center" maw={360}>
-                    {vendorFrameState === 'loading' ? <Loader size="sm" color="blue" /> : null}
-                    <Text size="sm" fw={700} c="white" ta="center">
-                      {vendorFrameState === 'blocked'
-                        ? 'Chess.com embed unavailable'
-                        : 'Loading Chess.com reference board'}
-                    </Text>
-                    <Text size="xs" c="rgba(226,232,240,0.78)" ta="center">
-                      {vendorFrameState === 'blocked'
-                        ? 'The vendor board did not finish loading in this browser context. The mirrored ChatBridge board below still works for chat-driven moves and analysis.'
-                        : 'The vendor board can take a moment to appear. The mirrored ChatBridge board below is still the source of truth for chat memory and move execution.'}
-                    </Text>
-                  </Stack>
-                </Box>
-              ) : null}
-            </Box>
-            {vendorFrameState === 'blocked' ? (
-              <Text size="xs" c="rgba(248,113,113,0.88)">
-                Chess.com blocked this embed URL. Save a valid Chess.com `emboard` URL to keep the vendor board visible.
-              </Text>
-            ) : null}
-          </Stack>
-        </Paper>
-
-        <Paper
-          withBorder
-          radius="xl"
-          p="sm"
-          style={{
-            background: 'rgba(15, 23, 42, 0.64)',
-            borderColor: 'rgba(148, 163, 184, 0.18)',
-          }}
-        >
-          <Stack gap="sm">
-            <Text size="sm" fw={700} c="white">
-              Embed configuration
-            </Text>
-            <TextInput
-              label={approvedApp?.integrationConfig?.launchUrlLabel ?? 'Chess.com emboard URL'}
-              placeholder={approvedApp?.integrationConfig?.launchUrlPlaceholder ?? DEFAULT_EMBED_URL}
-              value={draftEmbedUrl}
-              onChange={(event) => setDraftEmbedUrl(event.currentTarget.value)}
-              error={embedUrlError}
-            />
-            <Group gap="xs">
-              <Button size="xs" onClick={handleSaveEmbedUrl}>
-                Save embed URL
-              </Button>
-              <Button size="xs" variant="subtle" color="gray" onClick={handleResetEmbedUrl}>
-                Reset
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
-
-        <Paper
-          withBorder
-          radius="xl"
-          p="sm"
-          style={{
-            background: 'rgba(15, 23, 42, 0.64)',
-            borderColor: 'rgba(148, 163, 184, 0.18)',
-          }}
-        >
-          <Stack gap="sm">
-            <Text size="sm" fw={700} c="white">
-              Import a position into the mirrored board
-            </Text>
-            <Text size="sm" c="rgba(226,232,240,0.72)">
-              Paste a FEN or PGN from Chess.com. Chat will analyze and manipulate the mirrored board state from there.
-            </Text>
-            <Textarea
-              autosize
-              minRows={4}
-              value={importValue}
-              onChange={(event) => setImportValue(event.currentTarget.value)}
-              placeholder="Paste FEN or PGN here"
-            />
-            <Group gap="xs">
-              <Button size="xs" onClick={handleImportPosition}>
-                Import position
-              </Button>
-              <Button size="xs" variant="subtle" color="gray" onClick={handleResetMirrorBoard}>
-                Reset mirrored board
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
 
         <Paper
           withBorder
@@ -991,6 +869,178 @@ export function ChessComAppPage() {
                 Legal destinations: {selectableMoves.map((move) => move.square).join(', ')}
               </Text>
             ) : null}
+          </Stack>
+        </Paper>
+
+        <Paper
+          withBorder
+          radius="xl"
+          p="sm"
+          style={{
+            background: 'rgba(15, 23, 42, 0.64)',
+            borderColor: 'rgba(148, 163, 184, 0.18)',
+          }}
+        >
+          <Stack gap="sm">
+            <Text size="sm" fw={700} c="white">
+              Import a position into the mirrored board
+            </Text>
+            <Text size="sm" c="rgba(226,232,240,0.72)">
+              Paste a FEN or PGN from Chess.com. Chat will analyze and manipulate the mirrored board state from there.
+            </Text>
+            <Textarea
+              autosize
+              minRows={4}
+              value={importValue}
+              onChange={(event) => setImportValue(event.currentTarget.value)}
+              placeholder="Paste FEN or PGN here"
+            />
+            <Group gap="xs">
+              <Button size="xs" onClick={handleImportPosition}>
+                Import position
+              </Button>
+              <Button size="xs" variant="subtle" color="gray" onClick={handleResetMirrorBoard}>
+                Reset mirrored board
+              </Button>
+            </Group>
+          </Stack>
+        </Paper>
+
+        <Paper
+          withBorder
+          radius="xl"
+          p="sm"
+          style={{
+            background: 'rgba(15, 23, 42, 0.74)',
+            borderColor: 'rgba(148, 163, 184, 0.18)',
+          }}
+        >
+          <Stack gap="sm">
+            <Group justify="space-between" align="center">
+              <div>
+                <Text size="sm" fw={700} c="white">
+                  Chess.com reference board
+                </Text>
+                <Text size="xs" c="rgba(226,232,240,0.7)">
+                  Optional vendor board for visual comparison only
+                </Text>
+              </div>
+              <Badge
+                variant="light"
+                color={
+                  !showVendorReference || vendorFrameState === 'idle'
+                    ? 'gray'
+                    : vendorFrameState === 'ready'
+                      ? 'green'
+                      : vendorFrameState === 'blocked'
+                        ? 'red'
+                        : 'blue'
+                }
+              >
+                {!showVendorReference || vendorFrameState === 'idle'
+                  ? 'Reference hidden'
+                  : vendorFrameState === 'ready'
+                    ? 'Embed ready'
+                    : vendorFrameState === 'blocked'
+                      ? 'Embed blocked'
+                      : 'Loading embed'}
+              </Badge>
+            </Group>
+
+            <Text size="sm" c="rgba(226,232,240,0.72)">
+              This vendor iframe is less reliable than the mirrored ChatBridge board. Use it as a reference surface, not
+              the primary board for chat-driven play.
+            </Text>
+
+            <Group gap="xs">
+              <Button
+                size="xs"
+                variant={showVendorReference ? 'light' : 'filled'}
+                onClick={handleToggleVendorReference}
+              >
+                {showVendorReference ? 'Hide reference board' : 'Show reference board'}
+              </Button>
+            </Group>
+
+            {showVendorReference ? (
+              <>
+                <Box className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[#0b1120]">
+                  <iframe
+                    src={embedUrl}
+                    title="Chess.com reference board"
+                    className="h-[20rem] w-full border-0 bg-white"
+                    sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+                    referrerPolicy={getPreviewReferrerPolicy({ id: CHESS_COM_APP_ID })}
+                    onLoad={() => setVendorFrameState('ready')}
+                    onError={() => setVendorFrameState('blocked')}
+                  />
+                  {vendorFrameState !== 'ready' ? (
+                    <Box
+                      className="absolute inset-0 flex items-center justify-center px-4"
+                      style={{
+                        zIndex: 1,
+                        background:
+                          vendorFrameState === 'blocked'
+                            ? 'linear-gradient(180deg, rgba(127,29,29,0.22) 0%, rgba(11,17,32,0.94) 100%)'
+                            : 'linear-gradient(180deg, rgba(15,23,42,0.78) 0%, rgba(11,17,32,0.94) 100%)',
+                        backdropFilter: 'blur(3px)',
+                      }}
+                    >
+                      <Stack gap="xs" align="center" maw={360}>
+                        {vendorFrameState === 'loading' ? <Loader size="sm" color="blue" /> : null}
+                        <Text size="sm" fw={700} c="white" ta="center">
+                          {vendorFrameState === 'blocked'
+                            ? 'Chess.com embed unavailable'
+                            : 'Loading Chess.com reference board'}
+                        </Text>
+                        <Text size="xs" c="rgba(226,232,240,0.78)" ta="center">
+                          {vendorFrameState === 'blocked'
+                            ? 'The vendor board did not finish loading in this browser context. The mirrored ChatBridge board above still works for chat-driven moves and analysis.'
+                            : 'The vendor board can take a moment to appear. The mirrored ChatBridge board above remains the source of truth for chat memory and move execution.'}
+                        </Text>
+                      </Stack>
+                    </Box>
+                  ) : null}
+                </Box>
+                {vendorFrameState === 'blocked' ? (
+                  <Text size="xs" c="rgba(248,113,113,0.88)">
+                    Chess.com blocked this embed URL. Save a valid Chess.com `emboard` URL to keep the reference board
+                    visible.
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </Stack>
+        </Paper>
+
+        <Paper
+          withBorder
+          radius="xl"
+          p="sm"
+          style={{
+            background: 'rgba(15, 23, 42, 0.64)',
+            borderColor: 'rgba(148, 163, 184, 0.18)',
+          }}
+        >
+          <Stack gap="sm">
+            <Text size="sm" fw={700} c="white">
+              Reference board configuration
+            </Text>
+            <TextInput
+              label={approvedApp?.integrationConfig?.launchUrlLabel ?? 'Chess.com emboard URL'}
+              placeholder={approvedApp?.integrationConfig?.launchUrlPlaceholder ?? DEFAULT_EMBED_URL}
+              value={draftEmbedUrl}
+              onChange={(event) => setDraftEmbedUrl(event.currentTarget.value)}
+              error={embedUrlError}
+            />
+            <Group gap="xs">
+              <Button size="xs" onClick={handleSaveEmbedUrl}>
+                Save embed URL
+              </Button>
+              <Button size="xs" variant="subtle" color="gray" onClick={handleResetEmbedUrl}>
+                Reset
+              </Button>
+            </Group>
           </Stack>
         </Paper>
       </Stack>
