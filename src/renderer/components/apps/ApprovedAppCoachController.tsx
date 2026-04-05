@@ -1,5 +1,5 @@
 import type { Session } from '@shared/types'
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   buildChessApprovedAppKickoffMessage,
   buildChessApprovedAppKickoffToolCallId,
@@ -8,7 +8,6 @@ import {
 } from '@/packages/tutormeai-apps/orchestrator'
 import * as scrollActions from '@/stores/scrollActions'
 import { useApprovedAppEventStore } from '@/stores/approvedAppEventStore'
-import { getChessSessionSnapshot, subscribeChessSession } from '@/stores/chessSessionStore'
 import { insertMessage } from '@/stores/session/messages'
 import { getAllMessageList } from '@/stores/sessionHelpers'
 
@@ -51,30 +50,19 @@ function sessionHasActiveChessRuntimeMessage(session: Session) {
 
 export default function ApprovedAppCoachController({ sessionId, session }: ApprovedAppCoachControllerProps) {
   const latestOpenedEvent = useApprovedAppEventStore((state) => state.latestOpenedEvent)
+  const latestObservedStateEvent = useApprovedAppEventStore((state) => state.latestObservedStateEvent)
   const handledKickoffAppSessionIdsRef = useRef<Set<string>>(new Set())
   const handledObservedBoardKeysRef = useRef<Set<string>>(new Set())
   const activeChessEvent =
     latestOpenedEvent && latestOpenedEvent.sessionId === sessionId && latestOpenedEvent.approvedAppId === 'chess-tutor'
       ? latestOpenedEvent
       : null
-
-  const activeChessSnapshot = useSyncExternalStore(
-    (listener) => {
-      if (!activeChessEvent) {
-        return () => {}
-      }
-
-      return subscribeChessSession(activeChessEvent.conversationId, activeChessEvent.appSessionId, listener)
-    },
-    () => {
-      if (!activeChessEvent) {
-        return null
-      }
-
-      return getChessSessionSnapshot(activeChessEvent.conversationId, activeChessEvent.appSessionId)
-    },
-    () => null
-  )
+  const activeChessObservedStateEvent =
+    latestObservedStateEvent &&
+    latestObservedStateEvent.sessionId === sessionId &&
+    latestObservedStateEvent.approvedAppId === 'chess-tutor'
+      ? latestObservedStateEvent
+      : null
 
   useEffect(() => {
     if (!activeChessEvent) {
@@ -117,37 +105,37 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
   }, [activeChessEvent, session, sessionId])
 
   useEffect(() => {
-    if (!activeChessEvent || !activeChessSnapshot) {
+    if (!activeChessObservedStateEvent) {
       return
     }
 
-    if (activeChessSnapshot.lastUpdateSource !== 'manual-board-move' || activeChessSnapshot.moveCount === 0) {
+    const observedStateDigest = activeChessObservedStateEvent.latestStateDigest
+    const fen = typeof observedStateDigest?.fen === 'string' ? observedStateDigest.fen : null
+    const moveCount =
+      typeof observedStateDigest?.moveCount === 'number' ? observedStateDigest.moveCount : null
+    const lastUpdateSource =
+      typeof observedStateDigest?.lastUpdateSource === 'string' ? observedStateDigest.lastUpdateSource : null
+
+    if (!fen || moveCount === null || moveCount === 0 || lastUpdateSource !== 'manual-board-move') {
       return
     }
 
-    const observedKey = `${activeChessEvent.appSessionId}:${activeChessSnapshot.moveCount}:${activeChessSnapshot.fen}`
+    const observedKey = `${activeChessObservedStateEvent.appSessionId}:${moveCount}:${fen}`
     if (handledObservedBoardKeysRef.current.has(observedKey)) {
       return
     }
 
-    if (sessionAlreadyHasObservedBoardMessage(session, activeChessEvent.appSessionId, activeChessSnapshot.moveCount)) {
+    if (sessionAlreadyHasObservedBoardMessage(session, activeChessObservedStateEvent.appSessionId, moveCount)) {
       handledObservedBoardKeysRef.current.add(observedKey)
       return
     }
 
     handledObservedBoardKeysRef.current.add(observedKey)
     const observedMessage = buildChessObservedBoardStateMessage({
-      appSessionId: activeChessEvent.appSessionId,
-      summary: activeChessSnapshot.summary,
-      latestStateDigest: {
-        fen: activeChessSnapshot.fen,
-        turn: activeChessSnapshot.turn,
-        moveCount: activeChessSnapshot.moveCount,
-        lastMove: activeChessSnapshot.lastMove,
-        lastUpdateSource: activeChessSnapshot.lastUpdateSource,
-        ...(activeChessSnapshot.mode ? { mode: activeChessSnapshot.mode } : {}),
-      },
-      availableToolNames: activeChessEvent.availableToolNames,
+      appSessionId: activeChessObservedStateEvent.appSessionId,
+      summary: activeChessObservedStateEvent.summary,
+      latestStateDigest: observedStateDigest,
+      availableToolNames: activeChessObservedStateEvent.availableToolNames,
     })
     if (!observedMessage) {
       handledObservedBoardKeysRef.current.delete(observedKey)
@@ -161,7 +149,7 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
       .catch(() => {
         handledObservedBoardKeysRef.current.delete(observedKey)
       })
-  }, [activeChessEvent, activeChessSnapshot, session, sessionId])
+  }, [activeChessObservedStateEvent, session, sessionId])
 
   return null
 }
