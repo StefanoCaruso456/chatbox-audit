@@ -139,6 +139,19 @@ describe('AuthApi', () => {
     expect(callbackResponse.status).toBe(200)
     expect(callbackBody.ok).toBe(true)
     expect(callbackBody.data.connection.status).toBe('connected')
+
+    const lookupResponse = await api.getOAuthConnection(
+      new Request('https://railway.local/api/auth/oauth?userId=teacher.user&appId=planner.oauth&provider=planner-cloud')
+    )
+
+    const lookupBody = await readJson(lookupResponse)
+    expect(lookupResponse.status).toBe(200)
+    expect(lookupBody.ok).toBe(true)
+    expect(lookupBody.data.connection.hasAccessToken).toBe(true)
+    expect(lookupBody.data.connection.hasRefreshToken).toBe(true)
+    expect(lookupBody.data.connection.accessTokenCiphertext).toBeUndefined()
+    expect(lookupBody.data.connection.refreshTokenCiphertext).toBeUndefined()
+    expect(lookupBody.data.connection.authorizationUrl).toBeUndefined()
   })
 
   it('returns a readable error when an OAuth adapter is not configured', async () => {
