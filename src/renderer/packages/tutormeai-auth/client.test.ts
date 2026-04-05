@@ -233,6 +233,19 @@ describe('TutorMeAI auth client helpers', () => {
         students: ['student.user'],
       })
     ).toBe(true)
+
+    expect(
+      isTutorMeAIProfileComplete({
+        userId: 'teacher.user',
+        email: 'teacher@example.com',
+        username: 'teacher.demo',
+        displayName: 'Teacher Demo',
+        role: 'teacher',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+        students: undefined as unknown as string[],
+      })
+    ).toBe(false)
   })
 
   it('revokes the TutorMeAI platform session during logout', async () => {

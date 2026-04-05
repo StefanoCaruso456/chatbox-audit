@@ -318,11 +318,12 @@ export function isTutorMeAIPlatformCallbackMessage(
 }
 
 export function isTutorMeAIProfileComplete(user: TutorMeAIPlatformUser | null | undefined) {
+  const assignedStudents = Array.isArray(user?.students) ? user.students : []
   return Boolean(
     user?.username &&
       user?.role &&
       user?.onboardingCompletedAt &&
-      (!isTutorMeAIReviewerRole(user.role) || user.students.length > 0)
+      (!isTutorMeAIReviewerRole(user.role) || assignedStudents.length > 0)
   )
 }
 

@@ -193,4 +193,71 @@ describe('TutorMeAIAuthGate', () => {
       expect(screen.getByText('Authenticated content')).toBeTruthy()
     })
   })
+
+  it('does not crash when an older cached TutorMeAI user is missing the students field', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            data: {
+              user: {
+                userId: 'teacher.user',
+                email: 'teacher@example.com',
+                username: 'teacher.demo',
+                displayName: 'Teacher Demo',
+                role: 'teacher',
+                pictureUrl: null,
+                onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+                students: [],
+              },
+              session: {
+                platformSessionId: 'platform-session.demo',
+                provider: 'google',
+                status: 'active',
+                sessionExpiresAt: '2026-04-05T04:00:00.000Z',
+                refreshExpiresAt: '2026-05-05T04:00:00.000Z',
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          }
+        )
+      })
+    )
+
+    tutorMeAIAuthStore.setState({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        userId: 'teacher.user',
+        email: 'teacher@example.com',
+        username: 'teacher.demo',
+        displayName: 'Teacher Demo',
+        role: 'teacher',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T04:05:00.000Z',
+      } as never,
+      status: 'authenticated',
+      error: null,
+      hasHydrated: true,
+    })
+
+    render(
+      <MantineProvider>
+        <TutorMeAIAuthGate>
+          <div>Authenticated content</div>
+        </TutorMeAIAuthGate>
+      </MantineProvider>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/complete your tutormeai profile/i)).toBeTruthy()
+    })
+  })
 })

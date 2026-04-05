@@ -156,7 +156,7 @@ export function RouteComponent() {
               </Text>
               {isTutorMeAIReviewerRole(platformUser?.role) ? (
                 <Text size="sm" c="chatbox-tertiary">
-                  {t('Assigned students')}: {platformUser?.students.length ?? 0}
+                  {t('Assigned students')}: {platformUser?.students?.length ?? 0}
                 </Text>
               ) : null}
             </Stack>
