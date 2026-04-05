@@ -392,6 +392,32 @@ function isChessMoveIntent(userRequest: string) {
   return moveKeywordPattern.test(normalized) && pieceKeywords.some((keyword) => normalized.includes(keyword))
 }
 
+function isChessSuggestedMoveFollowUpIntent(userRequest: string) {
+  const normalized = normalizeComparable(userRequest)
+  const confirmationPhrases = [
+    'do it',
+    'do it now',
+    'do that',
+    'do that now',
+    'make it',
+    'make it now',
+    'make the move',
+    'make the move now',
+    'make that move',
+    'play it',
+    'play it now',
+    'play that',
+    'play that now',
+    'execute it',
+    'execute it now',
+    'go ahead',
+    'lets do that',
+    'let s do that',
+  ]
+
+  return confirmationPhrases.some((phrase) => normalized.includes(phrase))
+}
+
 function shouldUseChessBoardStateTool(userRequest: string) {
   return isChessBoardReadIntent(userRequest) || isChessMoveIntent(userRequest)
 }
@@ -674,8 +700,97 @@ function buildChessMoveResultText(result: ChessMoveToolResult) {
   return `${result.summary} ${result.explanation}${nextMoveHint}`
 }
 
-function selectRequestedChessMove(userRequest: string, boardState: ChessBoardStateToolResult) {
-  return extractRequestedChessMove(userRequest) ?? boardState.candidateMoves[0] ?? null
+function extractSuggestedChessMoveCandidate(text: string) {
+  const prefixedCoordinateMatch = text.match(
+    /\b[KQRBN]?([a-h][1-8])\s*(?:to|-)\s*([a-h][1-8])(?:\s*=?\s*([qrbnQRBN]))?\b/u
+  )
+  if (prefixedCoordinateMatch) {
+    const [, from, to, promotion = ''] = prefixedCoordinateMatch
+    return `${from}${to}${promotion}`.toLowerCase()
+  }
+
+  return extractRequestedChessMove(text)
+}
+
+function extractSuggestedChessMoveFromAssistantText(text: string) {
+  const anchorPatterns = [
+    /recommended next move\s*:/iu,
+    /the move i(?:'m| am) choosing(?: for (?:white|black))?(?: is still| is)?\s*:?/iu,
+    /i choose for (?:white|black)\s*:?/iu,
+    /i(?:'ll| will) play(?: [^:\n]*)?\s*:?/iu,
+    /notation\s*:/iu,
+  ]
+
+  for (const pattern of anchorPatterns) {
+    const match = pattern.exec(text)
+    if (!match) {
+      continue
+    }
+
+    const tail = text.slice(match.index + match[0].length)
+    const nonEmptyLines = tail
+      .split(/\r?\n/iu)
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    for (const line of nonEmptyLines.slice(0, 6)) {
+      const move = extractSuggestedChessMoveCandidate(line)
+      if (move) {
+        return move
+      }
+    }
+
+    const inlineMove = extractSuggestedChessMoveCandidate(tail.slice(0, 120))
+    if (inlineMove) {
+      return inlineMove
+    }
+  }
+
+  return null
+}
+
+function extractLastSuggestedChessMove(previousMessages: Message[]) {
+  for (let index = previousMessages.length - 1; index >= 0; index -= 1) {
+    const message = previousMessages[index]
+    if (message?.role !== 'assistant') {
+      continue
+    }
+
+    const textParts = message.contentParts
+      .filter((part): part is Extract<(typeof message.contentParts)[number], { type: 'text' }> => part.type === 'text')
+      .map((part) => part.text)
+      .join('\n')
+    const textMove = extractSuggestedChessMoveFromAssistantText(textParts)
+    if (textMove) {
+      return textMove
+    }
+
+    for (const part of message.contentParts) {
+      if (part.type !== 'tool-call' || part.toolName !== exampleChessGetBoardStateToolSchema.name || part.state !== 'result') {
+        continue
+      }
+
+      const boardStateResult = buildChessBoardStateResult({
+        appSessionId: 'assistant-recommendation',
+        latestStateDigest: toJsonObject(part.result),
+        availableToolNames: [exampleChessMakeMoveToolSchema.name],
+      })
+      const structuredMove = boardStateResult?.candidateMoves[0]
+      if (structuredMove) {
+        return structuredMove
+      }
+    }
+  }
+
+  return null
+}
+
+function selectRequestedChessMove(
+  userRequest: string,
+  boardState: ChessBoardStateToolResult,
+  requestedMoveOverride?: string
+) {
+  return requestedMoveOverride ?? extractRequestedChessMove(userRequest) ?? boardState.candidateMoves[0] ?? null
 }
 
 function validateRequestedChessMove(boardState: ChessBoardStateToolResult, requestedMove: string) {
@@ -895,6 +1010,7 @@ async function buildChessMoveMessageFromSidebarSnapshot(
   input: {
     conversationId: string
     userRequest: string
+    requestedMoveOverride?: string
   }
 ): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
   const boardState = buildLiveChessBoardStateResult({
@@ -908,7 +1024,7 @@ async function buildChessMoveMessageFromSidebarSnapshot(
     return null
   }
 
-  const requestedMove = selectRequestedChessMove(input.userRequest, boardState)
+  const requestedMove = selectRequestedChessMove(input.userRequest, boardState, input.requestedMoveOverride)
   if (!requestedMove) {
     return null
   }
@@ -1431,20 +1547,38 @@ export async function routeTutorMeAiAppRequest(
     exampleInternalChessManifest.appId
   )
   const chessSidebarIsOpen = uiStore.getState().activeApprovedAppId === 'chess-tutor'
+  const chessSuggestedMoveFollowUpIntent = isChessSuggestedMoveFollowUpIntent(input.userRequest)
+  const hasActiveChessContext =
+    Boolean(activeSidebarChessSnapshot) ||
+    chessSidebarIsOpen ||
+    selectedReference?.appId === exampleInternalChessManifest.appId
+  const suggestedChessMove = chessSuggestedMoveFollowUpIntent
+    ? extractLastSuggestedChessMove(input.previousMessages)
+    : null
 
-  if (shouldUseChessBoardStateTool(input.userRequest)) {
-    if (isChessMoveIntent(input.userRequest)) {
+  if (shouldUseChessBoardStateTool(input.userRequest) || (chessSuggestedMoveFollowUpIntent && hasActiveChessContext)) {
+    if (isChessMoveIntent(input.userRequest) || chessSuggestedMoveFollowUpIntent) {
+      if (chessSuggestedMoveFollowUpIntent && !suggestedChessMove) {
+        return {
+          kind: 'clarify',
+          message: buildClarificationMessage(
+            'Chess Tutor is open, but I do not know which recommendation you want me to play. Say the move explicitly, for example "play Nf6".'
+          ),
+        }
+      }
+
       if (activeSidebarChessSnapshot) {
         const moveMessage = await buildChessMoveMessageFromSidebarSnapshot(activeSidebarChessSnapshot, {
           conversationId: input.conversationId,
           userRequest: input.userRequest,
+          requestedMoveOverride: suggestedChessMove ?? undefined,
         })
         if (moveMessage) {
           return moveMessage
         }
       }
 
-      if (activeSidebarChessSnapshot || chessSidebarIsOpen || selectedReference?.appId === exampleInternalChessManifest.appId) {
+      if (hasActiveChessContext) {
         return {
           kind: 'clarify',
           message: buildClarificationMessage(

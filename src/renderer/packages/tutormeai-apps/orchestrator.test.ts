@@ -352,6 +352,214 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
   })
 
+  it('plays the last structured chess recommendation when the user says play it', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8.follow-up',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8.follow-up',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      updatedAt: '2026-04-04T05:30:00.000Z',
+    })
+
+    const priorRecommendation = createMessage('assistant')
+    priorRecommendation.contentParts = [
+      {
+        type: 'tool-call',
+        state: 'result',
+        toolCallId: 'tool-call.chess.get-board-state.recommendation',
+        toolName: 'chess.get-board-state',
+        args: {
+          scope: 'current-position',
+        },
+        result: {
+          appSessionId: 'app-session.sidebar.chess.8.follow-up',
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          turn: 'white',
+          moveCount: 0,
+          lastMove: 'No moves yet',
+          legalMoveCount: 20,
+          legalMoves: ['d4', 'e4'],
+          candidateMoves: ['d4', 'e4'],
+          phase: 'opening',
+          status: 'Position is stable',
+          summary: 'Current live Chess board: White to move.',
+          moveExecutionAvailable: true,
+        },
+      },
+    ]
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.follow-up',
+      userId: 'user.8.follow-up',
+      userRequest: 'play it',
+      requestMessageId: 'message.8.follow-up',
+      previousMessages: [createMessage('user', 'what should I move?'), priorRecommendation],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.make-move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueSidebarAppRuntimeCommand.mock.calls[0]?.[0]).toMatchObject({
+      arguments: {
+        move: 'd4',
+        expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      },
+    })
+  })
+
+  it('plays the last plain-text chess recommendation when the user says do it now', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8.plain-text-follow-up',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8.plain-text-follow-up',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1. Black to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+        turn: 'b',
+        moveCount: 1,
+        lastMove: 'd3',
+      },
+      updatedAt: '2026-04-04T05:31:00.000Z',
+    })
+
+    mockEnqueueSidebarAppRuntimeCommand.mockResolvedValueOnce({
+      ok: true,
+      command: {
+        hostSessionId: 'conversation.8.plain-text-follow-up',
+        runtimeAppId: 'chess.internal',
+        appSessionId: 'app-session.sidebar.chess.8.plain-text-follow-up',
+        toolCallId: 'tool-call.chess.make-move.plain-text-follow-up',
+        toolName: 'chess.make-move',
+        arguments: {
+          move: 'g8f6',
+          expectedFen: 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+        },
+        createdAt: '2026-04-04T05:31:02.000Z',
+      },
+      completion: {
+        version: 'v1',
+        conversationId: 'conversation.8.plain-text-follow-up',
+        appSessionId: 'app-session.sidebar.chess.8.plain-text-follow-up',
+        appId: 'chess.internal',
+        toolCallId: 'tool-call.chess.make-move.plain-text-follow-up',
+        status: 'succeeded',
+        resultSummary: 'Move played: Nf6. White to move.',
+        result: {
+          appSessionId: 'app-session.sidebar.chess.8.plain-text-follow-up',
+          requestedMove: 'g8f6',
+          appliedMove: 'Nf6',
+          fen: 'rnbqkb1r/pppppppp/5n2/8/8/3P4/PPP1PPPP/RNBQKBNR w KQkq - 1 2',
+          turn: 'white',
+          moveCount: 2,
+          lastMove: 'Nf6',
+          legalMoveCount: 27,
+          candidateMoves: ['e4', 'Nf3'],
+          summary: 'Move played: Nf6. White to move.',
+          explanation: 'It develops a knight toward the center while keeping options flexible.',
+          moveExecutionAvailable: true,
+        },
+        completedAt: '2026-04-04T05:31:05.000Z',
+        followUpContext: {
+          summary: 'Use the updated live chess board to recommend the best next move from this position.',
+        },
+      },
+    })
+
+    const priorRecommendation = createMessage(
+      'assistant',
+      "I'll play a developing move for Black:\n\n...Ng8-f6\n\nThat's a standard, flexible move."
+    )
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.plain-text-follow-up',
+      userId: 'user.8.plain-text-follow-up',
+      userRequest: 'do it now',
+      requestMessageId: 'message.8.plain-text-follow-up',
+      previousMessages: [createMessage('user', 'what should black do?'), priorRecommendation],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.make-move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueSidebarAppRuntimeCommand.mock.calls[0]?.[0]).toMatchObject({
+      arguments: {
+        move: 'g8f6',
+        expectedFen: 'rnbqkbnr/pppppppp/8/8/8/3P4/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+      },
+    })
+  })
+
+  it('asks for an explicit move when the user says do it now without a prior chess recommendation', async () => {
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8.no-recommendation',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8.no-recommendation',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Current board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+      },
+      updatedAt: '2026-04-04T05:32:00.000Z',
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.no-recommendation',
+      userId: 'user.8.no-recommendation',
+      userRequest: 'do it now',
+      requestMessageId: 'message.8.no-recommendation',
+      previousMessages: [createMessage('user', "let's play chess"), createMessage('assistant', 'Sure, ready when you are.')],
+    })
+
+    expect(result.kind).toBe('clarify')
+    if (result.kind !== 'clarify') {
+      return
+    }
+
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Say the move explicitly')
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+  })
+
   it('reads the current live chess position from the shared session when the sidebar snapshot is stale', async () => {
     upsertSidebarAppRuntimeSnapshot({
       hostSessionId: 'conversation.shared.live-board',
