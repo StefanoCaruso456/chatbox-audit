@@ -234,13 +234,23 @@ const boardSquares = (['8', '7', '6', '5', '4', '3', '2', '1'] as const).flatMap
   (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const).map((file) => `${file}${rank}` as Square)
 )
 
-const pieceGlyphs: Record<string, string> = {
-  p: '♟',
-  r: '♜',
-  n: '♞',
-  b: '♝',
-  q: '♛',
-  k: '♚',
+const pieceGlyphs: Record<'w' | 'b', Record<string, string>> = {
+  w: {
+    p: '♙',
+    r: '♖',
+    n: '♘',
+    b: '♗',
+    q: '♕',
+    k: '♔',
+  },
+  b: {
+    p: '♟',
+    r: '♜',
+    n: '♞',
+    b: '♝',
+    q: '♛',
+    k: '♚',
+  },
 }
 
 export function ChessAppPage() {
@@ -465,7 +475,7 @@ export function ChessAppPage() {
         const square = `${String.fromCharCode(97 + fileIndex)}${8 - rankIndex}` as Square
         map.set(square, {
           label: `${piece.color === 'w' ? 'White' : 'Black'} ${piece.type.toUpperCase()}`,
-          glyph: pieceGlyphs[piece.type] ?? piece.type.toUpperCase(),
+          glyph: pieceGlyphs[piece.color][piece.type] ?? piece.type.toUpperCase(),
           color: piece.color,
         })
       })
@@ -633,7 +643,6 @@ export function ChessAppPage() {
                     border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.18)',
                     background: isSelected ? '#bfdbfe' : getSquareColor(square),
                     boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
-                    color: piecePalette?.fill ?? '#0f172a',
                     overflow: 'hidden',
                   }}
                 >
@@ -645,6 +654,7 @@ export function ChessAppPage() {
                       fontSize: 'clamp(1.42rem, 3.15vw, 2.08rem)',
                       fontWeight: 700,
                       lineHeight: 1,
+                      color: piecePalette?.fill ?? '#0f172a',
                       textShadow: piecePalette?.shadow,
                       WebkitTextStroke: piecePalette?.stroke,
                     }}
