@@ -98,7 +98,11 @@ const APP_WORKSPACE_OVERRIDES: Record<string, Partial<NonNullable<ApprovedApp['i
     helpUrl: 'https://developers.miro.com/docs/miro-live-embed-with-boardspicker-registered',
     helpLabel: 'Miro Live Embed docs',
     authModel: 'vendor-session',
-    capabilities: ['Official live embed path', 'BoardsPicker-based board selection', 'Collaborative whiteboard beside chat'],
+    capabilities: [
+      'Official live embed path',
+      'BoardsPicker-based board selection',
+      'Collaborative whiteboard beside chat',
+    ],
     setupChecklist: [
       'Create a Miro developer app and request BoardsPicker enablement for your app.',
       'Allowlist the ChatBridge domain in the Miro app settings for BoardsPicker.',
@@ -306,6 +310,45 @@ function buildIntegrationConfig(app: ApprovedApp): NonNullable<ApprovedApp['inte
 }
 
 const curatedApprovedAppCatalog: ApprovedApp[] = [
+  {
+    id: 'chess-com',
+    name: 'Chess.com',
+    icon: '/icons/apps/chess-com.png',
+    shortSummary:
+      'An embedded Chess.com board surface for studying and replaying Chess.com positions inside the sidebar.',
+    category: 'Study, Assessment & Engagement',
+    gradeRanges: ['6-8', '9-12'],
+    launchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+    launchMode: 'iframe',
+    integrationMode: 'partner-embed',
+    isApproved: true,
+    tags: ['chess', 'strategy', 'board-review', 'partner-embed'],
+    vendorUrl: 'https://www.chess.com/play/computer',
+    integrationConfig: {
+      defaultLaunchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      configurableLaunchUrl: true,
+      launchUrlLabel: 'Chess.com emboard URL',
+      launchUrlPlaceholder: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      helpUrl: 'https://www.chess.com/',
+      helpLabel: 'Chess.com',
+      capabilities: [
+        'Embedded Chess.com board surface',
+        'Replay and study positions inside the sidebar',
+        'Configurable Chess.com emboard launch URL',
+      ],
+      samplePrompts: [
+        'Open Chess.com in the sidebar.',
+        'Load a Chess.com embedded board beside chat.',
+        'Keep the Chess.com board open while we talk through the position.',
+      ],
+      statusNote:
+        'Chess.com is configured through its embeddable board surface. The full Chess.com play/computer product blocks third-party iframe embedding, so this workspace uses emboard URLs instead.',
+    },
+    loadingFallback: {
+      title: 'Chess.com needs an embeddable board URL',
+      body: 'Chess.com blocks its main play and analysis pages in third-party iframes. Use a Chess.com emboard URL here for the supported embedded board experience.',
+    },
+  },
   {
     id: 'google-classroom',
     name: 'Google Classroom',
@@ -722,7 +765,11 @@ const tutorMeAiApps: ApprovedApp[] = [
         moveCount: 0,
         mode: 'practice',
       },
-      availableTools: [exampleChessLaunchToolSchema, exampleChessGetBoardStateToolSchema, exampleChessMakeMoveToolSchema],
+      availableTools: [
+        exampleChessLaunchToolSchema,
+        exampleChessGetBoardStateToolSchema,
+        exampleChessMakeMoveToolSchema,
+      ],
       pendingInvocation: {
         toolName: exampleChessLaunchToolSchema.name,
         arguments: { mode: 'practice' },
@@ -787,6 +834,7 @@ const tutorMeAiApps: ApprovedApp[] = [
 
 export const APP_MILESTONE_ORDER = [
   'chess-tutor',
+  'chess-com',
   'flashcards-coach',
   'planner-connect',
   'desmos',

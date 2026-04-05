@@ -3,7 +3,7 @@ import { approvedApps, getApprovedAppById } from './approvedApps'
 
 describe('approvedApps', () => {
   it('includes the TutorMeAI runtime apps in the shared library', () => {
-    expect(approvedApps).toHaveLength(29)
+    expect(approvedApps).toHaveLength(30)
 
     expect(getApprovedAppById('chess-tutor')).toMatchObject({
       experience: 'tutormeai-runtime',
@@ -57,6 +57,18 @@ describe('approvedApps', () => {
   })
 
   it('seeds preview-capable apps with a default launch target', () => {
+    expect(getApprovedAppById('chess-com')).toMatchObject({
+      integrationMode: 'partner-embed',
+      integrationConfig: {
+        defaultLaunchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+        launchUrlLabel: 'Chess.com emboard URL',
+        launchUrlPlaceholder: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      },
+      loadingFallback: {
+        title: 'Chess.com needs an embeddable board URL',
+      },
+    })
+
     expect(getApprovedAppById('khan-academy')).toMatchObject({
       integrationMode: 'browser-session',
       integrationConfig: {
@@ -88,7 +100,7 @@ describe('approvedApps', () => {
   it('gives every approved library app an integration workspace config', () => {
     const approvedLibraryApps = approvedApps.filter((app) => app.experience === 'approved-library')
 
-    expect(approvedLibraryApps).toHaveLength(26)
+    expect(approvedLibraryApps).toHaveLength(27)
     approvedLibraryApps.forEach((app) => {
       expect(app.launchUrl).toBe(`/embedded-apps/catalog/${app.id}`)
       expect(app.integrationConfig?.capabilities?.length).toBeGreaterThan(0)
