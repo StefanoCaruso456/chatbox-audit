@@ -744,6 +744,168 @@ describe('routeTutorMeAiAppRequest', () => {
     expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
   })
 
+  it('prefers the fresh sidebar chess snapshot over a stale shared store for strategy prompts', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.8.fresh-sidebar-strategy',
+      appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-strategy',
+      fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+      moveCount: 1,
+      lastMove: 'd4',
+      status: 'active',
+    })
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8.fresh-sidebar-strategy',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-strategy',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Played c6. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+        turn: 'w',
+        moveCount: 2,
+        lastMove: 'c6',
+        lastUpdateSource: 'manual-board-move',
+      },
+      updatedAt: '2026-04-05T05:05:00.000Z',
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.fresh-sidebar-strategy',
+      userId: 'user.8.fresh-sidebar-strategy',
+      userRequest: 'what should be my next move',
+      requestMessageId: 'message.8.fresh-sidebar-strategy',
+      previousMessages: [createMessage('assistant', 'I saw c6 on the board. White to move now.')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-strategy',
+      turn: 'white',
+      lastMove: 'c6',
+      moveCount: 2,
+      recommendedMove: 'd5',
+    })
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('White to move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).not.toHaveBeenCalled()
+  })
+
+  it('prefers the fresh sidebar chess snapshot over a stale shared store for move execution', async () => {
+    initializeChessSession({
+      conversationId: 'conversation.8.fresh-sidebar-move',
+      appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-move',
+      fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+      moveCount: 1,
+      lastMove: 'd4',
+      status: 'active',
+    })
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.8.fresh-sidebar-move',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-move',
+      conversationId: 'conversation.sidebar.chess-tutor',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Played c6. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+        turn: 'w',
+        moveCount: 2,
+        lastMove: 'c6',
+        lastUpdateSource: 'manual-board-move',
+      },
+      updatedAt: '2026-04-05T05:06:00.000Z',
+    })
+    uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
+    mockEnqueueSidebarAppRuntimeCommand.mockClear()
+    mockEnqueueSidebarAppRuntimeCommand.mockResolvedValueOnce({
+      ok: true,
+      command: {
+        hostSessionId: 'conversation.8.fresh-sidebar-move',
+        runtimeAppId: 'chess.internal',
+        appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-move',
+        toolCallId: 'tool-call.chess.make-move.fresh-sidebar',
+        toolName: 'chess.make-move',
+        arguments: {
+          move: 'd5',
+          expectedFen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+        },
+        createdAt: '2026-04-05T05:06:03.000Z',
+      },
+      completion: {
+        version: 'v1',
+        conversationId: 'conversation.8.fresh-sidebar-move',
+        appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-move',
+        appId: 'chess.internal',
+        toolCallId: 'tool-call.chess.make-move.fresh-sidebar',
+        status: 'succeeded',
+        resultSummary: 'Move played: d5. Black to move.',
+        result: {
+          appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-move',
+          requestedMove: 'd5',
+          appliedMove: 'd5',
+          fen: 'rnbqkbnr/pp1ppppp/2p5/3P4/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 2',
+          turn: 'black',
+          moveCount: 3,
+          lastMove: 'd5',
+          legalMoveCount: 20,
+          candidateMoves: ['d6', 'Nf6'],
+          summary: 'Move played: d5. Black to move.',
+          explanation: 'It claims central space and opens lines for your pieces.',
+          moveExecutionAvailable: true,
+        },
+        completedAt: '2026-04-05T05:06:04.000Z',
+        followUpContext: {
+          summary: 'Use the updated live chess board to recommend the best next move from this position.',
+        },
+      },
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.8.fresh-sidebar-move',
+      userId: 'user.8.fresh-sidebar-move',
+      userRequest: 'play d5',
+      requestMessageId: 'message.8.fresh-sidebar-move',
+      previousMessages: [createMessage('assistant', 'I saw c6 on the board. White to move now, and I’d recommend d5.')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.make-move')
+    expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueSidebarAppRuntimeCommand.mock.calls[0]?.[0]).toMatchObject({
+      appSessionId: 'app-session.sidebar.chess.8.fresh-sidebar-move',
+      arguments: {
+        move: 'd5',
+        expectedFen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+      },
+    })
+  })
+
   it('reads the current live chess position from the shared session when the sidebar snapshot is stale', async () => {
     upsertSidebarAppRuntimeSnapshot({
       hostSessionId: 'conversation.shared.live-board',
