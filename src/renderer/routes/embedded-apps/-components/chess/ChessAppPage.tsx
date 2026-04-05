@@ -4,10 +4,10 @@ import { Chess, type Square } from 'chess.js'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { postSidebarDirectIframeStateMessage } from '@/components/apps/sidebarDirectIframeState'
 import {
+  activateChessSession,
   applyChessSessionMove,
   getChessSessionSnapshot,
   initializeChessSession,
-  resetChessSession,
   subscribeChessSession,
   type ChessMode,
 } from '@/stores/chessSessionStore'
@@ -342,14 +342,16 @@ export function ChessAppPage() {
     }
 
     handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
-    resetChessSession({
+    const launchSnapshot = activateChessSession({
       conversationId: runtimeContext.conversationId,
       appSessionId: runtimeContext.appSessionId,
       mode: asChessMode(invocationMessage.payload.arguments.mode),
       status: 'active',
     })
     setSelection({ from: null })
-    setFeedback(null)
+    if (launchSnapshot.moveCount === 0) {
+      setFeedback(null)
+    }
   }, [invocationMessage, runtimeContext])
 
   useEffect(() => {

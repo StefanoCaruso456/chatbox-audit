@@ -165,6 +165,31 @@ export function initializeChessSession(input: {
   )
 }
 
+export function activateChessSession(input: {
+  conversationId: string
+  appSessionId: string
+  mode?: ChessMode
+  status?: RuntimeAppStatus
+}) {
+  const existing = chessSessions.get(buildSessionKey(input.conversationId, input.appSessionId))
+  if (!existing) {
+    return resetChessSession(input)
+  }
+
+  const nextMode = input.mode ?? existing.snapshot.mode
+
+  return setChessSessionRecord({
+    historySan: existing.historySan,
+    snapshot: {
+      ...existing.snapshot,
+      status: input.status ?? 'active',
+      summary: buildSummary(existing.snapshot.fen, existing.snapshot.turn, existing.snapshot.lastMove),
+      updatedAt: new Date().toISOString(),
+      ...(nextMode ? { mode: nextMode } : {}),
+    },
+  })
+}
+
 export function resetChessSession(input: {
   conversationId: string
   appSessionId: string
