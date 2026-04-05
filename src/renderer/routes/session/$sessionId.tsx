@@ -5,6 +5,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from 'zustand'
+import ApprovedAppCoachController from '@/components/apps/ApprovedAppCoachController'
 import AppsWorkspace from '@/components/apps/AppsWorkspace'
 import MessageList, { type MessageListRef } from '@/components/chat/MessageList'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
@@ -139,6 +140,7 @@ function RouteComponent() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-chatbox-background-brand-secondary/20 to-transparent" />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <Header session={currentSession} />
+        <ApprovedAppCoachController sessionId={currentSession.id} session={currentSession} />
 
         <div className="relative flex min-h-0 flex-1 flex-col px-2 pb-2 pt-1 sm:px-3 sm:pb-3">
           <AppsWorkspace>
