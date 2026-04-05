@@ -77,7 +77,7 @@ describe('ChessAppPage', () => {
 
     expect(screen.getByTestId('chess-board-grid')).toBeTruthy()
     expect(screen.getByTestId('chess-square-a8').textContent).toContain('♜')
-    expect(screen.getByTestId('chess-square-e1').textContent).toContain('♚')
+    expect(screen.getByTestId('chess-square-e1').textContent).toContain('♔')
     expect(screen.getAllByRole('button').length).toBeGreaterThanOrEqual(64)
   })
 
@@ -123,7 +123,7 @@ describe('ChessAppPage', () => {
     fireEvent.click(screen.getByTestId('chess-square-e4'))
 
     expect(screen.getByText('Played e4. Black to move.')).toBeTruthy()
-    expect(screen.getByTestId('chess-piece-e4').textContent).toContain('♟')
+    expect(screen.getByTestId('chess-piece-e4').textContent).toContain('♙')
 
     invocationMessage = {
       payload: {
@@ -141,7 +141,7 @@ describe('ChessAppPage', () => {
       </MantineProvider>
     )
 
-    await waitFor(() => expect(screen.getByTestId('chess-piece-e4').textContent).toContain('♟'))
+    await waitFor(() => expect(screen.getByTestId('chess-piece-e4').textContent).toContain('♙'))
 
     expect(screen.getByTestId('chess-piece-e2').textContent).toBe('')
     expect(
@@ -283,23 +283,21 @@ describe('ChessAppPage', () => {
     const darkSquareCoordinate = screen.getByTestId('chess-coordinate-a8')
     const whitePiece = screen.getByTestId('chess-piece-b1')
     const blackPiece = screen.getByTestId('chess-piece-b8')
-    const whitePieceSquare = screen.getByTestId('chess-square-b1')
-    const blackPieceSquare = screen.getByTestId('chess-square-b8')
     const lightCoordinateStyle = lightSquareCoordinate.getAttribute('style') ?? ''
     const darkCoordinateStyle = darkSquareCoordinate.getAttribute('style') ?? ''
     const whitePieceStyle = whitePiece.getAttribute('style') ?? ''
     const blackPieceStyle = blackPiece.getAttribute('style') ?? ''
-    const whitePieceSquareStyle = whitePieceSquare.getAttribute('style') ?? ''
-    const blackPieceSquareStyle = blackPieceSquare.getAttribute('style') ?? ''
 
     expect(lightCoordinateStyle).toContain('background: rgba(15, 23, 42, 0.96)')
     expect(lightCoordinateStyle).toContain('color: rgb(248, 250, 252)')
     expect(darkCoordinateStyle).toContain('background: rgba(15, 23, 42, 0.96)')
     expect(darkCoordinateStyle).toContain('color: rgb(248, 250, 252)')
     expect(darkCoordinateStyle).toContain('box-shadow: 0 2px 6px rgba(2,6,23,0.32)')
+    expect(whitePiece.textContent).toBe('♘')
+    expect(blackPiece.textContent).toBe('♞')
+    expect(whitePieceStyle).toContain('color: rgb(248, 250, 252)')
     expect(whitePieceStyle).toContain('0.8px rgba(15, 23, 42, 0.58)')
+    expect(blackPieceStyle).toContain('color: rgb(15, 23, 42)')
     expect(blackPieceStyle).toContain('text-shadow: 0 1px 0 rgba(248,250,252,0.18), 0 2px 4px rgba(15,23,42,0.2)')
-    expect(whitePieceSquareStyle).toContain('color: rgb(248, 250, 252)')
-    expect(blackPieceSquareStyle).toContain('color: rgb(15, 23, 42)')
   })
 })
