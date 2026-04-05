@@ -204,6 +204,34 @@ describe('TutorMeAI auth client helpers', () => {
     )
   })
 
+  it('treats stale or already-revoked TutorMeAI sessions as logged out', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ok: false,
+          error: {
+            message: 'No platform session matched the supplied selector.',
+          },
+        }),
+        {
+          status: 404,
+          headers: {
+            'content-type': 'application/json',
+          },
+        }
+      )
+    )
+
+    await expect(
+      logoutTutorMeAIPlatformSession({
+        backendOrigin: 'https://chatbox-audit-production.up.railway.app',
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })
+    ).resolves.toBeUndefined()
+  })
+
   it('recognizes platform callback messages only from the configured backend origin', () => {
     const matchingEvent = new MessageEvent('message', {
       origin: 'https://chatbox-audit-production.up.railway.app',

@@ -109,6 +109,17 @@ export const SettingsModal: FC<SettingsModalProps> = (props) => {
 
 export default SettingsModal
 
+export function closeSettings() {
+  const { settings: _, ...otherSearch } = router.state.location.search
+
+  if ('settings' in router.state.location.search) {
+    router.navigate({
+      to: router.state.location.pathname,
+      search: otherSearch,
+    })
+  }
+}
+
 export function navigateToSettings(path?: string) {
   if (window.matchMedia(`(max-width:${getThemeDesign('light', 16, 'en').breakpoints?.values?.sm || 640}px)`).matches) {
     router.navigate({

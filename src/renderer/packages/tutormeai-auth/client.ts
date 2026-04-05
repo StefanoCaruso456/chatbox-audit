@@ -235,6 +235,13 @@ export async function logoutTutorMeAIPlatformSession(input: {
     return
   }
 
+  // Logout should be idempotent from the client perspective. If the backend says
+  // the session is already missing or revoked, we can still clear local auth state
+  // and return the user to the sign-in gate.
+  if ([401, 403, 404].includes(response.status)) {
+    return
+  }
+
   const payload = (await response.json().catch(() => null)) as
     | {
         ok: false

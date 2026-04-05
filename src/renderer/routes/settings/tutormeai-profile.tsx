@@ -3,6 +3,7 @@ import type { TutorMeAIUserRole } from '@shared/types'
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { closeSettings } from '@/modals/Settings'
 import {
   deriveTutorMeAIUsernameCandidate,
   isTutorMeAIProfileComplete,
@@ -32,7 +33,6 @@ export function RouteComponent() {
   const refreshToken = useTutorMeAIAuthStore((state) => state.refreshToken)
   const updateUser = useTutorMeAIAuthStore((state) => state.updateUser)
   const clearSession = useTutorMeAIAuthStore((state) => state.clearSession)
-  const [logoutError, setLogoutError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -67,16 +67,16 @@ export function RouteComponent() {
 
   const handleLogout = async () => {
     try {
-      setLogoutError(null)
       await logoutTutorMeAIPlatformSession({
         backendOrigin: resolveTutorMeAIBackendOrigin(),
         accessToken,
         refreshToken,
       })
     } catch (error) {
-      setLogoutError(error instanceof Error ? error.message : String(error))
+      console.warn('TutorMeAI logout request failed; clearing local auth state anyway.', error)
     } finally {
       clearSession()
+      closeSettings()
     }
   }
 
@@ -136,12 +136,6 @@ export function RouteComponent() {
             </Button>
           </Group>
         </Paper>
-
-        {logoutError && (
-          <Alert color="red" variant="light">
-            {logoutError}
-          </Alert>
-        )}
 
         {saveError && (
           <Alert color="red" variant="light">
