@@ -206,7 +206,7 @@ export function buildAppSecurityHeaders(
         ...csp.value.headers,
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
-        'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+        'permissions-policy': 'camera=(), microphone=(self), geolocation=(), payment=()',
       },
     },
   }

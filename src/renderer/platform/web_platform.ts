@@ -5,13 +5,13 @@ import { v4 as uuidv4 } from 'uuid'
 import { parseLocale } from '@/i18n/parser'
 import { type ImageGenerationStorage, IndexedDBImageGenerationStorage } from '@/storage/ImageGenerationStorage'
 import { getBrowser, getOS } from '../packages/navigator'
+import { WEB_PLATFORM_CAPABILITIES } from './capabilities'
 import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
-import { WEB_PLATFORM_CAPABILITIES } from './capabilities'
+import { parseFileInBrowser } from './local_file_parser'
 import { IndexedDBStorage } from './storages'
 import WebExporter from './web_exporter'
 import webLogger from './web_logger'
-import { parseTextFileLocally } from './web_platform_utils'
 
 export default class WebPlatform extends IndexedDBStorage implements Platform {
   public type: PlatformType = 'web'
@@ -152,7 +152,7 @@ export default class WebPlatform extends IndexedDBStorage implements Platform {
   }
 
   async parseFileLocally(file: File): Promise<{ key?: string; isSupported: boolean }> {
-    const result = await parseTextFileLocally(file)
+    const result = await parseFileInBrowser(file)
     if (!result.isSupported) {
       return { isSupported: false }
     }

@@ -1,8 +1,7 @@
 import { compareVersions } from 'compare-versions'
 import dayjs from 'dayjs'
-import { useAtomValue } from 'jotai'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { remoteConfigAtom } from '@/stores/atoms'
+import { useRemoteConfig } from '@/stores/remoteConfigStore'
 import { CHATBOX_BUILD_PLATFORM } from '@/variables'
 import * as remote from '../packages/remote'
 import platform from '../platform'
@@ -31,7 +30,7 @@ export function isFirstDay(): boolean {
 export default function useVersion() {
   const [version, _setVersion] = useState('')
   const [needCheckUpdate, setNeedCheckUpdate] = useState(false)
-  const remoteConfig = useAtomValue(remoteConfigAtom)
+  const remoteConfig = useRemoteConfig()
   const isExceeded = useMemo(
     () =>
       CHATBOX_BUILD_PLATFORM === 'ios' &&
@@ -56,7 +55,7 @@ export default function useVersion() {
         console.log(e)
       }
     }
-    handler()
+    void handler()
     updateCheckTimer.current = setInterval(handler, 2 * 60 * 60 * 1000)
     return () => {
       if (updateCheckTimer.current) {

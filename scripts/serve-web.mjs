@@ -2,11 +2,13 @@ import { createReadStream, existsSync, statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { extname, join, normalize, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const host = '0.0.0.0'
 const port = Number.parseInt(process.env.PORT || '3000', 10)
 const rootDir = resolve(process.cwd(), 'release/app/dist/renderer')
 const indexFile = join(rootDir, 'index.html')
+const bundledRailwayServer = resolve(process.cwd(), 'release/app/server/railway-web-server.mjs')
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -43,56 +45,61 @@ function resolveRequestedPath(urlPath) {
   return indexFile
 }
 
-const server = createServer(async (req, res) => {
-  if ((req.url || '/').split('?')[0] === '/health') {
-    const isReady = existsSync(indexFile)
+if (existsSync(bundledRailwayServer)) {
+  await import(pathToFileURL(bundledRailwayServer).href)
+}
+if (!existsSync(bundledRailwayServer)) {
+  const server = createServer(async (req, res) => {
+    if ((req.url || '/').split('?')[0] === '/health') {
+      const isReady = existsSync(indexFile)
 
-    res.writeHead(isReady ? 200 : 503, {
-      'Cache-Control': 'no-store',
-      'Content-Type': 'application/json; charset=utf-8',
-    })
-    res.end(
-      JSON.stringify({
-        ready: isReady,
-      }),
-    )
-    return
-  }
-
-  const filePath = resolveRequestedPath(req.url || '/')
-
-  if (!filePath) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
-    res.end('Forbidden')
-    return
-  }
-
-  const extension = extname(filePath)
-  const contentType = contentTypes[extension] || 'application/octet-stream'
-
-  try {
-    if (filePath === indexFile) {
-      const html = await readFile(indexFile)
-      res.writeHead(200, {
+      res.writeHead(isReady ? 200 : 503, {
         'Cache-Control': 'no-store',
-        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Type': 'application/json; charset=utf-8',
       })
-      res.end(html)
+      res.end(
+        JSON.stringify({
+          ready: isReady,
+        }),
+      )
       return
     }
 
-    res.writeHead(200, {
-      'Cache-Control': 'public, max-age=31536000, immutable',
-      'Content-Type': contentType,
-    })
-    createReadStream(filePath).pipe(res)
-  } catch (error) {
-    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' })
-    res.end(`Server error: ${error instanceof Error ? error.message : String(error)}`)
-  }
-})
+    const filePath = resolveRequestedPath(req.url || '/')
 
-server.listen(port, host, () => {
-  console.log(`Serving Chatbox web bundle from ${rootDir}`)
-  console.log(`Listening on http://${host}:${port}`)
-})
+    if (!filePath) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' })
+      res.end('Forbidden')
+      return
+    }
+
+    const extension = extname(filePath)
+    const contentType = contentTypes[extension] || 'application/octet-stream'
+
+    try {
+      if (filePath === indexFile) {
+        const html = await readFile(indexFile)
+        res.writeHead(200, {
+          'Cache-Control': 'no-store',
+          'Content-Type': 'text/html; charset=utf-8',
+        })
+        res.end(html)
+        return
+      }
+
+      res.writeHead(200, {
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Content-Type': contentType,
+      })
+      createReadStream(filePath).pipe(res)
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' })
+      res.end(`Server error: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  })
+
+  server.listen(port, host, () => {
+    console.log(`Serving Chatbox web bundle from ${rootDir}`)
+    console.log(`Listening on http://${host}:${port}`)
+  })
+}

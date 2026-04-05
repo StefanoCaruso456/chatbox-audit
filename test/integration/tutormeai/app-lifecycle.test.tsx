@@ -14,6 +14,7 @@ import { deriveConversationAppContext, routeTutorMeAiAppRequest } from '@/packag
 import { ChessAppPage } from '@/routes/embedded-apps/-components/chess/ChessAppPage'
 import { FlashcardsAppPage } from '@/routes/embedded-apps/-components/flashcards/FlashcardsAppPage'
 import { PlannerAppPage } from '@/routes/embedded-apps/-components/planner/PlannerAppPage'
+import { settingsStore } from '@/stores/settingsStore'
 
 const localOrigin = 'http://localhost:1212'
 const originalParentDescriptor = Object.getOwnPropertyDescriptor(window, 'parent')
@@ -238,6 +239,75 @@ describe('TutorMeAI embedded app lifecycle integration', () => {
   })
 
   it('completes the planner auth-required lifecycle after the user connects', async () => {
+    settingsStore.setState((state) => ({
+      tutorMeAIProfile: {
+        ...state.tutorMeAIProfile,
+        name: 'stefano',
+        email: 'stefanocaruso456@gmail.com',
+      },
+    }))
+
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            error: {
+              message: 'No OAuth connection matched the supplied selector.',
+            },
+          }),
+          {
+            status: 404,
+            headers: {
+              'content-type': 'application/json',
+            },
+          }
+        )
+      )
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            data: {
+              connection: {
+                oauthConnectionId: 'oauth-connection.1',
+                userId: 'user.stefanocaruso456.gmail.com',
+                appId: 'planner.oauth',
+                provider: 'google',
+                status: 'connected',
+                requestedScopes: ['openid', 'email', 'profile'],
+                externalAccountId: 'google-user-123',
+                scopes: ['openid', 'email', 'profile'],
+                tokenType: 'Bearer',
+                accessTokenExpiresAt: '2026-04-05T04:00:00.000Z',
+                refreshTokenExpiresAt: null,
+                lastRefreshedAt: '2026-04-05T03:00:00.000Z',
+                connectedAt: '2026-04-05T03:00:00.000Z',
+                disconnectedAt: null,
+                createdAt: '2026-04-05T03:00:00.000Z',
+                updatedAt: '2026-04-05T03:00:00.000Z',
+                hasAccessToken: true,
+                hasRefreshToken: true,
+              },
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          }
+        )
+      )
+
+    vi.stubGlobal('fetch', fetchMock)
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+    } as unknown as Window
+    vi.spyOn(window, 'open').mockReturnValue(popup)
+
     const launch = await routeTutorMeAiAppRequest({
       origin: localOrigin,
       conversationId: 'conversation.planner',
@@ -266,9 +336,26 @@ describe('TutorMeAI embedded app lifecycle integration', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /connect account/i }))
 
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: 'https://chatbox-audit-production.up.railway.app',
+        data: {
+          type: 'tutormeai.oauth.callback',
+          ok: true,
+          appId: 'planner.oauth',
+          provider: 'google',
+          userId: 'user.stefanocaruso456.gmail.com',
+          status: 'connected',
+        },
+      })
+    )
+
     await waitFor(() => {
       expect(screen.getAllByText('Connected').length).toBeGreaterThan(0)
     })
+
+    expect(fetchMock).toHaveBeenCalled()
+    expect(window.open).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: /send planner summary to chat/i }))
 

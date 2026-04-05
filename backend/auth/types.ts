@@ -1,7 +1,21 @@
 import type { JsonObject } from '@shared/contracts/v1'
+import type { TutorMeAIUserRole } from '@shared/types/settings'
 import type { BackendFailureResult, BackendResult } from '../errors'
 
 export type PlatformSessionStatus = 'active' | 'expired' | 'revoked'
+
+export interface UserRecord {
+  userId: string
+  email: string | null
+  username: string | null
+  displayName: string
+  role: TutorMeAIUserRole | null
+  onboardingCompletedAt: string | null
+  metadata: JsonObject
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
 
 export interface PlatformSessionRecord {
   platformSessionId: string

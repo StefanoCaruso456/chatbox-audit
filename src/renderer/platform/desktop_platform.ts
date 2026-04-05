@@ -17,8 +17,8 @@ import { getOS } from '../packages/navigator'
 import { DESKTOP_PLATFORM_CAPABILITIES } from './capabilities'
 import type { Platform, PlatformCapabilities, PlatformType } from './interfaces'
 import DesktopKnowledgeBaseController from './knowledge-base/desktop-controller'
+import { parseFileInBrowser } from './local_file_parser'
 import WebExporter from './web_exporter'
-import { parseTextFileLocally } from './web_platform_utils'
 
 const log = getLogger('desktop-platform')
 
@@ -217,7 +217,7 @@ export default class DesktopPlatform implements Platform {
     let result: DesktopParsedFileResult
     if (!file.path) {
       // 复制长文本粘贴的文件是没有 path 的
-      result = await parseTextFileLocally(file)
+      result = await parseFileInBrowser(file)
     } else {
       const payload: DesktopParsedFilePayload = { filePath: file.path }
       const resultJSON = await this.ipc.invoke('parseFileLocally', JSON.stringify(payload))

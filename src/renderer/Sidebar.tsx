@@ -47,6 +47,7 @@ export default function Sidebar() {
   const setShowSidebar = useUIStore((s) => s.setShowSidebar)
   const setSidebarWidth = useUIStore((s) => s.setSidebarWidth)
   const setOpenSearchDialog = useUIStore((s) => s.setOpenSearchDialog)
+  const triggerConversationModeHint = useUIStore((s) => s.triggerConversationModeHint)
   const { sessionMetaList: sortedSessions } = useSessionList()
   const { projects } = useProjects()
 
@@ -54,11 +55,12 @@ export default function Sidebar() {
   const isSmallScreen = useIsSmallScreen()
   const currentPath = routerState.location.pathname
   const currentSessionId = currentPath.startsWith('/session/') ? currentPath.replace('/session/', '') : null
+  const currentProjectRouteId = currentPath.match(/^\/projects\/([^/]+)/)?.[1] ?? null
   const currentSession = useMemo(
     () => (sortedSessions || []).find((session) => session.id === currentSessionId),
     [currentSessionId, sortedSessions]
   )
-  const currentProjectId = currentSession?.projectId
+  const currentProjectId = currentSession?.projectId ?? currentProjectRouteId
 
   const [projectsExpanded, setProjectsExpanded] = useState(() => Boolean(currentProjectId))
   const [chatsExpanded, setChatsExpanded] = useState(() => currentPath.startsWith('/session/'))
@@ -88,13 +90,65 @@ export default function Sidebar() {
   }, [projects, sortedSessions])
 
   const handleCreateNewSession = useCallback(() => {
+    triggerConversationModeHint()
     navigate({ to: `/` })
 
     if (isSmallScreen) {
       setShowSidebar(false)
     }
     trackingEvent('create_new_conversation', { event_category: 'user' })
+  }, [isSmallScreen, navigate, setShowSidebar, triggerConversationModeHint])
+
+  const handleCreateProject = useCallback(async () => {
+    const project = await NiceModal.show<{ id: string; name: string } | undefined>('create-project')
+    if (!project?.id) {
+      return
+    }
+
+    setProjectsExpanded(true)
+    setExpandedProjectIds((prev) => ({
+      ...prev,
+      [project.id]: true,
+    }))
+    navigate({
+      to: '/projects/$projectId',
+      params: {
+        projectId: project.id,
+      },
+    })
+
+    if (isSmallScreen) {
+      setShowSidebar(false)
+    }
   }, [isSmallScreen, navigate, setShowSidebar])
+
+  const handleOpenProject = useCallback(
+    (projectId: string) => {
+      setProjectsExpanded(true)
+      setExpandedProjectIds((prev) => ({
+        ...prev,
+        [projectId]: true,
+      }))
+      navigate({
+        to: '/projects/$projectId',
+        params: {
+          projectId,
+        },
+      })
+
+      if (isSmallScreen) {
+        setShowSidebar(false)
+      }
+    },
+    [isSmallScreen, navigate, setShowSidebar]
+  )
+
+  const handleToggleProjectExpansion = useCallback((projectId: string) => {
+    setExpandedProjectIds((prev) => ({
+      ...prev,
+      [projectId]: !prev[projectId],
+    }))
+  }, [])
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -187,11 +241,9 @@ export default function Sidebar() {
               gap="sm"
               onClick={() => platform.openLink('https://chatboxai.app/')}
               style={{ cursor: 'pointer' }}
+              aria-label="Chatbox"
             >
               <Image src={icon} w={20} h={20} />
-              <Text span c="chatbox-secondary" size="xl" lh={1.2} fw="700">
-                Chatbox
-              </Text>
             </Flex>
             {FORCE_ENABLE_DEV_PAGES && <ThemeSwitchButton size="xs" />}
           </Flex>
@@ -221,7 +273,7 @@ export default function Sidebar() {
                 <SidebarPrimaryAction
                   icon={IconFolderPlus}
                   label={t('New project')}
-                  onClick={() => void NiceModal.show('create-project')}
+                  onClick={() => void handleCreateProject()}
                   emphasized
                   compact
                 />
@@ -237,12 +289,8 @@ export default function Sidebar() {
                         chatCount={projectSessions.length}
                         expanded={expanded}
                         selected={currentProjectId === project.id}
-                        onClick={() =>
-                          setExpandedProjectIds((prev) => ({
-                            ...prev,
-                            [project.id]: !prev[project.id],
-                          }))
-                        }
+                        onSelect={() => handleOpenProject(project.id)}
+                        onToggle={() => handleToggleProjectExpansion(project.id)}
                       />
                       <Collapse in={expanded}>
                         <Stack gap={2} pt={4}>
@@ -429,17 +477,20 @@ function SidebarProjectDisclosure({
   chatCount,
   expanded,
   selected,
-  onClick,
+  onSelect,
+  onToggle,
 }: {
   label: string
   chatCount: number
   expanded: boolean
   selected: boolean
-  onClick: () => void
+  onSelect: () => void
+  onToggle: () => void
 }) {
   return (
-    <UnstyledButton
-      onClick={onClick}
+    <Flex
+      align="center"
+      gap={4}
       className={clsx(
         'w-full rounded-lg px-3 py-2 text-left transition-all duration-200',
         selected
@@ -447,29 +498,41 @@ function SidebarProjectDisclosure({
           : 'hover:bg-chatbox-background-gray-secondary hover:shadow-[var(--chatbox-shadow-raised-sm)]'
       )}
     >
-      <Flex align="center" justify="space-between" gap="sm">
-        <Flex align="center" gap="sm" maw="80%">
-          <ScalableIcon
-            icon={IconFolder}
-            size={18}
-            className={selected ? 'text-chatbox-brand' : 'text-chatbox-tertiary'}
-          />
-          <Text lineClamp={1} c={selected ? 'chatbox-brand' : 'chatbox-primary'}>
-            {label}
-          </Text>
-        </Flex>
+      <UnstyledButton onClick={onSelect} className="min-w-0 flex-1">
+        <Flex align="center" justify="space-between" gap="sm">
+          <Flex align="center" gap="sm" maw="80%">
+            <ScalableIcon
+              icon={IconFolder}
+              size={18}
+              className={selected ? 'text-chatbox-brand' : 'text-chatbox-tertiary'}
+            />
+            <Text lineClamp={1} c={selected ? 'chatbox-brand' : 'chatbox-primary'}>
+              {label}
+            </Text>
+          </Flex>
 
-        <Flex align="center" gap={6}>
           <Text size="xs" c="chatbox-tertiary">
             {chatCount}
           </Text>
-          <ScalableIcon
-            icon={expanded ? IconChevronDown : IconChevronRight}
-            size={16}
-            className="text-chatbox-tertiary"
-          />
         </Flex>
-      </Flex>
-    </UnstyledButton>
+      </UnstyledButton>
+
+      <ActionIcon
+        variant="subtle"
+        color="chatbox-tertiary"
+        size={24}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onToggle()
+        }}
+      >
+        <ScalableIcon
+          icon={expanded ? IconChevronDown : IconChevronRight}
+          size={16}
+          className="text-chatbox-tertiary"
+        />
+      </ActionIcon>
+    </Flex>
   )
 }

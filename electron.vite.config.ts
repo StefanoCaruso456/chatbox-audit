@@ -113,6 +113,7 @@ export default defineConfig(({ mode }) => {
         'process.env.CHATBOX_BUILD_PLATFORM': JSON.stringify(process.env.CHATBOX_BUILD_PLATFORM || 'unknown'),
         'process.env.USE_LOCAL_API': JSON.stringify(process.env.USE_LOCAL_API || ''),
         'process.env.USE_BETA_API': JSON.stringify(process.env.USE_BETA_API || ''),
+        'process.env.TUTORMEAI_BACKEND_ORIGIN': JSON.stringify(process.env.TUTORMEAI_BACKEND_ORIGIN || ''),
       },
     },
     preload: {
@@ -233,6 +234,7 @@ export default defineConfig(({ mode }) => {
         'process.env.CHATBOX_BUILD_PLATFORM': JSON.stringify(process.env.CHATBOX_BUILD_PLATFORM || 'unknown'),
         'process.env.USE_LOCAL_API': JSON.stringify(process.env.USE_LOCAL_API || ''),
         'process.env.USE_BETA_API': JSON.stringify(process.env.USE_BETA_API || ''),
+        'process.env.TUTORMEAI_BACKEND_ORIGIN': JSON.stringify(process.env.TUTORMEAI_BACKEND_ORIGIN || ''),
       },
       optimizeDeps: {
         include: ['mermaid'],

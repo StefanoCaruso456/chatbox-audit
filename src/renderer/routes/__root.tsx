@@ -1,7 +1,11 @@
 import { type RemoteConfig, Theme } from '@shared/types'
+import AppsModal from '@/components/apps/AppsModal'
+import RuntimeTraceExportController from '@/components/apps/RuntimeTraceExportController'
+import { TutorMeAIAuthGate } from '@/components/auth/TutorMeAIAuthGate'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import Toasts from '@/components/common/Toasts'
 import ExitFullscreenButton from '@/components/layout/ExitFullscreenButton'
+import AppAccessApprovalRuntime from '@/components/security/AppAccessApprovalRuntime'
 import useAppTheme from '@/hooks/useAppTheme'
 import { useSystemLanguageWhenInit } from '@/hooks/useDefaultSystemLanguage'
 import { useI18nEffect } from '@/hooks/useI18nEffect'
@@ -45,9 +49,7 @@ import { Box, Grid } from '@mui/material'
 import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
-import { useSetAtom } from 'jotai'
 import { useEffect, useMemo, useRef } from 'react'
-import AppsModal from '@/components/apps/AppsModal'
 import { isEmbeddedAppPath } from '@/lib/root-layout-utils'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
 import { getOS } from '@/packages/navigator'
@@ -58,8 +60,8 @@ import SearchDialog from '@/pages/SearchDialog'
 import platform from '@/platform'
 import { router } from '@/router'
 import Sidebar from '@/Sidebar'
-import * as atoms from '@/stores/atoms'
 import * as premiumActions from '@/stores/premiumActions'
+import { initRemoteConfigStore, remoteConfigStore, useRemoteConfigStore } from '@/stores/remoteConfigStore'
 import * as settingActions from '@/stores/settingActions'
 import { settingsStore, useLanguage, useSettingsStore, useTheme } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
@@ -86,8 +88,11 @@ function Root() {
   const isEmbeddedAppRoute = isEmbeddedAppPath(location.pathname)
 
   const setOpenAboutDialog = useUIStore((s) => s.setOpenAboutDialog)
+  const mergeRemoteConfig = useRemoteConfigStore((state) => state.mergeRemoteConfig)
 
-  const setRemoteConfig = useSetAtom(atoms.remoteConfigAtom)
+  useEffect(() => {
+    void initRemoteConfigStore()
+  }, [])
 
   useEffect(() => {
     if (isEmbeddedAppRoute) {
@@ -100,10 +105,24 @@ function Root() {
     const tid = setTimeout(() => {
       // biome-ignore lint/nursery/noFloatingPromises: inline call
       ;(async () => {
-        const remoteConfig = await remote
-          .getRemoteConfig('setting_chatboxai_first')
-          .catch(() => ({ setting_chatboxai_first: false }) as RemoteConfig)
-        setRemoteConfig((conf) => ({ ...conf, ...remoteConfig }))
+        await initRemoteConfigStore()
+        const [chatboxFirstConfig, currentVersionConfig] = await Promise.all([
+          remote
+            .getRemoteConfig('setting_chatboxai_first')
+            .catch(() => ({ setting_chatboxai_first: false }) satisfies Pick<RemoteConfig, 'setting_chatboxai_first'>),
+          remote
+            .getRemoteConfig('current_version')
+            .catch(() => ({}) satisfies Partial<Pick<RemoteConfig, 'current_version'>>),
+        ])
+        const fetchedRemoteConfig: Partial<RemoteConfig> = {
+          ...chatboxFirstConfig,
+          ...currentVersionConfig,
+        }
+        const mergedRemoteConfig = {
+          ...remoteConfigStore.getState().getRemoteConfig(),
+          ...fetchedRemoteConfig,
+        }
+        mergeRemoteConfig(fetchedRemoteConfig)
         // 是否需要弹出设置窗口
         initialized.current = true
         if (settingActions.needEditSetting() && location.pathname !== '/settings/mcp') {
@@ -113,7 +132,7 @@ function Root() {
         // 是否需要弹出关于窗口（更新后首次启动）
         // 目前仅在桌面版本更新后首次启动、且网络环境为"外网"的情况下才自动弹窗
         const shouldShowAboutDialogWhenStartUp = await platform.shouldShowAboutDialogWhenStartUp()
-        if (shouldShowAboutDialogWhenStartUp && remoteConfig.setting_chatboxai_first) {
+        if (shouldShowAboutDialogWhenStartUp && mergedRemoteConfig.setting_chatboxai_first) {
           setOpenAboutDialog(true)
           return
         }
@@ -121,7 +140,7 @@ function Root() {
     }, 2000)
 
     return () => clearTimeout(tid)
-  }, [isEmbeddedAppRoute, setOpenAboutDialog, setRemoteConfig, location.pathname])
+  }, [isEmbeddedAppRoute, location.pathname, mergeRemoteConfig, setOpenAboutDialog])
 
   const showSidebar = useUIStore((s) => s.showSidebar)
   const sidebarWidth = useSidebarWidth()
@@ -184,24 +203,38 @@ function Root() {
   return (
     <Box className="box-border App cb-neumo-app" spellCheck={spellCheck} dir={language === 'ar' ? 'rtl' : 'ltr'}>
       {platform.type === 'desktop' && (getOS() === 'Windows' || getOS() === 'Linux') && <ExitFullscreenButton />}
-      <Grid container className="h-full">
-        {!isEmbeddedAppRoute && <Sidebar />}
-        <Box
-          className="h-full w-full"
-          sx={{
-            flexGrow: 1,
-            ...(!isEmbeddedAppRoute && showSidebar
-              ? language === 'ar'
-                ? { paddingRight: { sm: `${sidebarWidth}px` } }
-                : { paddingLeft: { sm: `${sidebarWidth}px` } }
-              : {}),
-          }}
-        >
-          <ErrorBoundary name="main">
-            <Outlet />
-          </ErrorBoundary>
-        </Box>
-      </Grid>
+      {isEmbeddedAppRoute ? (
+        <Grid container className="h-full">
+          <Box className="h-full w-full" sx={{ flexGrow: 1 }}>
+            <ErrorBoundary name="main">
+              <Outlet />
+            </ErrorBoundary>
+          </Box>
+        </Grid>
+      ) : (
+        <TutorMeAIAuthGate>
+          <AppAccessApprovalRuntime />
+          <RuntimeTraceExportController />
+          <Grid container className="h-full">
+            <Sidebar />
+            <Box
+              className="h-full w-full"
+              sx={{
+                flexGrow: 1,
+                ...(showSidebar
+                  ? language === 'ar'
+                    ? { paddingRight: { sm: `${sidebarWidth}px` } }
+                    : { paddingLeft: { sm: `${sidebarWidth}px` } }
+                  : {}),
+              }}
+            >
+              <ErrorBoundary name="main">
+                <Outlet />
+              </ErrorBoundary>
+            </Box>
+          </Grid>
+        </TutorMeAIAuthGate>
+      )}
       {/* 对话设置 */}
       {/* <AppStoreRatingDialog /> */}
       {/* 代码预览 */}

@@ -24,6 +24,7 @@ ENV NODE_ENV=production
 
 COPY scripts/serve-web.mjs ./scripts/serve-web.mjs
 COPY --from=builder /app/release/app/dist/renderer ./release/app/dist/renderer
+COPY --from=builder /app/release/app/server ./release/app/server
 
 EXPOSE 3000
 

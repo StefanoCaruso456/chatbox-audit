@@ -1,9 +1,8 @@
 import { Typography } from '@mui/material'
 import type { Message } from '@shared/types'
-import { useAtomValue } from 'jotai'
 import { Loader } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
-import * as atoms from '@/stores/atoms'
+import { useRemoteConfig } from '@/stores/remoteConfigStore'
 import LinkTargetBlank from '../common/Link'
 
 export default function MessageStatuses(props: { statuses: Message['status'] }) {
@@ -36,7 +35,7 @@ function getMessageStatusKey(status: NonNullable<Message['status']>[number]) {
 function MessageStatus(props: { status: NonNullable<Message['status']>[number] }) {
   const { status } = props
   const { t } = useTranslation()
-  const remoteConfig = useAtomValue(atoms.remoteConfigAtom)
+  const remoteConfig = useRemoteConfig()
   if (status.type === 'sending_file') {
     return (
       <div>
@@ -100,7 +99,9 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
     return (
       <LoadingBubble>
         <span>
-          {status.appName ? t('Launching {{appName}}...', { appName: status.appName }) : t('Launching app...')}
+          {status.appName
+            ? t('Opening {{appName}} in the right sidebar...', { appName: status.appName })
+            : t('Opening app in the right sidebar...')}
         </span>
       </LoadingBubble>
     )
@@ -110,8 +111,8 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
       <LoadingBubble>
         <span>
           {status.appName
-            ? t('Loading {{appName}} interface...', { appName: status.appName })
-            : t('Loading app interface...')}
+            ? t('Loading {{appName}} in the right sidebar...', { appName: status.appName })
+            : t('Loading app in the right sidebar...')}
         </span>
       </LoadingBubble>
     )
@@ -121,8 +122,8 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
       <LoadingBubble>
         <span>
           {status.appName
-            ? t('Waiting for {{appName}} to finish...', { appName: status.appName })
-            : t('Waiting for app to finish...')}
+            ? t('Waiting for {{appName}} to finish in the right sidebar...', { appName: status.appName })
+            : t('Waiting for the sidebar app to finish...')}
         </span>
       </LoadingBubble>
     )

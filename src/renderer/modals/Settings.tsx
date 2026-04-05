@@ -31,6 +31,8 @@ import { RouteComponent as SettingsProviderChatboxAiRouteComponent } from '@/rou
 import { RouteComponent as SettingsProviderIndexRouteComponent } from '@/routes/settings/provider/index'
 import { RouteComponent as SettingsProviderRouteRouteComponent } from '@/routes/settings/provider/route'
 import { SettingsRoot } from '@/routes/settings/route'
+import { RouteComponent as SettingsTutorMeAIProfileRouteComponent } from '@/routes/settings/tutormeai-profile'
+import { RouteComponent as SettingsTutorMeAIReviewsRouteComponent } from '@/routes/settings/tutormeai-reviews'
 import { RouteComponent as SettingsWebSearchRouteComponent } from '@/routes/settings/web-search'
 
 export type SettingsModalProps = {}
@@ -107,6 +109,17 @@ export const SettingsModal: FC<SettingsModalProps> = (props) => {
 
 export default SettingsModal
 
+export function closeSettings() {
+  const { settings: _, ...otherSearch } = router.state.location.search
+
+  if ('settings' in router.state.location.search) {
+    router.navigate({
+      to: router.state.location.pathname,
+      search: otherSearch,
+    })
+  }
+}
+
 export function navigateToSettings(path?: string) {
   if (window.matchMedia(`(max-width:${getThemeDesign('light', 16, 'en').breakpoints?.values?.sm || 640}px)`).matches) {
     router.navigate({
@@ -138,6 +151,18 @@ const SettingsIndexRoute = createRoute({
 const SettingsChatboxAiRoute = createRoute({
   component: SettingsChatboxAiRouteComponent,
   path: '/settings/chatbox-ai',
+  getParentRoute: () => RootRoute,
+})
+
+const SettingsTutorMeAIProfileRoute = createRoute({
+  component: SettingsTutorMeAIProfileRouteComponent,
+  path: '/settings/tutormeai-profile',
+  getParentRoute: () => RootRoute,
+})
+
+const SettingsTutorMeAIReviewsRoute = createRoute({
+  component: SettingsTutorMeAIReviewsRouteComponent,
+  path: '/settings/tutormeai-reviews',
   getParentRoute: () => RootRoute,
 })
 
@@ -222,6 +247,8 @@ SettingsProviderRouteRoute.addChildren([
 const routeTree = RootRoute.addChildren([
   SettingsIndexRoute,
   SettingsChatboxAiRoute,
+  SettingsTutorMeAIProfileRoute,
+  SettingsTutorMeAIReviewsRoute,
   SettingsGeneralRoute,
   SettingsChatRoute,
   SettingsWebSearchRoute,

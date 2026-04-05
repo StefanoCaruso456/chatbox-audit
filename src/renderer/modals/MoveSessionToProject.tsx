@@ -109,8 +109,8 @@ const MoveSessionToProject = NiceModal.create(({ sessionId }: { sessionId: strin
         </Text>
 
         <TextInput
-          label={t('Project name')}
-          placeholder={t('Project name')}
+          label={t('Project name') || ''}
+          placeholder={t('Project name') || ''}
           value={newProjectName}
           onChange={(event) => {
             setNewProjectName(event.currentTarget.value)

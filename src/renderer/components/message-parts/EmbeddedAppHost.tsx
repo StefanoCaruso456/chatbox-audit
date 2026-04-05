@@ -92,6 +92,28 @@ function getRuntimeGuardError(reason: string | null | undefined): string | null 
   return null
 }
 
+function hasIframeRenderableContent(iframe: HTMLIFrameElement | null) {
+  try {
+    const doc = iframe?.contentDocument
+    if (!doc) {
+      return false
+    }
+
+    if (doc.readyState !== 'interactive' && doc.readyState !== 'complete') {
+      return false
+    }
+
+    const body = doc.body
+    if (!body) {
+      return false
+    }
+
+    return body.childElementCount > 0 || (body.textContent ?? '').trim().length > 0
+  } catch {
+    return false
+  }
+}
+
 function createTimeoutError(timeoutMs: number): EmbeddedAppHostTimeoutError {
   const timeoutSeconds = Math.max(1, Math.round(timeoutMs / 1000))
   return {
@@ -122,6 +144,8 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
   const bootstrapKeyRef = useRef<string | null>(null)
   const invocationKeyRef = useRef<string | null>(null)
   const heartbeatTimerRef = useRef<number | null>(null)
+  const handshakeReplayTimersRef = useRef<number[]>([])
+  const hasRuntimeResponseRef = useRef(false)
 
   const normalizedSrc = useMemo(() => normalizeEmbeddedAppSrc(props.src), [props.src])
   const actualOrigin = useMemo(() => getActualOrigin(normalizedSrc), [normalizedSrc])
@@ -168,6 +192,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
   }, [originValidation?.reason, props.runtime])
 
   const [hasLoaded, setHasLoaded] = useState(false)
+  const [hasRuntimeResponse, setHasRuntimeResponse] = useState(false)
   const [displayState, setDisplayState] = useState<EmbeddedAppHostState>(initialState)
   const [runtimeDescription, setRuntimeDescription] = useState<string | undefined>(
     props.runtime?.completion?.summary ?? props.description
@@ -181,6 +206,11 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
       window.clearTimeout(heartbeatTimerRef.current)
       heartbeatTimerRef.current = null
     }
+  }, [])
+
+  const clearHandshakeReplayTimers = useCallback(() => {
+    handshakeReplayTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    handshakeReplayTimersRef.current = []
   }, [])
 
   const emitTimeout = useCallback(
@@ -240,8 +270,12 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     sequenceRef.current = 0
     bootstrapKeyRef.current = null
     invocationKeyRef.current = null
+    hasRuntimeResponseRef.current = false
+    setHasRuntimeResponse(false)
     clearHeartbeatTimer()
+    clearHandshakeReplayTimers()
   }, [
+    clearHandshakeReplayTimers,
     clearHeartbeatTimer,
     initialState,
     props.description,
@@ -299,6 +333,13 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
         return
       }
 
+      if (!hasRuntimeResponseRef.current) {
+        hasRuntimeResponseRef.current = true
+        setHasRuntimeResponse(true)
+        setHasLoaded(true)
+        clearHandshakeReplayTimers()
+      }
+
       if (message.type === 'app.state') {
         setDisplayState(mapRuntimeStatusToHostState(message.payload.status))
         setRuntimeDescription(message.payload.summary)
@@ -354,119 +395,189 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     props.runtime,
     runtimeAppSessionId,
     runtimeGuardError,
+    clearHandshakeReplayTimers,
     scheduleHeartbeatTimeout,
   ])
 
-  useEffect(() => {
-    const runtime = props.runtime
-    if (!hasLoaded || !normalizedSrc || !runtime || runtimeGuardError || !originValidation?.valid) {
-      return
-    }
+  const postRuntimeHandshake = useCallback(
+    (forceReplay = false) => {
+      const runtime = props.runtime
+      if (!hasLoaded || !normalizedSrc || !runtime || runtimeGuardError || !originValidation?.valid) {
+        return
+      }
 
-    const iframeWindow = iframeRef.current?.contentWindow
-    const targetOrigin = originValidation.normalizedExpectedOrigin
-    if (!iframeWindow || !targetOrigin) {
-      return
-    }
+      const iframeWindow = iframeRef.current?.contentWindow
+      const targetOrigin = originValidation.normalizedExpectedOrigin
+      if (!iframeWindow || !targetOrigin) {
+        return
+      }
 
-    const now = new Date().toISOString()
-    const nextSequence = () => {
-      sequenceRef.current += 1
-      return sequenceRef.current
-    }
+      const now = new Date().toISOString()
+      const nextSequence = () => {
+        sequenceRef.current += 1
+        return sequenceRef.current
+      }
 
-    const bootstrapKey = JSON.stringify([
-      runtime.conversationId,
-      runtimeAppSessionId,
-      runtime.bootstrap?.launchReason ?? 'manual-open',
-      runtime.bootstrap?.messageId ?? '',
-      runtime.bootstrap?.correlationId ?? '',
-      runtime.bootstrap?.authState ?? 'not-required',
-      runtime.bootstrap?.grantedPermissions ?? [],
-      runtime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
-    ])
+      const bootstrapKey = JSON.stringify([
+        runtime.conversationId,
+        runtimeAppSessionId,
+        runtime.bootstrap?.launchReason ?? 'manual-open',
+        runtime.bootstrap?.messageId ?? '',
+        runtime.bootstrap?.correlationId ?? '',
+        runtime.bootstrap?.authState ?? 'not-required',
+        runtime.bootstrap?.grantedPermissions ?? [],
+        runtime.bootstrap?.availableTools?.map((tool) => tool.name) ?? [],
+      ])
 
-    if (bootstrapKeyRef.current !== bootstrapKey) {
-      const bootstrapSequence = nextSequence()
-      const bootstrapMessage = createHostBootstrapMessage({
+      if (forceReplay || bootstrapKeyRef.current !== bootstrapKey) {
+        const bootstrapSequence = nextSequence()
+        const bootstrapMessage = createHostBootstrapMessage({
+          messageId:
+            runtime.bootstrap?.messageId ??
+            buildRuntimeMessageId('bootstrap', props.appId, runtimeAppSessionId, bootstrapSequence),
+          correlationId: runtime.bootstrap?.correlationId,
+          conversationId: runtime.conversationId,
+          appSessionId: runtimeAppSessionId,
+          appId: props.appId,
+          sequence: bootstrapSequence,
+          sentAt: now,
+          expectedOrigin: targetOrigin,
+          handshakeToken,
+          launchReason: runtime.bootstrap?.launchReason ?? 'manual-open',
+          authState: runtime.bootstrap?.authState ?? 'not-required',
+          grantedPermissions: runtime.bootstrap?.grantedPermissions ?? [],
+          embedUrl: normalizedSrc,
+          initialState: runtime.bootstrap?.initialState,
+          availableTools: runtime.bootstrap?.availableTools ?? [],
+        })
+
+        iframeWindow.postMessage(bootstrapMessage, targetOrigin)
+        bootstrapKeyRef.current = bootstrapKey
+        scheduleHeartbeatTimeout(now)
+      }
+
+      if (!runtime.pendingInvocation) {
+        return
+      }
+
+      const invocationKey = JSON.stringify([
+        runtime.pendingInvocation.toolCallId,
+        runtime.pendingInvocation.toolName,
+        runtime.pendingInvocation.messageId ?? '',
+        runtime.pendingInvocation.correlationId ?? '',
+        runtime.pendingInvocation.timeoutMs ?? '',
+        runtime.pendingInvocation.arguments ?? {},
+      ])
+
+      if (!forceReplay && invocationKeyRef.current === invocationKey) {
+        return
+      }
+
+      const invokeSequence = nextSequence()
+      const invokeMessage = createHostInvokeMessage({
         messageId:
-          runtime.bootstrap?.messageId ??
-          buildRuntimeMessageId('bootstrap', props.appId, runtimeAppSessionId, bootstrapSequence),
-        correlationId: runtime.bootstrap?.correlationId,
+          runtime.pendingInvocation.messageId ??
+          buildRuntimeMessageId('invoke', props.appId, runtimeAppSessionId, invokeSequence),
+        correlationId: runtime.pendingInvocation.correlationId,
         conversationId: runtime.conversationId,
         appSessionId: runtimeAppSessionId,
         appId: props.appId,
-        sequence: bootstrapSequence,
+        sequence: invokeSequence,
         sentAt: now,
         expectedOrigin: targetOrigin,
         handshakeToken,
-        launchReason: runtime.bootstrap?.launchReason ?? 'manual-open',
-        authState: runtime.bootstrap?.authState ?? 'not-required',
-        grantedPermissions: runtime.bootstrap?.grantedPermissions ?? [],
-        embedUrl: normalizedSrc,
-        initialState: runtime.bootstrap?.initialState,
-        availableTools: runtime.bootstrap?.availableTools ?? [],
+        toolCallId: runtime.pendingInvocation.toolCallId,
+        toolName: runtime.pendingInvocation.toolName,
+        arguments: runtime.pendingInvocation.arguments ?? {},
+        timeoutMs: runtime.pendingInvocation.timeoutMs,
       })
 
-      iframeWindow.postMessage(bootstrapMessage, targetOrigin)
-      bootstrapKeyRef.current = bootstrapKey
+      iframeWindow.postMessage(invokeMessage, targetOrigin)
+      invocationKeyRef.current = invocationKey
+      setDisplayState((currentState) => (currentState === 'complete' ? currentState : 'loading'))
+      setRuntimeDescription((currentDescription) => {
+        return currentDescription ?? `${runtime.pendingInvocation?.toolName} pending`
+      })
       scheduleHeartbeatTimeout(now)
-    }
-
-    if (!runtime.pendingInvocation) {
-      return
-    }
-
-    const invocationKey = JSON.stringify([
-      runtime.pendingInvocation.toolCallId,
-      runtime.pendingInvocation.toolName,
-      runtime.pendingInvocation.messageId ?? '',
-      runtime.pendingInvocation.correlationId ?? '',
-      runtime.pendingInvocation.timeoutMs ?? '',
-      runtime.pendingInvocation.arguments ?? {},
-    ])
-
-    if (invocationKeyRef.current === invocationKey) {
-      return
-    }
-
-    const invokeSequence = nextSequence()
-    const invokeMessage = createHostInvokeMessage({
-      messageId:
-        runtime.pendingInvocation.messageId ??
-        buildRuntimeMessageId('invoke', props.appId, runtimeAppSessionId, invokeSequence),
-      correlationId: runtime.pendingInvocation.correlationId,
-      conversationId: runtime.conversationId,
-      appSessionId: runtimeAppSessionId,
-      appId: props.appId,
-      sequence: invokeSequence,
-      sentAt: now,
-      expectedOrigin: targetOrigin,
+    },
+    [
       handshakeToken,
-      toolCallId: runtime.pendingInvocation.toolCallId,
-      toolName: runtime.pendingInvocation.toolName,
-      arguments: runtime.pendingInvocation.arguments ?? {},
-      timeoutMs: runtime.pendingInvocation.timeoutMs,
-    })
+      hasLoaded,
+      normalizedSrc,
+      originValidation?.normalizedExpectedOrigin,
+      originValidation?.valid,
+      props.appId,
+      props.runtime,
+      runtimeAppSessionId,
+      runtimeGuardError,
+      scheduleHeartbeatTimeout,
+    ]
+  )
 
-    iframeWindow.postMessage(invokeMessage, targetOrigin)
-    invocationKeyRef.current = invocationKey
-    setDisplayState((currentState) => (currentState === 'complete' ? currentState : 'loading'))
-    setRuntimeDescription((currentDescription) => {
-      return currentDescription ?? `${runtime.pendingInvocation?.toolName} pending`
-    })
-    scheduleHeartbeatTimeout(now)
+  useEffect(() => {
+    if (hasLoaded || !normalizedSrc || typeof window === 'undefined' || actualOrigin !== window.location.origin) {
+      return
+    }
+
+    let timer: number | null = null
+    let cancelled = false
+
+    const syncReadyState = () => {
+      if (cancelled) {
+        return
+      }
+
+      if (hasIframeRenderableContent(iframeRef.current)) {
+        setHasLoaded(true)
+        return
+      }
+
+      timer = window.setTimeout(syncReadyState, 100)
+    }
+
+    timer = window.setTimeout(syncReadyState, 100)
+
+    return () => {
+      cancelled = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [actualOrigin, hasLoaded, normalizedSrc, runtimeResetKey])
+
+  useEffect(() => {
+    if (!hasLoaded || !normalizedSrc || !props.runtime || runtimeGuardError || !originValidation?.valid) {
+      return
+    }
+
+    postRuntimeHandshake(false)
+  }, [hasLoaded, normalizedSrc, originValidation?.valid, postRuntimeHandshake, props.runtime, runtimeGuardError])
+
+  useEffect(() => {
+    if (!hasLoaded || !props.runtime || runtimeGuardError || hasRuntimeResponse) {
+      clearHandshakeReplayTimers()
+      return
+    }
+
+    const replayDelays = [180, 720, 1_600]
+    handshakeReplayTimersRef.current = replayDelays.map((delayMs) =>
+      window.setTimeout(() => {
+        if (!hasRuntimeResponseRef.current) {
+          postRuntimeHandshake(true)
+        }
+      }, delayMs)
+    )
+
+    return () => {
+      clearHandshakeReplayTimers()
+    }
   }, [
-    handshakeToken,
+    clearHandshakeReplayTimers,
     hasLoaded,
-    normalizedSrc,
-    originValidation?.normalizedExpectedOrigin,
-    originValidation?.valid,
-    props.appId,
+    hasRuntimeResponse,
+    postRuntimeHandshake,
     props.runtime,
-    runtimeAppSessionId,
     runtimeGuardError,
-    scheduleHeartbeatTimeout,
   ])
 
   const effectiveState: EmbeddedAppHostState = runtimeGuardError ? 'error' : !normalizedSrc ? 'error' : displayState
@@ -483,7 +594,10 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
     runtimeErrorMessage ||
     props.errorMessage ||
     'The embedded app could not be loaded. Retry the launch or continue the conversation in chat.'
-  const shouldHideOverlay = hasLoaded && (effectiveState === 'ready' || effectiveState === 'complete') && !hasError
+  const hasReadyRuntimeState = effectiveState === 'ready' || effectiveState === 'complete'
+  const shouldRevealIframe = (hasLoaded || hasRuntimeResponse || hasReadyRuntimeState) && !hasError
+  const shouldShowLoadingOverlay = !shouldRevealIframe && effectiveState === 'loading' && !hasError
+  const shouldShowErrorOverlay = hasError && !showRecoveryPanel
 
   return (
     <Paper
@@ -567,8 +681,8 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
               sandbox={buildEmbeddedAppSandbox(props.sandbox)}
               allow={props.allow}
               className={cn('absolute inset-0 h-full w-full border-0 transition-opacity duration-300', {
-                'opacity-100': shouldHideOverlay,
-                'opacity-0': !shouldHideOverlay,
+                'opacity-100': shouldRevealIframe,
+                'opacity-0': !shouldRevealIframe,
               })}
               onLoad={() => {
                 setHasLoaded(true)
@@ -626,7 +740,7 @@ export const EmbeddedAppHost: FC<EmbeddedAppHostProps> = (props) => {
                 </Group>
               </Stack>
             </Box>
-          ) : !shouldHideOverlay ? (
+          ) : shouldShowErrorOverlay || shouldShowLoadingOverlay ? (
             <Box
               data-testid="embedded-app-host-overlay"
               className="absolute inset-0 flex items-center justify-center p-5"

@@ -1,5 +1,15 @@
 import type { EmbeddedAppHostRuntimeConfig } from '@/components/message-parts/embedded-app-host'
+import type { Session } from '@shared/types'
 import type { ApprovedApp } from '@/types/apps'
+import {
+  buildConversationEmbeddedAppRuntime,
+  selectLatestApprovedAppConversationPart,
+} from './app-panel-conversation-sync'
+
+type ResolveAppPanelLaunchUrlOptions = {
+  cacheBustKey?: string
+  launchArguments?: Record<string, unknown>
+}
 
 function getLaunchOrigin(launchUrl: string): string | null {
   try {
@@ -14,9 +24,41 @@ function getLaunchOrigin(launchUrl: string): string | null {
   }
 }
 
-export function resolveAppPanelLaunchUrl(launchUrl: string) {
+function appendCacheBustKey(url: URL, cacheBustKey?: string) {
+  if (!cacheBustKey) {
+    return
+  }
+
+  url.searchParams.set('chatbridge_panel', '1')
+  url.searchParams.set('chatbridge_launch', cacheBustKey)
+}
+
+function appendLaunchArguments(url: URL, launchArguments?: Record<string, unknown>) {
+  if (!launchArguments) {
+    return
+  }
+
+  Object.entries(launchArguments).forEach(([key, value]) => {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      url.searchParams.set(key, String(value))
+    }
+  })
+}
+
+export function resolveAppPanelLaunchUrl(launchUrl: string, options?: ResolveAppPanelLaunchUrlOptions) {
   const trimmed = launchUrl.trim()
   if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed)
+      if (typeof window !== 'undefined' && parsed.origin === window.location.origin) {
+        appendCacheBustKey(parsed, options?.cacheBustKey)
+        appendLaunchArguments(parsed, options?.launchArguments)
+        return parsed.toString()
+      }
+    } catch {
+      return trimmed
+    }
+
     return trimmed
   }
 
@@ -32,7 +74,10 @@ export function resolveAppPanelLaunchUrl(launchUrl: string) {
     return `${window.location.href.split('#')[0]}#${trimmed}`
   }
 
-  return new URL(trimmed, window.location.origin).toString()
+  const resolved = new URL(trimmed, window.location.origin)
+  appendCacheBustKey(resolved, options?.cacheBustKey)
+  appendLaunchArguments(resolved, options?.launchArguments)
+  return resolved.toString()
 }
 
 export function buildSidebarEmbeddedAppRuntime(
@@ -68,6 +113,11 @@ export function buildSidebarEmbeddedAppRuntime(
         source: 'approved-app-sidebar',
         approvedAppId: app.id,
         approvedAppName: app.name,
+        ...(runtimeBridge.pendingInvocation?.arguments
+          ? {
+              toolArguments: runtimeBridge.pendingInvocation.arguments,
+            }
+          : {}),
         ...(runtimeBridge.initialState ?? {}),
       },
       availableTools: runtimeBridge.availableTools ?? [],
@@ -82,4 +132,33 @@ export function buildSidebarEmbeddedAppRuntime(
         }
       : undefined,
   }
+}
+
+export function resolveApprovedAppPanelRuntime(
+  app: ApprovedApp,
+  resolvedLaunchUrl: string,
+  restartNonce: number,
+  options?: {
+    sessionId?: string | null
+    session?: Session | null
+  }
+): EmbeddedAppHostRuntimeConfig | null {
+  if (!app.runtimeBridge) {
+    return null
+  }
+
+  const sessionId = options?.sessionId?.trim()
+  const session = options?.session
+
+  if (sessionId && session && app.experience === 'tutormeai-runtime') {
+    const ref = selectLatestApprovedAppConversationPart(session, app)
+    if (ref) {
+      const runtime = buildConversationEmbeddedAppRuntime(sessionId, ref, resolvedLaunchUrl)
+      if (runtime) {
+        return runtime
+      }
+    }
+  }
+
+  return buildSidebarEmbeddedAppRuntime(app, resolvedLaunchUrl, restartNonce)
 }

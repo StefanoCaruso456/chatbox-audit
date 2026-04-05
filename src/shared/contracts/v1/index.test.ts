@@ -17,13 +17,18 @@ import {
   exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
   examplePublicFlashcardsManifest,
+  exampleRuntimeTraceSpans,
+  exampleRuntimeTraceTree,
   exampleToolSchemas,
+  RuntimeTraceSpanSchema,
+  RuntimeTraceTreeSchema,
   ToolSchemaSchema,
   validateAppManifest,
   validateAppSessionState,
   validateCompletionSignal,
   validateConversationAppContext,
   validateEmbeddedAppMessage,
+  validateRuntimeTraceTree,
   validateToolSchema,
 } from '.'
 
@@ -260,6 +265,47 @@ describe('ConversationAppContextSchema', () => {
     expect(result.success).toBe(false)
     if (!result.success) {
       expect(result.errors.some((error) => error.includes('activeApp'))).toBe(true)
+    }
+  })
+})
+
+describe('RuntimeTraceSchema', () => {
+  it('accepts the example runtime trace spans and tree', () => {
+    for (const span of exampleRuntimeTraceSpans) {
+      expect(() => RuntimeTraceSpanSchema.parse(span)).not.toThrow()
+    }
+
+    expect(() => RuntimeTraceTreeSchema.parse(exampleRuntimeTraceTree)).not.toThrow()
+  })
+
+  it('rejects a runtime trace tree whose rootSpanId does not point to the root span', () => {
+    const result = validateRuntimeTraceTree({
+      ...exampleRuntimeTraceTree,
+      rootSpanId: 'span.some-other-root',
+    })
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('rootSpanId'))).toBe(true)
+    }
+  })
+
+  it('rejects a runtime trace tree when one span drifts to another traceId', () => {
+    const result = validateRuntimeTraceTree({
+      ...exampleRuntimeTraceTree,
+      spans: exampleRuntimeTraceTree.spans.map((span, index) =>
+        index === 1
+          ? {
+              ...span,
+              traceId: 'trace.other',
+            }
+          : span
+      ),
+    })
+
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.errors.some((error) => error.includes('traceId'))).toBe(true)
     }
   })
 })

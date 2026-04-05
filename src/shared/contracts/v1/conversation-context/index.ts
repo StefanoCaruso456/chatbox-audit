@@ -149,7 +149,7 @@ export const exampleConversationAppContext: ConversationAppContext = Conversatio
     authState: 'connected',
     currentToolCallId: 'tool-call.chess.1',
     resumableUntil: '2026-04-01T15:00:00.000Z',
-    availableToolNames: ['chess.launch-game'],
+    availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
   },
   recentCompletions: [
     {

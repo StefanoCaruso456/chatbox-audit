@@ -6,10 +6,7 @@ import type { AppRegistryErrorCode, AppRegistryFailure, AppRegistryRecord } from
 
 const BooleanQuerySchema = z.enum(['true', 'false']).transform((value) => value === 'true')
 
-const RegisterAppBodySchema = z.object({
-  manifest: z.unknown(),
-  category: z.string(),
-})
+const RegisterAppBodySchema = z.unknown()
 
 const ListAppsQuerySchema = z.object({
   approvedOnly: BooleanQuerySchema.optional(),
@@ -56,7 +53,6 @@ export interface AppRegistryApiErrorBody {
 
 export interface AppRegistryApiOptions {
   allowUnapprovedReads?: boolean
-  preserveSubmittedReviewStatus?: boolean
 }
 
 export interface GetAppRouteParams {
@@ -65,7 +61,6 @@ export interface GetAppRouteParams {
 
 export function createAppRegistryApi(service: AppRegistryService, options: AppRegistryApiOptions = {}) {
   const allowUnapprovedReads = options.allowUnapprovedReads ?? false
-  const preserveSubmittedReviewStatus = options.preserveSubmittedReviewStatus ?? false
 
   return {
     register: async (request: Request): Promise<Response> => {
@@ -74,13 +69,9 @@ export function createAppRegistryApi(service: AppRegistryService, options: AppRe
         return parsedBody.response
       }
 
-      const manifest = preserveSubmittedReviewStatus
-        ? parsedBody.data.manifest
-        : coerceManifestToPendingReview(parsedBody.data.manifest)
-
       const result = await service.registerApp({
-        manifest,
-        category: parsedBody.data.category,
+        submission: parsedBody.data,
+        registrationSource: 'partner-submission',
       })
 
       return toRegistryResponse(result, 201)
@@ -183,28 +174,6 @@ function searchParamsToObject(searchParams: URLSearchParams): Record<string, str
   return Object.fromEntries(searchParams.entries())
 }
 
-function coerceManifestToPendingReview(manifest: unknown): unknown {
-  if (!manifest || typeof manifest !== 'object') {
-    return manifest
-  }
-
-  const manifestRecord = manifest as Record<string, unknown>
-  const safetyMetadata =
-    manifestRecord.safetyMetadata && typeof manifestRecord.safetyMetadata === 'object'
-      ? (manifestRecord.safetyMetadata as Record<string, unknown>)
-      : {}
-
-  return {
-    ...manifestRecord,
-    safetyMetadata: {
-      ...safetyMetadata,
-      reviewStatus: 'pending',
-      reviewedAt: undefined,
-      reviewedBy: undefined,
-    },
-  }
-}
-
 function toRegistryResponse(result: { ok: true; value: AppRegistryRecord } | AppRegistryFailure, successStatus: number): Response {
   if (result.ok) {
     return jsonSuccess(successStatus, { app: result.value })
@@ -216,6 +185,7 @@ function toRegistryResponse(result: { ok: true; value: AppRegistryRecord } | App
 function statusForRegistryFailure(code: AppRegistryErrorCode): number {
   switch (code) {
     case 'invalid-manifest':
+    case 'invalid-submission-package':
     case 'invalid-category':
       return 400
     case 'slug-conflict':

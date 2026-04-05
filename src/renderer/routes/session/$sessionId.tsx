@@ -5,16 +5,16 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useStore } from 'zustand'
+import ApprovedAppCoachController from '@/components/apps/ApprovedAppCoachController'
 import AppsWorkspace from '@/components/apps/AppsWorkspace'
 import MessageList, { type MessageListRef } from '@/components/chat/MessageList'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import InputBox from '@/components/InputBox/InputBox'
 import Header from '@/components/layout/Header'
-import ThreadHistoryDrawer from '@/components/session/ThreadHistoryDrawer'
 import { updateSession as updateSessionStore, useSession } from '@/stores/chatStore'
 import { lastUsedModelStore } from '@/stores/lastUsedModelStore'
 import * as scrollActions from '@/stores/scrollActions'
-import { modifyMessage, removeCurrentThread, startNewThread, submitNewUserMessage } from '@/stores/sessionActions'
+import { modifyMessage, submitNewUserMessage } from '@/stores/sessionActions'
 import { getAllMessageList } from '@/stores/sessionHelpers'
 
 export const Route = createFileRoute('/session/$sessionId')({
@@ -81,22 +81,6 @@ function RouteComponent() {
     [currentSession]
   )
 
-  const onStartNewThread = useCallback(() => {
-    if (!currentSession) {
-      return false
-    }
-    void startNewThread(currentSession.id)
-    return true
-  }, [currentSession])
-
-  const onRollbackThread = useCallback(() => {
-    if (!currentSession) {
-      return false
-    }
-    void removeCurrentThread(currentSession.id)
-    return true
-  }, [currentSession])
-
   const onSubmit = useCallback(
     async ({
       constructedMessage,
@@ -157,6 +141,7 @@ function RouteComponent() {
       <div className="pointer-events-none absolute left-6 top-10 h-32 w-32 rounded-full bg-chatbox-background-brand-secondary/30 blur-3xl" />
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <Header session={currentSession} />
+        <ApprovedAppCoachController sessionId={currentSession.id} session={currentSession} />
 
         <div className="relative flex min-h-0 flex-1 flex-col px-2 pb-2 pt-1 sm:px-3 sm:pb-3">
           <AppsWorkspace>
@@ -177,8 +162,6 @@ function RouteComponent() {
                     sessionId={currentSession.id}
                     sessionType={currentSession.type}
                     model={model}
-                    onStartNewThread={onStartNewThread}
-                    onRollbackThread={onRollbackThread}
                     onSelectModel={onSelectModel}
                     onClickSessionSettings={onClickSessionSettings}
                     generating={!!lastGeneratingMessage}
@@ -190,7 +173,6 @@ function RouteComponent() {
             </section>
           </AppsWorkspace>
         </div>
-        <ThreadHistoryDrawer session={currentSession} />
       </div>
     </main>
   ) : (

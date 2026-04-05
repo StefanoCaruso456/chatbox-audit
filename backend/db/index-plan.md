@@ -2,6 +2,8 @@
 
 This document explains the initial indexes created by `backend/db/migrations/0001_tutormeai_platform.sql`.
 Phase 3 auth/security adds `backend/db/migrations/0002_tutormeai_auth_security.sql` for platform-session persistence.
+Trust Governance Phase 2 adds `backend/db/migrations/0003_tutormeai_submission_review_hardening.sql` for submission and version-scoped review metadata.
+Trust Governance Phase 4 adds `backend/db/migrations/0004_tutormeai_review_workflow.sql` for reviewer decision persistence on `app_review_records`.
 
 ## Query Patterns
 
@@ -39,8 +41,10 @@ Primary indexes:
 
 - unique constraint on `apps.slug`
 - `idx_apps_review_distribution`
+- `idx_apps_review_state`
 - unique constraint on `(app_id, version)`
 - `idx_app_versions_app_created`
+- `idx_app_versions_review_state`
 
 ### 4. Active and resumable app sessions
 
@@ -115,11 +119,14 @@ Expected query:
 
 - fetch the latest review history for an app
 - inspect pending or blocked reviews
+- build reviewer queues by `review_state`
+- page recent review decisions for a specific app version
 
 Primary indexes:
 
 - `idx_app_review_records_app_created`
 - `idx_app_review_records_status_created`
+- `idx_app_review_records_state_created`
 
 ## Out Of Scope For Ticket 09
 
