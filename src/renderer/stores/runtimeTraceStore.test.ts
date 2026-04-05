@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildRuntimeTraceId,
+  getPendingRuntimeTraceSpans,
   getRuntimeTraceTree,
   getRuntimeTraceSpans,
+  markRuntimeTraceSpansExported,
   recordRuntimeTraceSpan,
   resetRuntimeTraceStore,
 } from './runtimeTraceStore'
@@ -50,5 +52,37 @@ describe('runtimeTraceStore', () => {
     expect(tree).not.toBeNull()
     expect(tree?.rootSpanId).toBe(spans.find((item) => item.kind === 'trace-root')?.spanId)
     expect(tree?.spans).toHaveLength(2)
+  })
+
+  it('tracks pending spans until they are marked as exported', () => {
+    const traceId = buildRuntimeTraceId({
+      conversationId: 'session.test',
+      appSessionId: 'app-session.chess.2',
+      runtimeAppId: 'chess.internal',
+    })
+
+    const span = recordRuntimeTraceSpan({
+      traceId,
+      name: 'publish chess runtime opened event',
+      kind: 'runtime-open',
+      status: 'succeeded',
+      conversationId: 'session.test',
+      sessionId: 'session.test',
+      appSessionId: 'app-session.chess.2',
+      approvedAppId: 'chess-tutor',
+      runtimeAppId: 'chess.internal',
+      actor: {
+        layer: 'host',
+        source: 'app-iframe-panel',
+      },
+    })
+
+    const pendingBeforeExport = getPendingRuntimeTraceSpans().filter((item) => item.traceId === traceId)
+    expect(pendingBeforeExport.map((item) => item.kind)).toEqual(['trace-root', 'runtime-open'])
+
+    markRuntimeTraceSpansExported([span.spanId, pendingBeforeExport[0]!.spanId])
+
+    const pendingAfterExport = getPendingRuntimeTraceSpans().filter((item) => item.traceId === traceId)
+    expect(pendingAfterExport).toHaveLength(0)
   })
 })

@@ -1,5 +1,6 @@
 import { type RemoteConfig, Theme } from '@shared/types'
 import AppsModal from '@/components/apps/AppsModal'
+import RuntimeTraceExportController from '@/components/apps/RuntimeTraceExportController'
 import { TutorMeAIAuthGate } from '@/components/auth/TutorMeAIAuthGate'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import Toasts from '@/components/common/Toasts'
@@ -191,6 +192,7 @@ function Root() {
         </Grid>
       ) : (
         <TutorMeAIAuthGate>
+          <RuntimeTraceExportController />
           <Grid container className="h-full">
             <Sidebar />
             <Box
