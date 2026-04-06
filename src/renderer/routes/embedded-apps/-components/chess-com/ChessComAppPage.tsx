@@ -298,6 +298,10 @@ function buildViewerKey(input: { diagramId: string; pgn: string; reloadNonce: nu
   return `${input.viewerKind}:${input.diagramId}:${input.pgn.length}:${input.reloadNonce}:${input.pgn.slice(-24)}`
 }
 
+function buildRawViewerKey(input: { diagramId: string; resolvedEmbedUrl: string; reloadNonce: number }) {
+  return `raw:${input.diagramId}:${input.reloadNonce}:${input.resolvedEmbedUrl}`
+}
+
 function buildChessComApiUrl(pathname: string, backendOrigin: string) {
   return new URL(pathname, backendOrigin).toString()
 }
@@ -469,24 +473,32 @@ export function ChessComAppPage() {
     })
   }, [backendOrigin, boardPgn, diagramId, reloadNonce])
 
-  const shouldPreloadPatchedViewer =
-    usesPatchedViewer && visibleViewerKind === 'raw' && viewerMode !== 'fallback' && Boolean(patchedViewerUrl)
-  const activeViewerKind: VisibleViewerKind =
-    usesPatchedViewer && visibleViewerKind === 'patched' && viewerMode !== 'fallback' ? 'patched' : 'raw'
-  const activeViewerUrl = activeViewerKind === 'patched' ? patchedViewerUrl : resolvedEmbedUrl
-
-  const viewerKey = useMemo(() => {
+  const rawViewerKey = useMemo(() => {
     if (!diagramId) {
-      return `chess-com-missing:${reloadNonce}:${activeViewerKind}`
+      return `raw:missing:${reloadNonce}`
+    }
+
+    return buildRawViewerKey({
+      diagramId,
+      resolvedEmbedUrl,
+      reloadNonce,
+    })
+  }, [diagramId, reloadNonce, resolvedEmbedUrl])
+
+  const patchedViewerKey = useMemo(() => {
+    if (!diagramId) {
+      return `patched:missing:${reloadNonce}`
     }
 
     return buildViewerKey({
       diagramId,
       pgn: boardPgn,
       reloadNonce,
-      viewerKind: activeViewerKind,
+      viewerKind: 'patched',
     })
-  }, [activeViewerKind, boardPgn, diagramId, reloadNonce])
+  }, [boardPgn, diagramId, reloadNonce])
+  const showPatchedViewer = usesPatchedViewer && visibleViewerKind === 'patched' && viewerMode !== 'fallback'
+  const renderPatchedViewer = usesPatchedViewer && viewerMode !== 'fallback' && Boolean(patchedViewerUrl)
 
   useEffect(() => {
     if (!usesPatchedViewer || !patchedViewerUrl) {
@@ -536,6 +548,16 @@ export function ChessComAppPage() {
         }
         setVisibleViewerKind('patched')
         setViewerMode('ready')
+        return
+      }
+
+      if (candidate.type === 'viewer-timeout') {
+        if (viewerTimeoutRef.current !== null) {
+          window.clearTimeout(viewerTimeoutRef.current)
+          viewerTimeoutRef.current = null
+        }
+        setVisibleViewerKind('raw')
+        setViewerMode('fallback')
       }
     }
 
@@ -873,22 +895,29 @@ export function ChessComAppPage() {
               }}
             >
               <iframe
-                key={viewerKey}
+                key={rawViewerKey}
                 title={buildShellIframeTitle(diagramId ?? 'unknown')}
-                src={activeViewerUrl}
-                className="h-full w-full border-0 bg-white"
+                src={resolvedEmbedUrl}
+                className={
+                  showPatchedViewer
+                    ? 'pointer-events-none h-full w-full border-0 bg-white opacity-0'
+                    : 'h-full w-full border-0 bg-white'
+                }
                 sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
                 allow="clipboard-read; clipboard-write; fullscreen"
                 referrerPolicy={approvedApp ? getPreviewReferrerPolicy(approvedApp) : 'strict-origin-when-cross-origin'}
                 onLoad={handleViewerLoad}
-                onError={handleViewerError}
               />
-              {shouldPreloadPatchedViewer ? (
+              {renderPatchedViewer ? (
                 <iframe
-                  key={`preload:${patchedViewerUrl}`}
-                  title={`${buildShellIframeTitle(diagramId ?? 'unknown')} preload`}
+                  key={patchedViewerKey}
+                  title={`${buildShellIframeTitle(diagramId ?? 'unknown')} synced replay`}
                   src={patchedViewerUrl}
-                  className="pointer-events-none absolute left-[-9999px] top-[-9999px] h-[1px] w-[1px] border-0 opacity-0"
+                  className={
+                    showPatchedViewer
+                      ? 'absolute inset-0 h-full w-full border-0 bg-white'
+                      : 'pointer-events-none absolute inset-0 h-full w-full border-0 bg-white opacity-0'
+                  }
                   sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
                   allow="clipboard-read; clipboard-write; fullscreen"
                   referrerPolicy={
