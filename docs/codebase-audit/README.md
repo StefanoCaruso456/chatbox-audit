@@ -40,7 +40,7 @@ This audit combined:
 
 - full repository inventory and file counting
 - targeted reading of entrypoints, storage, provider, routing, session, MCP, knowledge-base, image-generation, and remote-service code
-- review of existing internal documentation in `docs/`, `README.md`, `team-sharing/README.md`, `doc/FAQ.md`, and `ERROR_HANDLING.md`
+- review of existing internal documentation in `docs/`, `README.md`, `team-sharing/README.md`, `doc/FAQ.md`, and `docs/engineering/error-handling.md`
 - scan of TODO/FIXME markers, largest modules, route surfaces, tests, locales, and provider definitions
 
 ## Important Note

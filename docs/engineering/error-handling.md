@@ -95,4 +95,4 @@ All caught errors are reported to Sentry with:
 - Browser and application information
 - User session data
 
-This ensures that developers can identify and fix issues that users encounter in production. 
+This ensures that developers can identify and fix issues that users encounter in production.

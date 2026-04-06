@@ -218,7 +218,7 @@ Relevant code:
 
 Relevant code:
 
-- `ERROR_HANDLING.md`
+- `docs/engineering/error-handling.md`
 - `src/renderer/setup/global_error_handler.ts`
 - `src/main/adapters/sentry.ts`
 - `src/renderer/adapters/sentry.ts`

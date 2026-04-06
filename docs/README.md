@@ -44,7 +44,14 @@ This repository now has two documentation layers:
 
 - [UI Cleanup](./ui-cleanup.md)
 - [Chatbox Cleanup Roadmap](./chatbox-cleanup-roadmap.md)
+- [Repo Organization](./repo-organization.md)
 - [Testing Notes](./testing.md)
+
+## Process And Engineering Notes
+
+- [Workflow Rules](./process/workflow-rules.md)
+- [Work Completion Checklist](./process/work-completion-checklist.md)
+- [Error Handling](./engineering/error-handling.md)
 
 ## Suggested Reading By Audience
 
