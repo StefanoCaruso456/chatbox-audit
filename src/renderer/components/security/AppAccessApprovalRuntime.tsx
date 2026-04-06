@@ -19,7 +19,11 @@ function isReviewerRole(role: string | null | undefined) {
 }
 
 function requiresTeacherApproval(app: ApprovedApp | null | undefined) {
-  return app?.accessPolicy?.requiresTeacherApproval === true
+  if (!app) {
+    return false
+  }
+
+  return app.accessPolicy?.requiresTeacherApproval ?? true
 }
 
 export default function AppAccessApprovalRuntime() {

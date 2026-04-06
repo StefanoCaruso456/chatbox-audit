@@ -34,7 +34,7 @@ vi.mock('@/packages/app-access/client', async () => {
   }
 })
 
-function mockTeacherApprovalForApp(appId: string) {
+function mockTeacherApprovalForApp(appId: string, requiresTeacherApproval = true) {
   return vi.spyOn(approvedAppsModule, 'getApprovedAppById').mockImplementation((requestedAppId: string) => {
     const app = approvedAppsModule.approvedAppsById.get(requestedAppId)
     if (!app) {
@@ -48,7 +48,7 @@ function mockTeacherApprovalForApp(appId: string) {
     return {
       ...app,
       accessPolicy: {
-        requiresTeacherApproval: true,
+        requiresTeacherApproval,
       },
     }
   })
@@ -111,8 +111,7 @@ describe('AppAccessApprovalRuntime', () => {
     })
   })
 
-  it('blocks a student behind a waiting-for-teacher modal until approval exists', async () => {
-    mockTeacherApprovalForApp('chess-tutor')
+  it('blocks a student behind a waiting-for-teacher modal until approval exists by default', async () => {
     submitTutorMeAIAppAccessRequest.mockResolvedValueOnce({
       access: 'pending',
       request: {
@@ -174,7 +173,8 @@ describe('AppAccessApprovalRuntime', () => {
     expect(appAccessStore.getState().studentSubmittingAppId).toBeNull()
   })
 
-  it('opens an ungated app immediately for a student profile', async () => {
+  it('opens an explicitly ungated app immediately for a student profile', async () => {
+    mockTeacherApprovalForApp('chess-tutor', false)
     tutorMeAIAuthStore.setState({
       accessToken: 'access-token',
       refreshToken: 'refresh-token',
@@ -211,7 +211,6 @@ describe('AppAccessApprovalRuntime', () => {
   })
 
   it('shows a teacher popup and lets the teacher approve the pending student request', async () => {
-    mockTeacherApprovalForApp('chess-tutor')
     listTutorMeAIPendingAppAccessRequests.mockResolvedValueOnce([
       {
         appAccessRequestId: 'request-1',
@@ -287,7 +286,6 @@ describe('AppAccessApprovalRuntime', () => {
   })
 
   it('clears the student requesting overlay once a pending request is approved and the app opens', async () => {
-    mockTeacherApprovalForApp('chess-tutor')
     fetchTutorMeAIMyAppAccessRequest.mockResolvedValueOnce({
       appAccessRequestId: 'request-1',
       appId: 'chess-tutor',
