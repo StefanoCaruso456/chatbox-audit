@@ -52,6 +52,18 @@ Phase 0 now has implemented v1 contracts for:
 
 These contracts unblock downstream registry, iframe runtime, and completion-context work. Backend and frontend feature tickets should consume these exports directly rather than defining parallel payload shapes.
 
+## Runtime Observability
+
+Runtime tracing and Braintrust export are documented in `docs/runtime-observability.md`.
+
+That document is the source of truth for:
+
+- the runtime trace tree
+- what spans we emit
+- what metadata and metrics we export
+- how to read a live Braintrust trace
+- what product and debugging insights the traces provide
+
 ## System Components
 
 ### 1. Vercel Client
