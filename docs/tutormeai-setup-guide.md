@@ -66,6 +66,14 @@ Renderer and embedded app runtime:
 - `src/renderer/packages/tutormeai-apps/`
 - `src/renderer/routes/embedded-apps/`
 
+Observability and telemetry:
+
+- `docs/runtime-observability.md`
+- `src/renderer/stores/runtimeTraceStore.ts`
+- `src/renderer/stores/runtimeTraceGeneration.ts`
+- `src/renderer/components/apps/RuntimeTraceExportController.tsx`
+- `backend/observability/braintrust.ts`
+
 TutorMeAI integration tests:
 
 - `test/integration/tutormeai/app-lifecycle.test.tsx`
@@ -128,3 +136,7 @@ The current case-study implementation proves:
 - The production Vercel client and Railway backend are documented architecture targets, but this repo still hosts the proof-of-concept in one codebase.
 - The authenticated app pattern is implemented through a host-managed OAuth framework plus a demo planner experience, not a live production third-party provider.
 - Cost logging schema exists, but live deployment telemetry still needs a production connection before the model can report real usage dashboards.
+
+## Runtime Trace Reference
+
+For the full trace-tree explanation, Braintrust export path, and a live example trace link, see `docs/runtime-observability.md`.
