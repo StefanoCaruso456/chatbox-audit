@@ -51,6 +51,7 @@ import { createRootRoute, Outlet, useLocation } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef } from 'react'
 import { isEmbeddedAppPath } from '@/lib/root-layout-utils'
 import SettingsModal, { navigateToSettings } from '@/modals/Settings'
+import { ChatBridgeAppsSdkProvider } from '@/packages/apps-sdk'
 import { getOS } from '@/packages/navigator'
 import * as remote from '@/packages/remote'
 import PictureDialog from '@/pages/PictureDialog'
@@ -200,70 +201,72 @@ function Root() {
   }, [needRoomForMacWindowControls])
 
   return (
-    <Box className="box-border App cb-neumo-app" spellCheck={spellCheck} dir={language === 'ar' ? 'rtl' : 'ltr'}>
-      {platform.type === 'desktop' && (getOS() === 'Windows' || getOS() === 'Linux') && <ExitFullscreenButton />}
-      {isEmbeddedAppRoute ? (
-        <Grid container className="h-full">
-          <Box className="h-full w-full" sx={{ flexGrow: 1 }}>
-            <ErrorBoundary name="main">
-              <Outlet />
-            </ErrorBoundary>
-          </Box>
-        </Grid>
-      ) : (
-        <>
-          <AppAccessApprovalRuntime />
-          <RuntimeTraceExportController />
+    <ChatBridgeAppsSdkProvider>
+      <Box className="box-border App cb-neumo-app" spellCheck={spellCheck} dir={language === 'ar' ? 'rtl' : 'ltr'}>
+        {platform.type === 'desktop' && (getOS() === 'Windows' || getOS() === 'Linux') && <ExitFullscreenButton />}
+        {isEmbeddedAppRoute ? (
           <Grid container className="h-full">
-            <Sidebar />
-            <Box
-              className="h-full w-full"
-              sx={{
-                flexGrow: 1,
-                ...(showSidebar
-                  ? language === 'ar'
-                    ? { paddingRight: { sm: `${sidebarWidth}px` } }
-                    : { paddingLeft: { sm: `${sidebarWidth}px` } }
-                  : {}),
-              }}
-            >
+            <Box className="h-full w-full" sx={{ flexGrow: 1 }}>
               <ErrorBoundary name="main">
                 <Outlet />
               </ErrorBoundary>
             </Box>
           </Grid>
-        </>
-      )}
-      {/* 对话设置 */}
-      {/* <AppStoreRatingDialog /> */}
-      {/* 代码预览 */}
-      {/* <ArtifactDialog /> */}
-      {/* 对话列表清理 */}
-      {/* <ChatConfigWindow /> */}
-      {/* 似乎未使用 */}
-      {/* <CleanWidnow /> */}
-      {/* 对话列表清理 */}
-      {/* <ClearConversationListWindow /> */}
-      {/* 导出聊天记录 */}
-      {/* <ExportChatDialog /> */}
-      {/* 编辑消息 */}
-      {/* <MessageEditDialog /> */}
-      {/* 添加链接 */}
-      {/* <OpenAttachLinkDialog /> */}
-      {/* 图片预览 */}
-      <PictureDialog />
-      {/* 似乎是从后端拉一个弹窗的配置 */}
-      <RemoteDialogWindow />
-      {/* 手机端举报内容 */}
-      {/* <ReportContentDialog /> */}
-      {/* 搜索 */}
-      <SearchDialog />
-      <AppsModal />
-      {/* 没有配置模型时的欢迎弹窗 */}
-      {/* <WelcomeDialog /> */}
-      <Toasts /> {/* mui */}
-      <SettingsModal />
-    </Box>
+        ) : (
+          <>
+            <AppAccessApprovalRuntime />
+            <RuntimeTraceExportController />
+            <Grid container className="h-full">
+              <Sidebar />
+              <Box
+                className="h-full w-full"
+                sx={{
+                  flexGrow: 1,
+                  ...(showSidebar
+                    ? language === 'ar'
+                      ? { paddingRight: { sm: `${sidebarWidth}px` } }
+                      : { paddingLeft: { sm: `${sidebarWidth}px` } }
+                    : {}),
+                }}
+              >
+                <ErrorBoundary name="main">
+                  <Outlet />
+                </ErrorBoundary>
+              </Box>
+            </Grid>
+          </>
+        )}
+        {/* 对话设置 */}
+        {/* <AppStoreRatingDialog /> */}
+        {/* 代码预览 */}
+        {/* <ArtifactDialog /> */}
+        {/* 对话列表清理 */}
+        {/* <ChatConfigWindow /> */}
+        {/* 似乎未使用 */}
+        {/* <CleanWidnow /> */}
+        {/* 对话列表清理 */}
+        {/* <ClearConversationListWindow /> */}
+        {/* 导出聊天记录 */}
+        {/* <ExportChatDialog /> */}
+        {/* 编辑消息 */}
+        {/* <MessageEditDialog /> */}
+        {/* 添加链接 */}
+        {/* <OpenAttachLinkDialog /> */}
+        {/* 图片预览 */}
+        <PictureDialog />
+        {/* 似乎是从后端拉一个弹窗的配置 */}
+        <RemoteDialogWindow />
+        {/* 手机端举报内容 */}
+        {/* <ReportContentDialog /> */}
+        {/* 搜索 */}
+        <SearchDialog />
+        <AppsModal />
+        {/* 没有配置模型时的欢迎弹窗 */}
+        {/* <WelcomeDialog /> */}
+        <Toasts /> {/* mui */}
+        <SettingsModal />
+      </Box>
+    </ChatBridgeAppsSdkProvider>
   )
 }
 

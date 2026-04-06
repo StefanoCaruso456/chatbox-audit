@@ -1,8 +1,7 @@
 import { Badge, Button, Group, Stack, Text } from '@mantine/core'
 import type { MessageEmbeddedAppPart } from '@shared/types'
 import { useTranslation } from 'react-i18next'
-import { getApprovedAppByRuntimeAppId } from '@/data/approvedApps'
-import { useUIStore } from '@/stores/uiStore'
+import { useChatBridgeAppsSdk, useChatBridgeAppsSdkState } from '@/packages/apps-sdk'
 
 function getStatusTone(part: MessageEmbeddedAppPart) {
   if (part.bridge?.completion) {
@@ -38,9 +37,9 @@ function getStatusLabel(part: MessageEmbeddedAppPart) {
 
 export function EmbeddedAppSidebarNotice({ part }: { part: MessageEmbeddedAppPart }) {
   const { t } = useTranslation()
-  const approvedApp = getApprovedAppByRuntimeAppId(part.appId)
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
-  const openApprovedApp = useUIStore((state) => state.openApprovedApp)
+  const appsSdk = useChatBridgeAppsSdk()
+  const approvedApp = appsSdk.getAppByRuntimeAppId(part.appId)
+  const activeApprovedAppId = useChatBridgeAppsSdkState((state) => state.activeAppId)
 
   const isFocused = approvedApp ? activeApprovedAppId === approvedApp.id : false
 
@@ -67,7 +66,7 @@ export function EmbeddedAppSidebarNotice({ part }: { part: MessageEmbeddedAppPar
 
         {approvedApp ? (
           <Group gap="xs">
-            <Button size="xs" variant="light" color="chatbox-brand" onClick={() => openApprovedApp(approvedApp.id)}>
+            <Button size="xs" variant="light" color="chatbox-brand" onClick={() => appsSdk.openApp(approvedApp.id)}>
               {isFocused ? t('Focus right sidebar') : t('Open in right sidebar')}
             </Button>
             <Text size="xs" c="dimmed">

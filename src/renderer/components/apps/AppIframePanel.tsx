@@ -11,10 +11,10 @@ import {
   validateEmbeddedAppRuntimeMessage,
   validateRuntimeMessageOrigin,
 } from '@/components/message-parts/embedded-app-runtime'
-import { getApprovedAppById } from '@/data/approvedApps'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { probeForNewerBuild } from '@/lib/build-freshness'
 import { cn } from '@/lib/utils'
+import { useChatBridgeActiveApp, useChatBridgeAppsSdk, useChatBridgeAppsSdkState } from '@/packages/apps-sdk'
 import { publishApprovedAppOpenedEvent, publishApprovedAppStateObservedEvent } from '@/stores/approvedAppEventStore'
 import { currentSessionIdAtom } from '@/stores/atoms'
 import { useSession } from '@/stores/chatStore'
@@ -30,7 +30,6 @@ import {
   getSidebarAppRuntimeSnapshot,
   upsertSidebarAppRuntimeSnapshot,
 } from '@/stores/sidebarAppRuntimeStore'
-import { useUIStore } from '@/stores/uiStore'
 import { type ApprovedApp, appIntegrationModeMeta } from '@/types/apps'
 import AppIcon from './AppIcon'
 import { resolveAppPanelLaunchUrl, resolveApprovedAppPanelRuntime } from './app-panel-runtime'
@@ -250,8 +249,7 @@ function AppLoadingFallback({
 
 function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const { t } = useTranslation()
-  const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
-  const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
+  const appsSdk = useChatBridgeAppsSdk()
   const currentSessionId = useAtomValue(currentSessionIdAtom)
   const { session } = useSession(currentSessionId)
 
@@ -1078,7 +1076,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   }
 
   const handleSwitchApps = () => {
-    setApprovedAppsModalOpen(true)
+    appsSdk.openLibrary()
   }
 
   const handleIframeLoad = () => {
@@ -1133,7 +1131,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
 
   return (
     <Stack gap="md" className="h-full min-h-0 p-3 sm:p-4">
-      <AppPanelHeader app={app} onClose={closeApprovedApp} />
+      <AppPanelHeader app={app} onClose={() => appsSdk.closeActiveApp()} />
 
       <Group gap="xs" wrap="wrap">
         <Button
@@ -1168,7 +1166,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
             sandbox={iframeSandbox}
             runtime={embeddedRuntime}
             onRetry={handleReload}
-            onContinueInChat={closeApprovedApp}
+            onContinueInChat={() => appsSdk.closeActiveApp()}
           />
         </Box>
       ) : (
@@ -1222,21 +1220,21 @@ type AppIframePanelProps = {
 export default function AppIframePanel({ className }: AppIframePanelProps) {
   const { t } = useTranslation()
   const isCompactScreen = useScreenDownToMD()
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
-  const closeApprovedApp = useUIStore((state) => state.closeApprovedApp)
+  const appsSdk = useChatBridgeAppsSdk()
+  const activeApprovedAppId = useChatBridgeAppsSdkState((state) => state.activeAppId)
+  const activeApp = useChatBridgeActiveApp()
 
   if (!activeApprovedAppId) {
     return null
   }
 
-  const activeApp = getApprovedAppById(activeApprovedAppId)
   const panelContent = activeApp ? <AppIframeSurface app={activeApp} /> : null
 
   if (isCompactScreen) {
     return (
       <Drawer
         opened={Boolean(activeApprovedAppId)}
-        onClose={() => closeApprovedApp()}
+        onClose={() => appsSdk.closeActiveApp()}
         position="right"
         size="min(90vw, 32rem)"
         title={t('Apps')}

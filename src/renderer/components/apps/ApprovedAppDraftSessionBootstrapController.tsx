@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { getApprovedAppById } from '@/data/approvedApps'
-import { useUIStore } from '@/stores/uiStore'
+import { useChatBridgeActiveApp, useChatBridgeAppsSdkState } from '@/packages/apps-sdk'
 
 type ApprovedAppDraftSessionBootstrapControllerProps = {
   onRuntimeAppOpened: () => Promise<void> | void
@@ -9,7 +8,8 @@ type ApprovedAppDraftSessionBootstrapControllerProps = {
 export default function ApprovedAppDraftSessionBootstrapController({
   onRuntimeAppOpened,
 }: ApprovedAppDraftSessionBootstrapControllerProps) {
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
+  const activeApprovedAppId = useChatBridgeAppsSdkState((state) => state.activeAppId)
+  const activeApp = useChatBridgeActiveApp()
   const lastHandledAppIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -18,7 +18,6 @@ export default function ApprovedAppDraftSessionBootstrapController({
       return
     }
 
-    const activeApp = getApprovedAppById(activeApprovedAppId)
     if (!activeApp || activeApp.experience !== 'tutormeai-runtime') {
       return
     }
@@ -29,7 +28,7 @@ export default function ApprovedAppDraftSessionBootstrapController({
 
     lastHandledAppIdRef.current = activeApprovedAppId
     void onRuntimeAppOpened()
-  }, [activeApprovedAppId, onRuntimeAppOpened])
+  }, [activeApp, activeApprovedAppId, onRuntimeAppOpened])
 
   return null
 }

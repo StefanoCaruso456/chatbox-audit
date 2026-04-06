@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useScreenDownToMD } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
+import { useChatBridgeAppsSdk, useChatBridgeAppsSdkState } from '@/packages/apps-sdk'
 import { useLanguage } from '@/stores/settingsStore'
 import { useUIStore } from '@/stores/uiStore'
 import AppIframePanel from './AppIframePanel'
@@ -18,9 +19,9 @@ type AppsWorkspaceProps = {
 export default function AppsWorkspace({ children, className }: AppsWorkspaceProps) {
   const isCompactScreen = useScreenDownToMD()
   const language = useLanguage()
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
-  const approvedAppPanelWidth = useUIStore((state) => state.approvedAppPanelWidth)
-  const setApprovedAppPanelWidth = useUIStore((state) => state.setApprovedAppPanelWidth)
+  const appsSdk = useChatBridgeAppsSdk()
+  const activeApprovedAppId = useChatBridgeAppsSdkState((state) => state.activeAppId)
+  const approvedAppPanelWidth = useChatBridgeAppsSdkState((state) => state.panelWidth)
   const setShowSidebar = useUIStore((state) => state.setShowSidebar)
 
   const workspaceRef = useRef<HTMLDivElement | null>(null)
@@ -62,7 +63,7 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
     return () => {
       observer.disconnect()
     }
-  }, [isCompactScreen, activeApprovedAppId])
+  }, [isCompactScreen])
 
   useEffect(() => {
     const hasActiveApprovedApp = Boolean(activeApprovedAppId)
@@ -94,9 +95,9 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
 
     const clampedWidth = clampApprovedAppPanelWidth(approvedAppPanelWidth, containerWidth)
     if (clampedWidth !== approvedAppPanelWidth) {
-      setApprovedAppPanelWidth(clampedWidth)
+      appsSdk.setPanelWidth(clampedWidth)
     }
-  }, [approvedAppPanelWidth, containerWidth, setApprovedAppPanelWidth])
+  }, [appsSdk, approvedAppPanelWidth, containerWidth])
 
   const handleResizeStart = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -125,7 +126,7 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
       const isRTL = language === 'ar'
       const deltaX = isRTL ? event.clientX - resizeStartX.current : resizeStartX.current - event.clientX
       const requestedWidth = resizeStartWidth.current + deltaX
-      setApprovedAppPanelWidth(clampApprovedAppPanelWidth(requestedWidth, containerWidth))
+      appsSdk.setPanelWidth(clampApprovedAppPanelWidth(requestedWidth, containerWidth))
     }
 
     const handleMouseUp = () => {
@@ -143,11 +144,11 @@ export default function AppsWorkspace({ children, className }: AppsWorkspaceProp
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [containerWidth, isResizing, language, setApprovedAppPanelWidth])
+  }, [appsSdk, containerWidth, isResizing, language])
 
   const handleResetPanelWidth = useCallback(() => {
-    setApprovedAppPanelWidth(null)
-  }, [setApprovedAppPanelWidth])
+    appsSdk.setPanelWidth(null)
+  }, [appsSdk])
 
   return (
     <>
