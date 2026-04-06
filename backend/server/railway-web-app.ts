@@ -32,7 +32,12 @@ import {
   toPublicOAuthConnectionRecord,
   type UserRecord,
 } from '../auth'
-import { ChessComDiagramIdSchema, fetchChessComDiagram, fetchChessComEmboardShell } from '../chess-com'
+import {
+  ChessComDiagramIdSchema,
+  fetchChessComDiagram,
+  fetchChessComEmboardShell,
+  patchChessComEmboardHtml,
+} from '../chess-com'
 import { failureResult, toApiErrorBody } from '../errors'
 import {
   BraintrustTelemetryConfigError,
@@ -59,6 +64,7 @@ const APP_ACCESS_PENDING_REQUESTS_PATH = '/api/app-access/requests/pending'
 const APP_ACCESS_MY_REQUESTS_PATH = '/api/app-access/requests/mine'
 const CHESS_COM_DIAGRAM_PATH_PREFIX = '/api/chess-com/diagram/'
 const CHESS_COM_EMBOARD_SHELL_PATH_PREFIX = '/api/chess-com/emboard-shell/'
+const CHESS_COM_VIEWER_PATH_PREFIX = '/api/chess-com/viewer/'
 const PLATFORM_GOOGLE_COOKIE_NAME = 'tutormeai_platform_google'
 
 const OAuthConnectionQuerySchema = z.object({
@@ -322,6 +328,10 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
         return withCors(request, await handleGetChessComEmboardShell(request, { fetchImpl }), env)
       }
 
+      if (url.pathname.startsWith(CHESS_COM_VIEWER_PATH_PREFIX) && request.method === 'GET') {
+        return withCors(request, await handleGetChessComViewer(request, { fetchImpl }), env)
+      }
+
       if (url.pathname === APP_ACCESS_REQUESTS_PATH && request.method === 'POST') {
         return withCors(
           request,
@@ -547,6 +557,64 @@ async function handleGetChessComEmboardShell(
     })
   } catch (error) {
     return new Response(error instanceof Error ? error.message : 'Chess.com emboard shell lookup failed.', {
+      status: 502,
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'text/plain; charset=utf-8',
+      },
+    })
+  }
+}
+
+async function handleGetChessComViewer(
+  request: Request,
+  input: {
+    fetchImpl: typeof fetch
+  }
+): Promise<Response> {
+  const diagramId = extractPathSuffix(request, CHESS_COM_VIEWER_PATH_PREFIX)
+  const parsedDiagramId = ChessComDiagramIdSchema.safeParse(diagramId)
+  if (!parsedDiagramId.success) {
+    return new Response('Chess.com viewer requests require a numeric diagram id.', {
+      status: 400,
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'text/plain; charset=utf-8',
+      },
+    })
+  }
+
+  const url = new URL(request.url)
+  const customPgn = url.searchParams.get('pgn')?.trim()
+
+  try {
+    const [diagram, upstreamShellHtml] = await Promise.all([
+      fetchChessComDiagram({
+        diagramId: parsedDiagramId.data,
+        fetchImpl: input.fetchImpl,
+      }),
+      fetchChessComEmboardShell({
+        diagramId: parsedDiagramId.data,
+        fetchImpl: input.fetchImpl,
+      }),
+    ])
+
+    const pgn = customPgn && customPgn.length > 0 ? customPgn : diagram.setup[0]?.pgn ?? ''
+    const html = patchChessComEmboardHtml({
+      html: upstreamShellHtml,
+      diagram,
+      pgn,
+    })
+
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'text/html; charset=utf-8',
+      },
+    })
+  } catch (error) {
+    return new Response(error instanceof Error ? error.message : 'Chess.com viewer rendering failed.', {
       status: 502,
       headers: {
         'cache-control': 'no-store',

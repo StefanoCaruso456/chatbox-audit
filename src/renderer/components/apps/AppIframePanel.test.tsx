@@ -452,6 +452,59 @@ describe('AppIframePanel', () => {
     ).toBe(true)
   })
 
+  it('publishes a chess board-state event when Chess.com loads an observed diagram position', () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-com' })
+
+    renderPanel(<AppIframePanel />)
+
+    const iframe = screen.getByTitle('Chess.com app panel')
+    const { postMessage } = attachSameOriginIframeWindow(iframe)
+
+    fireEvent.load(iframe)
+
+    const bootstrapMessage = postMessage.mock.calls[0]?.[0]
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          source: (iframe as HTMLIFrameElement).contentWindow,
+          origin: 'http://localhost:3000',
+          data: {
+            source: 'chatbridge-sidebar-app',
+            type: 'sidebar-state',
+            appId: 'chess.com.workspace',
+            payload: {
+              status: 'active',
+              summary:
+                'Chess.com board FEN: rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2. White to move.',
+              state: {
+                fen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+                turn: 'w',
+                moveCount: 2,
+                lastMove: 'c6',
+                lastUpdateSource: 'diagram-load',
+              },
+            },
+          },
+        })
+      )
+    })
+
+    expect(approvedAppEventStore.getState().latestObservedStateEvent).toMatchObject({
+      sessionId: 'session.test',
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appSessionId: bootstrapMessage.appSessionId,
+      conversationId: bootstrapMessage.conversationId,
+      summary: 'Chess.com board FEN: rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2. White to move.',
+      latestStateDigest: expect.objectContaining({
+        moveCount: 2,
+        lastMove: 'c6',
+        lastUpdateSource: 'diagram-load',
+      }),
+    })
+  })
+
   it('preserves the live chess board snapshot after a recoverable move error instead of blocking the panel', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-tutor' })
 

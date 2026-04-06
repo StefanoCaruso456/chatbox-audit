@@ -182,6 +182,54 @@ describe('ApprovedAppCoachController', () => {
     expect(mockInsertMessage).not.toHaveBeenCalled()
   })
 
+  it('inserts a proactive board-state message when Chess.com finishes loading a real diagram position', async () => {
+    render(
+      <ApprovedAppCoachController
+        sessionId="session.test"
+        session={
+          {
+            id: 'session.test',
+            messages: [],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
+      />
+    )
+
+    publishApprovedAppStateObservedEvent({
+      eventId: 'state.chess-com.observe.1',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appSessionId: 'app-session.sidebar.chess-com',
+      conversationId: 'conversation.sidebar.chess-com',
+      summary: 'Chess.com board FEN: rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pp1ppppp/2p5/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 2',
+        turn: 'w',
+        moveCount: 2,
+        lastMove: 'c6',
+        lastUpdateSource: 'diagram-load',
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      observedAt: '2026-04-05T03:03:05.000Z',
+    })
+
+    await waitFor(() => {
+      expect(mockInsertMessage).toHaveBeenCalledTimes(1)
+    })
+
+    const observedMessage = mockInsertMessage.mock.calls[0]?.[1]
+    expect(observedMessage?.contentParts?.find((part: { type: string }) => part.type === 'tool-call')).toMatchObject({
+      toolName: 'chess.get-board-state',
+      toolCallId: buildChessObservedBoardStateToolCallId('app-session.sidebar.chess-com', 2),
+    })
+    expect(observedMessage?.contentParts?.find((part: { type: string }) => part.type === 'text')?.text).toContain(
+      'I saw c6 on the board.'
+    )
+  })
+
   it('does not insert a manual-open kickoff when the session already has an active chess runtime message', async () => {
     render(
       <ApprovedAppCoachController
