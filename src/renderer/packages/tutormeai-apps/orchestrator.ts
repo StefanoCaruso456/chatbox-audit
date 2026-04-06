@@ -145,14 +145,47 @@ function isChessRuntimeAppId(appId: string | null | undefined) {
   return Boolean(getChessRuntimeTargetByRuntimeAppId(appId))
 }
 
+function scoreChessSidebarSnapshot(snapshot: SidebarAppRuntimeSnapshot, preferredRuntimeAppId?: string | null) {
+  let score = 0
+
+  if (
+    buildChessBoardStateResult({
+      appSessionId: snapshot.appSessionId,
+      summary: snapshot.summary,
+      latestStateDigest: snapshot.latestStateDigest,
+      availableToolNames: snapshot.availableToolNames,
+    })
+  ) {
+    score += 100
+  }
+
+  switch (snapshot.status) {
+    case 'active':
+      score += 30
+      break
+    case 'completed':
+      score += 20
+      break
+    case 'pending':
+      score += 10
+      break
+    case 'waiting-auth':
+    case 'waiting-user':
+      score += 5
+      break
+    default:
+      break
+  }
+
+  if (preferredRuntimeAppId && snapshot.runtimeAppId === preferredRuntimeAppId) {
+    score += 15
+  }
+
+  return score
+}
+
 function getPreferredChessSidebarSnapshot(conversationId: string): SidebarAppRuntimeSnapshot | null {
   const activeTarget = getChessRuntimeTargetByApprovedAppId(uiStore.getState().activeApprovedAppId)
-  if (activeTarget) {
-    const activeSnapshot = getSidebarAppRuntimeSnapshot(conversationId, activeTarget.runtimeAppId)
-    if (activeSnapshot) {
-      return activeSnapshot
-    }
-  }
 
   const snapshots = CHESS_RUNTIME_TARGETS.map((target) =>
     getSidebarAppRuntimeSnapshot(conversationId, target.runtimeAppId)
@@ -162,7 +195,16 @@ function getPreferredChessSidebarSnapshot(conversationId: string): SidebarAppRun
     return null
   }
 
-  return snapshots.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0]
+  return snapshots.sort((left, right) => {
+    const scoreDelta =
+      scoreChessSidebarSnapshot(right, activeTarget?.runtimeAppId) -
+      scoreChessSidebarSnapshot(left, activeTarget?.runtimeAppId)
+    if (scoreDelta !== 0) {
+      return scoreDelta
+    }
+
+    return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+  })[0]
 }
 
 function getMessageTraceContext(message: Message) {

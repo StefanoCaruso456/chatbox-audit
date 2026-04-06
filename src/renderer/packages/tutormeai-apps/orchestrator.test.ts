@@ -1737,6 +1737,64 @@ describe('routeTutorMeAiAppRequest', () => {
     })
   })
 
+  it('uses a readable Chess.com sidebar snapshot for coaching follow-ups even while the viewer is syncing', async () => {
+    uiStore.setState({ activeApprovedAppId: 'chess-com' })
+
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.sidebar.chess-com.why',
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appSessionId: 'app-session.sidebar.chess-com.why',
+      conversationId: 'conversation.sidebar.chess-com.why',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess-com?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'pending',
+      summary:
+        'Chess.com board FEN: 8/8/4k3/7p/5K2/8/8/8 b - - 0 91. Black to move. Recent moves: Ke7, Rf5, Ke6, Rxf4, Rxf4+, Kxf4. Diagram 10477955.',
+      latestStateDigest: {
+        fen: '8/8/4k3/7p/5K2/8/8/8 b - - 0 91',
+        turn: 'b',
+        moveCount: 181,
+        lastMove: 'Kxf4',
+        lastUpdateSource: 'manual-board-move',
+        candidateMoves: ['Kd7', 'Ke7', 'Kf7', 'Kf6', 'Kd5', 'Kd6'],
+        provider: 'chess.com',
+        embedUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      },
+      updatedAt: '2026-04-06T01:57:21.841Z',
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.sidebar.chess-com.why',
+      userId: 'user.sidebar.chess-com.why',
+      userRequest: 'Why is Kxf4 recommended here? Teach it like a chess coach.',
+      requestMessageId: 'message.sidebar.chess-com.why',
+      previousMessages: [createMessage('assistant', 'Played Kxf4 on the board.')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    const textPart = result.message.contentParts.find((part) => part.type === 'text')
+
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe('chess.get-board-state')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.result : null).toMatchObject({
+      appSessionId: 'app-session.sidebar.chess-com.why',
+      lastMove: 'Kxf4',
+      turn: 'black',
+      moveCount: 181,
+      recommendedMove: 'h4',
+    })
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Recommended next move: h4')
+    expect(textPart && textPart.type === 'text' ? textPart.text : '').not.toContain("can't read the live board state")
+  })
+
   it('returns a chess clarification for invalid natural-language coordinate moves instead of misparsing them', async () => {
     upsertSidebarAppRuntimeSnapshot({
       hostSessionId: 'conversation.sidebar.10',
