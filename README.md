@@ -40,6 +40,19 @@ It is:
 - a tool-aware and app-aware assistant shell
 - a foundation for trusted education and productivity workflows
 
+## Built On Top Of Upstream Chatbox
+
+Upstream Chatbox already provided a strong multi-provider chat workspace. This fork adds a second layer on top of that foundation:
+
+- projects and cleaner workspace organization
+- conversation-mode cleanup and easier onboarding
+- voice input and a more responsive composer
+- a governed approved-app catalog and right-side app workspace
+- embedded runtime products such as Chess Tutor, Chess.com, Flashcards Coach, and Planner Connect
+- shared app contracts and a reusable Apps SDK / cloud-plugin layer
+- backend services for registry, orchestration, auth, security review, and tool logging
+- trust, reviewer workflow, analytics, and education-oriented access controls
+
 ## Overview
 
 Today, the repository includes:
@@ -55,6 +68,19 @@ Today, the repository includes:
 - a right-side approved app panel
 - example runtime apps such as Chess Tutor, Flashcards Coach, and Planner Connect
 - backend foundations for registry, orchestration, security review, and tool invocation logging
+
+## Documentation Map
+
+If you are new to this repo, start here:
+
+- [What We Built](./docs/what-we-built.md): concise before/after report, feature inventory, implementation map, and product packaging view
+- [Docs Index](./docs/README.md): documentation by audience and topic
+- [Apps SDK](./docs/sdk/README.md): the reusable app-platform SDK and cloud-plugin packaging model
+- [UI Cleanup](./docs/ui-cleanup.md): what changed in the UX and how the interface was simplified
+- [Architecture](./docs/architecture.md): system responsibilities, trust boundaries, and target deployment model
+- [Setup Guide](./docs/tutormeai-setup-guide.md): how to run and verify the platform work inside this repo
+- [Third-Party Developer Guide](./docs/tutormeai-third-party-developer-guide.md): how external apps integrate with the platform
+- [Trust Docs](./docs/trust/README.md): approval, review-state, permission, and reviewer workflow guidance
 
 ## Current Stack
 
@@ -251,6 +277,13 @@ Needs:
 - [`src/shared`](./src/shared): shared types, providers, contracts, utilities
 - [`backend`](./backend): TutorMeAI platform backend domains
 - [`docs`](./docs): architecture, trust, setup, audit, and planning docs
+
+### New documentation entry points
+
+- [`docs/what-we-built.md`](./docs/what-we-built.md): feature and implementation report for this fork
+- [`docs/sdk/README.md`](./docs/sdk/README.md): Apps SDK and cloud-plugin model
+- [`docs/ui-cleanup.md`](./docs/ui-cleanup.md): UI simplification and workspace cleanup
+- [`docs/README.md`](./docs/README.md): docs index
 
 ### Important renderer areas
 
