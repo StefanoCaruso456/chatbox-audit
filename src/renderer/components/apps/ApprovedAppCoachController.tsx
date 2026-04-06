@@ -19,7 +19,7 @@ type ApprovedAppCoachControllerProps = {
 }
 
 type ChessFamilyApp = {
-  approvedAppId: 'chess-tutor'
+  approvedAppId: 'chess-tutor' | 'chess-com'
   runtimeAppId: string
   appLabel: string
 }
@@ -31,6 +31,14 @@ const chessFamilyApps = new Map<string, ChessFamilyApp>([
       approvedAppId: 'chess-tutor',
       runtimeAppId: 'chess.internal',
       appLabel: 'Chess Tutor',
+    },
+  ],
+  [
+    'chess-com',
+    {
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appLabel: 'Chess.com',
     },
   ],
 ])

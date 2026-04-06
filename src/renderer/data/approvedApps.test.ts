@@ -17,6 +17,20 @@ describe('approvedApps', () => {
         },
       },
     })
+    expect(getApprovedAppById('chess-com')).toMatchObject({
+      experience: 'tutormeai-runtime',
+      launchUrl: '/embedded-apps/chess-com',
+      integrationMode: 'runtime',
+      runtimeBridge: {
+        appId: 'chess.com.workspace',
+        sidebarMode: 'direct-iframe',
+        initialState: {
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          turn: 'w',
+          moveCount: 0,
+        },
+      },
+    })
     expect(getApprovedAppById('flashcards-coach')).toMatchObject({
       experience: 'tutormeai-runtime',
       launchUrl: '/embedded-apps/flashcards',
@@ -34,16 +48,6 @@ describe('approvedApps', () => {
   })
 
   it('keeps approved library apps pointed at their governed workspace routes', () => {
-    expect(getApprovedAppById('chess-com')).toMatchObject({
-      experience: 'approved-library',
-      launchUrl: '/embedded-apps/catalog/chess-com',
-      vendorUrl: 'https://www.chess.com/play/computer',
-      integrationMode: 'partner-embed',
-      integrationConfig: {
-        defaultLaunchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
-        launchUrlLabel: 'Chess.com emboard URL',
-      },
-    })
     expect(getApprovedAppById('google-classroom')).toMatchObject({
       experience: 'approved-library',
       launchUrl: '/embedded-apps/catalog/google-classroom',
@@ -98,7 +102,7 @@ describe('approvedApps', () => {
   it('gives every approved library app an integration workspace config', () => {
     const approvedLibraryApps = approvedApps.filter((app) => app.experience === 'approved-library')
 
-    expect(approvedLibraryApps).toHaveLength(27)
+    expect(approvedLibraryApps).toHaveLength(26)
     approvedLibraryApps.forEach((app) => {
       expect(app.launchUrl).toBe(`/embedded-apps/catalog/${app.id}`)
       expect(app.integrationConfig?.capabilities?.length).toBeGreaterThan(0)

@@ -95,6 +95,53 @@ describe('ApprovedAppCoachController', () => {
     ).toBe(true)
   })
 
+  it('inserts a chess kickoff coach message when Chess.com is manually opened', async () => {
+    render(
+      <ApprovedAppCoachController
+        sessionId="session.test"
+        session={
+          {
+            id: 'session.test',
+            messages: [],
+            threads: [],
+            type: 'chat',
+          } as never
+        }
+      />
+    )
+
+    publishApprovedAppOpenedEvent({
+      eventId: 'open.chess-com.1',
+      sessionId: 'session.test',
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appSessionId: 'app-session.sidebar.chess-com',
+      conversationId: 'conversation.sidebar.chess-com',
+      summary: 'Chess.com is open in the right sidebar.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+        embedUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      },
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      openedAt: '2026-04-05T03:00:05.000Z',
+    })
+
+    await waitFor(() => {
+      expect(mockInsertMessage).toHaveBeenCalledTimes(1)
+    })
+
+    const kickoffMessage = mockInsertMessage.mock.calls[0]?.[1]
+    expect(kickoffMessage?.contentParts?.find((part: { type: string }) => part.type === 'tool-call')).toMatchObject({
+      toolName: 'chess.get-board-state',
+      toolCallId: buildChessApprovedAppKickoffToolCallId('app-session.sidebar.chess-com'),
+    })
+    expect(kickoffMessage?.contentParts?.find((part: { type: string }) => part.type === 'text')?.text).toContain(
+      'Chess.com is on the board'
+    )
+  })
+
   it('does not insert a duplicate kickoff when the session already has one for that open event', async () => {
     render(
       <ApprovedAppCoachController

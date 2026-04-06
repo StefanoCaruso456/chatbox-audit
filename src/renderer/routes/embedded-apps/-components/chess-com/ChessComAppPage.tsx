@@ -21,6 +21,7 @@ import {
 } from '@shared/contracts/v1'
 import { Chess, type Square } from 'chess.js'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { postSidebarDirectIframeStateMessage } from '@/components/apps/sidebarDirectIframeState'
 import { getApprovedAppById } from '@/data/approvedApps'
 import {
   getLaunchUrlValidationMessage,
@@ -404,13 +405,9 @@ export function ChessComAppPage() {
     [chess, currentMode, embedUrl, runtimeContext?.appSessionId]
   )
 
-  useEffect(() => {
-    if (!runtimeContext) {
-      return
-    }
-
-    sendState({
-      status: chess.isGameOver() ? 'completed' : 'active',
+  const activeSidebarSnapshot = useMemo(
+    () => ({
+      status: chess.isGameOver() ? ('completed' as const) : ('active' as const),
       summary: boardStateResult.summary,
       state: {
         ...boardStateResult,
@@ -419,12 +416,43 @@ export function ChessComAppPage() {
         vendorBoardControllable: false,
         mirroredBoard: true,
       },
+    }),
+    [boardStateResult, chess, vendorFrameState]
+  )
+
+  const publishSidebarSnapshot = useCallback(() => {
+    postSidebarDirectIframeStateMessage({
+      appId: CHESS_COM_RUNTIME_APP_ID,
+      status: activeSidebarSnapshot.status,
+      summary: activeSidebarSnapshot.summary,
+      state: activeSidebarSnapshot.state,
+    })
+  }, [activeSidebarSnapshot])
+
+  useEffect(() => {
+    if (!runtimeContext) {
+      return
+    }
+
+    sendState({
+      status: activeSidebarSnapshot.status,
+      summary: activeSidebarSnapshot.summary,
+      state: activeSidebarSnapshot.state,
       progress: {
         label: boardStateResult.moveCount === 0 ? 'Mirror board ready' : `Move ${boardStateResult.moveCount}`,
         percent: boardStateResult.moveCount === 0 ? 8 : Math.min(96, 8 + boardStateResult.moveCount * 4),
       },
     })
-  }, [boardStateResult, chess, runtimeContext, sendState, vendorFrameState])
+  }, [activeSidebarSnapshot, boardStateResult.moveCount, runtimeContext, sendState])
+
+  useEffect(() => {
+    publishSidebarSnapshot()
+
+    const replayTimers = [120, 480, 1500].map((delayMs) => window.setTimeout(publishSidebarSnapshot, delayMs))
+    return () => {
+      replayTimers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [publishSidebarSnapshot])
 
   useEffect(() => {
     if (!invocationMessage || invocationMessage.payload.toolName !== exampleChessLaunchToolSchema.name) {

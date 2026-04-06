@@ -47,6 +47,7 @@ const iframeSandbox = [
 ].join(' ')
 
 const APP_LOAD_TIMEOUT_MS = 7000
+const CHESS_COACH_APPROVED_APP_IDS = new Set(['chess-tutor', 'chess-com'])
 
 function buildRuntimeMessageId(kind: string, appId: string, appSessionId: string, sequence: number): string {
   return `runtime.${kind}.${appId}.${appSessionId}.${sequence}`
@@ -378,7 +379,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         endedAt: new Date().toISOString(),
       })
 
-      if (app.id !== 'chess-tutor') {
+      if (!CHESS_COACH_APPROVED_APP_IDS.has(app.id)) {
         return
       }
 

@@ -10,6 +10,7 @@ import {
   exampleFlashcardsStartToolSchema,
   exampleInternalChessManifest,
   examplePublicFlashcardsManifest,
+  parseAppManifest,
   parseConversationAppContext,
   type ToolSchema,
 } from '@shared/contracts/v1'
@@ -95,6 +96,74 @@ type RouteTutorMeAiAppRequestInput = {
 
 const localPlatformCache = new Map<string, Promise<LocalAppPlatform>>()
 const CHESS_APPROVED_APP_ID = 'chess-tutor'
+const CHESS_COM_APPROVED_APP_ID = 'chess-com'
+const CHESS_COM_RUNTIME_APP_ID = 'chess.com.workspace'
+
+type ChessRuntimeTarget = {
+  approvedAppId: 'chess-tutor' | 'chess-com'
+  runtimeAppId: string
+  appLabel: string
+}
+
+const CHESS_TUTOR_RUNTIME_TARGET: ChessRuntimeTarget = {
+  approvedAppId: CHESS_APPROVED_APP_ID,
+  runtimeAppId: exampleInternalChessManifest.appId,
+  appLabel: 'Chess Tutor',
+}
+
+const CHESS_COM_RUNTIME_TARGET: ChessRuntimeTarget = {
+  approvedAppId: CHESS_COM_APPROVED_APP_ID,
+  runtimeAppId: CHESS_COM_RUNTIME_APP_ID,
+  appLabel: 'Chess.com',
+}
+
+const CHESS_RUNTIME_TARGETS = [CHESS_TUTOR_RUNTIME_TARGET, CHESS_COM_RUNTIME_TARGET]
+
+const exampleChessComWrapperManifest: AppManifest = parseAppManifest({
+  ...exampleInternalChessManifest,
+  appId: CHESS_COM_RUNTIME_APP_ID,
+  slug: 'chess-com',
+  name: 'Chess.com',
+  shortDescription: 'A ChatBridge wrapper app that keeps a live Chess.com board visible beside chat.',
+  description:
+    'A ChatBridge-controlled Chess.com wrapper that keeps the vendor board visible while exposing mirrored board state and chess tools back to the conversation.',
+  safetyMetadata: {
+    ...exampleInternalChessManifest.safetyMetadata,
+    notes: 'Approved wrapper app that embeds Chess.com visually and exposes mirrored board state to chat.',
+  },
+})
+
+function getChessRuntimeTargetByApprovedAppId(appId: string | null | undefined): ChessRuntimeTarget | null {
+  return CHESS_RUNTIME_TARGETS.find((target) => target.approvedAppId === appId) ?? null
+}
+
+function getChessRuntimeTargetByRuntimeAppId(runtimeAppId: string | null | undefined): ChessRuntimeTarget | null {
+  return CHESS_RUNTIME_TARGETS.find((target) => target.runtimeAppId === runtimeAppId) ?? null
+}
+
+function isChessRuntimeAppId(appId: string | null | undefined) {
+  return Boolean(getChessRuntimeTargetByRuntimeAppId(appId))
+}
+
+function getPreferredChessSidebarSnapshot(conversationId: string): SidebarAppRuntimeSnapshot | null {
+  const activeTarget = getChessRuntimeTargetByApprovedAppId(uiStore.getState().activeApprovedAppId)
+  if (activeTarget) {
+    const activeSnapshot = getSidebarAppRuntimeSnapshot(conversationId, activeTarget.runtimeAppId)
+    if (activeSnapshot) {
+      return activeSnapshot
+    }
+  }
+
+  const snapshots = CHESS_RUNTIME_TARGETS.map((target) =>
+    getSidebarAppRuntimeSnapshot(conversationId, target.runtimeAppId)
+  ).filter((snapshot): snapshot is SidebarAppRuntimeSnapshot => Boolean(snapshot))
+
+  if (snapshots.length === 0) {
+    return null
+  }
+
+  return snapshots.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0]
+}
 
 function getMessageTraceContext(message: Message) {
   const embeddedAppPart = message.contentParts.find(
@@ -108,7 +177,7 @@ function getMessageTraceContext(message: Message) {
   return {
     appSessionId: embeddedAppPart.bridge?.appSessionId ?? embeddedAppPart.appSessionId,
     runtimeAppId: embeddedAppPart.appId,
-    approvedAppId: embeddedAppPart.appId === exampleInternalChessManifest.appId ? CHESS_APPROVED_APP_ID : undefined,
+    approvedAppId: getChessRuntimeTargetByRuntimeAppId(embeddedAppPart.appId)?.approvedAppId,
   }
 }
 
@@ -203,12 +272,17 @@ function recordChessStateSelectionSpan(input: {
   sidebarUpdatedAt?: string
   sharedUpdatedAt?: string
   selectionReason: string
+  approvedAppId?: ChessRuntimeTarget['approvedAppId']
+  runtimeAppId?: string
 }) {
+  const approvedAppId = input.approvedAppId ?? CHESS_APPROVED_APP_ID
+  const runtimeAppId = input.runtimeAppId ?? exampleInternalChessManifest.appId
+
   recordRuntimeTraceSpan({
     traceId: buildRuntimeTraceId({
       conversationId: input.conversationId,
       appSessionId: input.appSessionId,
-      runtimeAppId: exampleInternalChessManifest.appId,
+      runtimeAppId,
     }),
     name: 'choose freshest chess board state',
     kind: 'state-selection',
@@ -216,8 +290,8 @@ function recordChessStateSelectionSpan(input: {
     conversationId: input.conversationId,
     sessionId: input.conversationId,
     appSessionId: input.appSessionId,
-    approvedAppId: CHESS_APPROVED_APP_ID,
-    runtimeAppId: exampleInternalChessManifest.appId,
+    approvedAppId,
+    runtimeAppId,
     actor: {
       layer: 'agent',
       source: 'tutormeai-orchestrator',
@@ -225,13 +299,7 @@ function recordChessStateSelectionSpan(input: {
     input: 'Choose the freshest chess board state for the active conversation.',
     output: input.selectedResult?.summary ?? 'No chess board state was selected.',
     expected: input.selectionReason,
-    tags: buildTraceTags(
-      'state-selection',
-      'agent',
-      CHESS_APPROVED_APP_ID,
-      exampleInternalChessManifest.appId,
-      input.selectedSource
-    ),
+    tags: buildTraceTags('state-selection', 'agent', approvedAppId, runtimeAppId, input.selectedSource),
     state: input.selectedResult
       ? {
           source: input.selectedSource,
@@ -268,12 +336,17 @@ function recordChessRuntimeCommandSpan(input: {
   moveResult?: ChessMoveToolResult
   errorMessage?: string
   completionStatus?: string
+  approvedAppId?: ChessRuntimeTarget['approvedAppId']
+  runtimeAppId?: string
 }) {
+  const approvedAppId = input.approvedAppId ?? CHESS_APPROVED_APP_ID
+  const runtimeAppId = input.runtimeAppId ?? exampleInternalChessManifest.appId
+
   recordRuntimeTraceSpan({
     traceId: buildRuntimeTraceId({
       conversationId: input.conversationId,
       appSessionId: input.appSessionId,
-      runtimeAppId: exampleInternalChessManifest.appId,
+      runtimeAppId,
     }),
     name: 'execute chess.make-move runtime command',
     kind: 'runtime-command',
@@ -281,8 +354,8 @@ function recordChessRuntimeCommandSpan(input: {
     conversationId: input.conversationId,
     sessionId: input.conversationId,
     appSessionId: input.appSessionId,
-    approvedAppId: CHESS_APPROVED_APP_ID,
-    runtimeAppId: exampleInternalChessManifest.appId,
+    approvedAppId,
+    runtimeAppId,
     actor: {
       layer: 'agent',
       source: 'tutormeai-orchestrator',
@@ -290,13 +363,7 @@ function recordChessRuntimeCommandSpan(input: {
     input: `Requested move: ${input.requestedMove}`,
     output: input.moveResult?.summary ?? input.errorMessage ?? 'Chess move command did not return a summary.',
     expected: `Expected FEN before move: ${input.expectedFen}`,
-    tags: buildTraceTags(
-      'runtime-command',
-      'agent',
-      CHESS_APPROVED_APP_ID,
-      exampleInternalChessManifest.appId,
-      exampleChessMakeMoveToolSchema.name
-    ),
+    tags: buildTraceTags('runtime-command', 'agent', approvedAppId, runtimeAppId, exampleChessMakeMoveToolSchema.name),
     state: {
       source: 'sidebar-runtime-command',
       requestedMove: input.requestedMove,
@@ -349,6 +416,11 @@ function getLocalAppDefinitions(origin: string): LocalAppDefinition[] {
       category: 'games',
       routePath: '/embedded-apps/chess',
       manifest: buildLocalManifest(origin, exampleInternalChessManifest, '/embedded-apps/chess'),
+    },
+    {
+      category: 'games',
+      routePath: '/embedded-apps/chess-com',
+      manifest: buildLocalManifest(origin, exampleChessComWrapperManifest, '/embedded-apps/chess-com'),
     },
     {
       category: 'study',
@@ -1202,6 +1274,7 @@ async function attemptSidebarChessMove(input: {
   appSessionId: string
   boardState: ChessBoardStateToolResult
   requestedMove: string
+  runtimeTarget: ChessRuntimeTarget
 }): Promise<
   | {
       ok: true
@@ -1216,7 +1289,7 @@ async function attemptSidebarChessMove(input: {
   const toolCallId = `tool-call.chess.make-move.${uuidv4()}`
   const commandResult = await enqueueSidebarAppRuntimeCommand({
     hostSessionId: input.conversationId,
-    runtimeAppId: exampleInternalChessManifest.appId,
+    runtimeAppId: input.runtimeTarget.runtimeAppId,
     appSessionId: input.appSessionId,
     toolCallId,
     toolName: exampleChessMakeMoveToolSchema.name,
@@ -1238,6 +1311,8 @@ async function attemptSidebarChessMove(input: {
       toolCallId,
       errorMessage: commandResult.error,
       completionStatus: 'enqueue-failed',
+      approvedAppId: input.runtimeTarget.approvedAppId,
+      runtimeAppId: input.runtimeTarget.runtimeAppId,
     })
     return {
       ok: false,
@@ -1255,6 +1330,8 @@ async function attemptSidebarChessMove(input: {
       toolCallId,
       errorMessage: commandResult.completion.resultSummary,
       completionStatus: commandResult.completion.status,
+      approvedAppId: input.runtimeTarget.approvedAppId,
+      runtimeAppId: input.runtimeTarget.runtimeAppId,
     })
     return {
       ok: false,
@@ -1271,12 +1348,14 @@ async function attemptSidebarChessMove(input: {
       expectedFen: input.boardState.fen,
       status: 'failed',
       toolCallId,
-      errorMessage: 'Chess Tutor responded, but the move result was not machine-readable.',
+      errorMessage: `${input.runtimeTarget.appLabel} responded, but the move result was not machine-readable.`,
       completionStatus: 'invalid-result-payload',
+      approvedAppId: input.runtimeTarget.approvedAppId,
+      runtimeAppId: input.runtimeTarget.runtimeAppId,
     })
     return {
       ok: false,
-      error: 'Chess Tutor responded, but the move result was not machine-readable.',
+      error: `${input.runtimeTarget.appLabel} responded, but the move result was not machine-readable.`,
     }
   }
 
@@ -1289,12 +1368,14 @@ async function attemptSidebarChessMove(input: {
       expectedFen: input.boardState.fen,
       status: 'failed',
       toolCallId,
-      errorMessage: 'Chess Tutor responded, but the move result was missing required board details.',
+      errorMessage: `${input.runtimeTarget.appLabel} responded, but the move result was missing required board details.`,
       completionStatus: 'missing-required-board-details',
+      approvedAppId: input.runtimeTarget.approvedAppId,
+      runtimeAppId: input.runtimeTarget.runtimeAppId,
     })
     return {
       ok: false,
-      error: 'Chess Tutor responded, but the move result was missing required board details.',
+      error: `${input.runtimeTarget.appLabel} responded, but the move result was missing required board details.`,
     }
   }
 
@@ -1307,6 +1388,8 @@ async function attemptSidebarChessMove(input: {
     toolCallId,
     moveResult,
     completionStatus: commandResult.completion.status,
+    approvedAppId: input.runtimeTarget.approvedAppId,
+    runtimeAppId: input.runtimeTarget.runtimeAppId,
   })
   return {
     ok: true,
@@ -1523,6 +1606,9 @@ function buildChessBoardStateMessageFromSharedSession(input: {
 }
 
 function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: SidebarAppRuntimeSnapshot) {
+  const runtimeTarget =
+    getChessRuntimeTargetByRuntimeAppId(snapshot.runtimeAppId) ??
+    getChessRuntimeTargetByApprovedAppId(snapshot.approvedAppId)
   const sidebarResult = buildChessBoardStateResult({
     appSessionId: snapshot.appSessionId,
     summary: snapshot.summary,
@@ -1564,6 +1650,8 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
       selectionReason: sharedResult
         ? 'sidebar snapshot was unreadable'
         : 'no sidebar or shared chess state was readable',
+      approvedAppId: runtimeTarget?.approvedAppId,
+      runtimeAppId: runtimeTarget?.runtimeAppId,
     })
     return sharedResult
   }
@@ -1581,6 +1669,8 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
       selectionReason: sharedResult
         ? 'shared snapshot was unavailable for comparison'
         : 'shared chess session unavailable',
+      approvedAppId: runtimeTarget?.approvedAppId,
+      runtimeAppId: runtimeTarget?.runtimeAppId,
     })
     return sidebarResult
   }
@@ -1597,6 +1687,8 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
       sidebarUpdatedAt: snapshot.updatedAt,
       sharedUpdatedAt: sharedSnapshot.updatedAt,
       selectionReason: 'preferred the source with the higher move count',
+      approvedAppId: runtimeTarget?.approvedAppId,
+      runtimeAppId: runtimeTarget?.runtimeAppId,
     })
     return selectedResult
   }
@@ -1619,6 +1711,8 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
       sidebarUpdatedAt: snapshot.updatedAt,
       sharedUpdatedAt: sharedSnapshot.updatedAt,
       selectionReason: 'preferred the source with the newer updatedAt timestamp',
+      approvedAppId: runtimeTarget?.approvedAppId,
+      runtimeAppId: runtimeTarget?.runtimeAppId,
     })
     return selectedResult
   }
@@ -1633,6 +1727,8 @@ function buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot: Sidebar
     sidebarUpdatedAt: snapshot.updatedAt,
     sharedUpdatedAt: sharedSnapshot.updatedAt,
     selectionReason: 'defaulted to the sidebar snapshot after equivalent freshness checks',
+    approvedAppId: runtimeTarget?.approvedAppId,
+    runtimeAppId: runtimeTarget?.runtimeAppId,
   })
   return sidebarResult
 }
@@ -1674,6 +1770,7 @@ async function buildChessMoveMessageFromBoardState(input: {
   boardState: ChessBoardStateToolResult
   userRequest: string
   requestedMoveOverride?: string
+  runtimeTarget: ChessRuntimeTarget
 }): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
   if (!input.boardState.moveExecutionAvailable) {
     return null
@@ -1699,6 +1796,7 @@ async function buildChessMoveMessageFromBoardState(input: {
     appSessionId: input.appSessionId,
     boardState: input.boardState,
     requestedMove,
+    runtimeTarget: input.runtimeTarget,
   })
 
   if (commandResult.ok) {
@@ -1714,7 +1812,7 @@ async function buildChessMoveMessageFromBoardState(input: {
   }
 
   if (commandResult.error.includes('The chess board changed before the requested move could be applied.')) {
-    const refreshedSnapshot = getSidebarAppRuntimeSnapshot(input.conversationId, exampleInternalChessManifest.appId)
+    const refreshedSnapshot = getSidebarAppRuntimeSnapshot(input.conversationId, input.runtimeTarget.runtimeAppId)
     const refreshedBoardState = buildLiveChessBoardStateResult({
       conversationId: input.conversationId,
       appSessionId: refreshedSnapshot?.appSessionId ?? input.appSessionId,
@@ -1745,6 +1843,7 @@ async function buildChessMoveMessageFromBoardState(input: {
             appSessionId: refreshedBoardState.appSessionId,
             boardState: refreshedBoardState,
             requestedMove: refreshedRequestedMove,
+            runtimeTarget: input.runtimeTarget,
           })
 
           if (retryResult.ok) {
@@ -1762,7 +1861,7 @@ async function buildChessMoveMessageFromBoardState(input: {
           return {
             kind: 'clarify',
             message: buildClarificationMessage(
-              `Chess Tutor is open, but it did not confirm the move. ${retryResult.error}`
+              `${input.runtimeTarget.appLabel} is open, but it did not confirm the move. ${retryResult.error}`
             ),
           }
         }
@@ -1772,7 +1871,9 @@ async function buildChessMoveMessageFromBoardState(input: {
 
   return {
     kind: 'clarify',
-    message: buildClarificationMessage(`Chess Tutor is open, but it did not confirm the move. ${commandResult.error}`),
+    message: buildClarificationMessage(
+      `${input.runtimeTarget.appLabel} is open, but it did not confirm the move. ${commandResult.error}`
+    ),
   }
 }
 
@@ -1780,7 +1881,8 @@ function buildChessMoveMessageFromBoundCoachAction(input: {
   conversationId: string
   userRequest: string
   action: ChessCoachActionClientData
-}): Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null {
+  runtimeTarget: ChessRuntimeTarget
+}): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
   const boardState = buildChessBoardStateResult({
     appSessionId: input.action.appSessionId,
     summary: input.action.boardState.summary,
@@ -1806,6 +1908,8 @@ function buildChessMoveMessageFromBoundCoachAction(input: {
     sidebarResult: null,
     sharedResult: null,
     selectionReason: 'used the exact board snapshot attached to the clicked chess coach action',
+    approvedAppId: input.runtimeTarget.approvedAppId,
+    runtimeAppId: input.runtimeTarget.runtimeAppId,
   })
 
   return buildChessMoveMessageFromBoardState({
@@ -1814,6 +1918,7 @@ function buildChessMoveMessageFromBoundCoachAction(input: {
     boardState,
     userRequest: input.userRequest,
     requestedMoveOverride: input.action.requestedMove,
+    runtimeTarget: input.runtimeTarget,
   })
 }
 
@@ -1823,8 +1928,9 @@ function buildChessMoveMessageFromSidebarSnapshot(
     conversationId: string
     userRequest: string
     requestedMoveOverride?: string
+    runtimeTarget: ChessRuntimeTarget
   }
-): Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null {
+): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
   const boardState = buildPreferredChessBoardStateResultForSidebarSnapshot(snapshot)
   if (!boardState) {
     return null
@@ -1836,6 +1942,7 @@ function buildChessMoveMessageFromSidebarSnapshot(
     appSessionId: snapshot.appSessionId,
     userRequest: input.userRequest,
     requestedMoveOverride: input.requestedMoveOverride,
+    runtimeTarget: input.runtimeTarget,
   })
 }
 
@@ -1845,8 +1952,9 @@ function buildChessMoveMessageFromReference(
     conversationId: string
     userRequest: string
     requestedMoveOverride?: string
+    runtimeTarget: ChessRuntimeTarget
   }
-): Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null {
+): Promise<Extract<TutorMeAiInterceptionResult, { kind: 'invoke-tool' | 'clarify' }> | null> {
   const boardState = buildLiveChessBoardStateResult({
     conversationId: input.conversationId,
     appSessionId: reference.appSessionId,
@@ -1867,6 +1975,7 @@ function buildChessMoveMessageFromReference(
     boardState,
     userRequest: input.userRequest,
     requestedMoveOverride: input.requestedMoveOverride,
+    runtimeTarget: input.runtimeTarget,
   })
 }
 
@@ -2369,6 +2478,7 @@ function buildChessLaunchCoachParts(input: {
   appSessionId: string
   mode?: string
   moveExecutionAvailable: boolean
+  appLabel?: string
 }): Message['contentParts'] {
   const result = buildInitialChessBoardStateResult({
     appSessionId: input.appSessionId,
@@ -2389,7 +2499,7 @@ function buildChessLaunchCoachParts(input: {
     },
     {
       type: 'text',
-      text: buildChessLaunchCopy(result),
+      text: buildChessLaunchCopy(result, input.appLabel),
     },
   ]
 }
@@ -2404,18 +2514,18 @@ function buildLaunchMessage(input: {
 }): Message {
   const embeddedAppPart = buildEmbeddedAppMessagePart(input)
   const launchText =
-    input.app.appId === exampleInternalChessManifest.appId && input.authState === 'connected'
+    isChessRuntimeAppId(input.app.appId) && input.authState === 'connected'
       ? null
       : buildLaunchCopy(input.app.name, input.authState)
   const launchMessage = createMessage('assistant', launchText ?? '')
+  const chessRuntimeTarget = getChessRuntimeTargetByRuntimeAppId(input.app.appId)
   const chessLaunchCoachParts =
-    input.app.appId === exampleInternalChessManifest.appId &&
-    input.authState === 'connected' &&
-    input.tool.name === 'chess.launch-game'
+    isChessRuntimeAppId(input.app.appId) && input.authState === 'connected' && input.tool.name === 'chess.launch-game'
       ? buildChessLaunchCoachParts({
           appSessionId: embeddedAppPart.appSessionId,
           mode: typeof input.toolArguments.mode === 'string' ? input.toolArguments.mode : undefined,
           moveExecutionAvailable: true,
+          ...(chessRuntimeTarget ? { appLabel: chessRuntimeTarget.appLabel } : {}),
         })
       : []
 
@@ -2477,28 +2587,33 @@ export async function routeTutorMeAiAppRequest(
     input.userRequest
   )
   const selectedReference = selectConversationAppReference(input.previousMessages, input.userRequest)
-  const activeSidebarChessSnapshot = getSidebarAppRuntimeSnapshot(
-    input.conversationId,
-    exampleInternalChessManifest.appId
-  )
-  const chessSidebarIsOpen = uiStore.getState().activeApprovedAppId === 'chess-tutor'
+  const activeApprovedAppId = uiStore.getState().activeApprovedAppId
+  const activeSidebarChessSnapshot = getPreferredChessSidebarSnapshot(input.conversationId)
+  const activeSidebarChessRuntimeTarget = getChessRuntimeTargetByRuntimeAppId(activeSidebarChessSnapshot?.runtimeAppId)
+  const selectedChessRuntimeTarget = getChessRuntimeTargetByRuntimeAppId(selectedReference?.appId)
+  const activeChessRuntimeTarget =
+    activeSidebarChessRuntimeTarget ??
+    getChessRuntimeTargetByApprovedAppId(activeApprovedAppId) ??
+    selectedChessRuntimeTarget
+  const chessSidebarIsOpen = Boolean(getChessRuntimeTargetByApprovedAppId(activeApprovedAppId))
   const chessSuggestedMoveFollowUpIntent = isChessSuggestedMoveFollowUpIntent(input.userRequest)
   const boundChessCoachAction = extractBoundChessCoachAction(input.requestMessage)
   const hasActiveChessContext =
-    Boolean(activeSidebarChessSnapshot) ||
-    chessSidebarIsOpen ||
-    selectedReference?.appId === exampleInternalChessManifest.appId
+    Boolean(activeSidebarChessSnapshot) || chessSidebarIsOpen || Boolean(selectedChessRuntimeTarget)
   const suggestedChessMove = chessSuggestedMoveFollowUpIntent
     ? extractLastSuggestedChessMove(input.previousMessages)
     : null
+  const activeChessAppLabel = activeChessRuntimeTarget?.appLabel ?? 'Chess Tutor'
 
   if (shouldUseChessBoardStateTool(input.userRequest) || (chessSuggestedMoveFollowUpIntent && hasActiveChessContext)) {
     if (isChessMoveIntent(input.userRequest) || chessSuggestedMoveFollowUpIntent) {
       if (boundChessCoachAction) {
+        const boundChessRuntimeTarget = activeChessRuntimeTarget ?? CHESS_TUTOR_RUNTIME_TARGET
         const moveMessage = await buildChessMoveMessageFromBoundCoachAction({
           conversationId: input.conversationId,
           userRequest: input.userRequest,
           action: boundChessCoachAction,
+          runtimeTarget: boundChessRuntimeTarget,
         })
         if (moveMessage) {
           return finalizeTutorMeAiInterceptionResult({
@@ -2506,8 +2621,8 @@ export async function routeTutorMeAiAppRequest(
             userRequest: input.userRequest,
             source: 'chess.move.from-bound-coach-action',
             appSessionId: boundChessCoachAction.appSessionId,
-            runtimeAppId: exampleInternalChessManifest.appId,
-            approvedAppId: CHESS_APPROVED_APP_ID,
+            runtimeAppId: boundChessRuntimeTarget.runtimeAppId,
+            approvedAppId: boundChessRuntimeTarget.approvedAppId,
             result: moveMessage,
           })
         }
@@ -2519,22 +2634,23 @@ export async function routeTutorMeAiAppRequest(
           userRequest: input.userRequest,
           source: 'chess.follow-up-move.missing-suggestion',
           appSessionId: activeSidebarChessSnapshot?.appSessionId ?? selectedReference?.appSessionId,
-          runtimeAppId: exampleInternalChessManifest.appId,
-          approvedAppId: CHESS_APPROVED_APP_ID,
+          runtimeAppId: activeChessRuntimeTarget?.runtimeAppId,
+          approvedAppId: activeChessRuntimeTarget?.approvedAppId,
           result: {
             kind: 'clarify',
             message: buildClarificationMessage(
-              'Chess Tutor is open, but I do not know which recommendation you want me to play. Say the move explicitly, for example "play Nf6".'
+              `${activeChessAppLabel} is open, but I do not know which recommendation you want me to play. Say the move explicitly, for example "play Nf6".`
             ),
           },
         })
       }
 
-      if (activeSidebarChessSnapshot) {
+      if (activeSidebarChessSnapshot && activeSidebarChessRuntimeTarget) {
         const moveMessage = await buildChessMoveMessageFromSidebarSnapshot(activeSidebarChessSnapshot, {
           conversationId: input.conversationId,
           userRequest: input.userRequest,
           requestedMoveOverride: suggestedChessMove ?? undefined,
+          runtimeTarget: activeSidebarChessRuntimeTarget,
         })
         if (moveMessage) {
           return finalizeTutorMeAiInterceptionResult({
@@ -2542,21 +2658,23 @@ export async function routeTutorMeAiAppRequest(
             userRequest: input.userRequest,
             source: 'chess.move.from-sidebar-snapshot',
             appSessionId: activeSidebarChessSnapshot.appSessionId,
-            runtimeAppId: exampleInternalChessManifest.appId,
-            approvedAppId: CHESS_APPROVED_APP_ID,
+            runtimeAppId: activeSidebarChessRuntimeTarget.runtimeAppId,
+            approvedAppId: activeSidebarChessRuntimeTarget.approvedAppId,
             result: moveMessage,
           })
         }
       }
 
       if (
-        selectedReference?.appId === exampleInternalChessManifest.appId &&
+        selectedReference &&
+        selectedChessRuntimeTarget &&
         hasInteractiveChessLaunchPrompt(input.previousMessages, selectedReference.appSessionId)
       ) {
         const moveMessage = await buildChessMoveMessageFromReference(selectedReference, {
           conversationId: input.conversationId,
           userRequest: input.userRequest,
           requestedMoveOverride: suggestedChessMove ?? undefined,
+          runtimeTarget: selectedChessRuntimeTarget,
         })
         if (moveMessage) {
           return finalizeTutorMeAiInterceptionResult({
@@ -2564,8 +2682,8 @@ export async function routeTutorMeAiAppRequest(
             userRequest: input.userRequest,
             source: 'chess.move.from-embedded-reference',
             appSessionId: selectedReference.appSessionId,
-            runtimeAppId: exampleInternalChessManifest.appId,
-            approvedAppId: CHESS_APPROVED_APP_ID,
+            runtimeAppId: selectedChessRuntimeTarget.runtimeAppId,
+            approvedAppId: selectedChessRuntimeTarget.approvedAppId,
             result: moveMessage,
           })
         }
@@ -2577,12 +2695,12 @@ export async function routeTutorMeAiAppRequest(
           userRequest: input.userRequest,
           source: 'chess.move.missing-live-board-state',
           appSessionId: activeSidebarChessSnapshot?.appSessionId ?? selectedReference?.appSessionId,
-          runtimeAppId: exampleInternalChessManifest.appId,
-          approvedAppId: CHESS_APPROVED_APP_ID,
+          runtimeAppId: activeChessRuntimeTarget?.runtimeAppId,
+          approvedAppId: activeChessRuntimeTarget?.approvedAppId,
           result: {
             kind: 'clarify',
             message: buildClarificationMessage(
-              'Chess Tutor is open, but move execution needs the live right-sidebar board state. Keep the sidebar open, wait for the board to finish syncing, and then try the move again.'
+              `${activeChessAppLabel} is open, but move execution needs the live right-sidebar board state. Keep the sidebar open, wait for the board to finish syncing, and then try the move again.`
             ),
           },
         })
@@ -2591,7 +2709,7 @@ export async function routeTutorMeAiAppRequest(
 
     const boardStateMessage = activeSidebarChessSnapshot
       ? buildChessBoardStateMessageFromSidebarSnapshot(activeSidebarChessSnapshot, input.userRequest)
-      : selectedReference?.appId === exampleInternalChessManifest.appId
+      : selectedChessRuntimeTarget && selectedReference
         ? buildChessBoardStateMessage({
             conversationId: input.conversationId,
             reference: selectedReference,
@@ -2609,12 +2727,12 @@ export async function routeTutorMeAiAppRequest(
         userRequest: input.userRequest,
         source: activeSidebarChessSnapshot
           ? 'chess.board-state.from-sidebar-snapshot'
-          : selectedReference?.appId === exampleInternalChessManifest.appId
+          : selectedChessRuntimeTarget
             ? 'chess.board-state.from-embedded-reference'
             : 'chess.board-state.from-shared-session',
         appSessionId: activeSidebarChessSnapshot?.appSessionId ?? selectedReference?.appSessionId,
-        runtimeAppId: exampleInternalChessManifest.appId,
-        approvedAppId: CHESS_APPROVED_APP_ID,
+        runtimeAppId: activeChessRuntimeTarget?.runtimeAppId,
+        approvedAppId: activeChessRuntimeTarget?.approvedAppId,
         result: {
           kind: 'invoke-tool',
           message: boardStateMessage,
@@ -2622,36 +2740,54 @@ export async function routeTutorMeAiAppRequest(
       })
     }
 
-    if (
-      activeSidebarChessSnapshot ||
-      chessSidebarIsOpen ||
-      selectedReference?.appId === exampleInternalChessManifest.appId
-    ) {
+    if (activeSidebarChessSnapshot || chessSidebarIsOpen || selectedChessRuntimeTarget) {
       return finalizeTutorMeAiInterceptionResult({
         conversationId: input.conversationId,
         userRequest: input.userRequest,
         source: 'chess.board-state.not-readable-yet',
         appSessionId: activeSidebarChessSnapshot?.appSessionId ?? selectedReference?.appSessionId,
-        runtimeAppId: exampleInternalChessManifest.appId,
-        approvedAppId: CHESS_APPROVED_APP_ID,
+        runtimeAppId: activeChessRuntimeTarget?.runtimeAppId,
+        approvedAppId: activeChessRuntimeTarget?.approvedAppId,
         result: {
           kind: 'clarify',
           message: buildClarificationMessage(
-            "Chess Tutor is open, but I can't read the live board state yet. Keep the sidebar open, let it finish reconnecting, and then try again."
+            `${activeChessAppLabel} is open, but I can't read the live board state yet. Keep the sidebar open, let it finish reconnecting, and then try again.`
           ),
         },
       })
     }
   }
 
-  const isExplicitChessLaunchRequest =
-    hasLaunchIntent(input.userRequest) &&
-    !shouldUseChessBoardStateTool(input.userRequest) &&
-    (normalizedRequest.includes(normalizeComparable(exampleInternalChessManifest.name)) ||
-      normalizedRequest.includes(normalizeComparable(exampleInternalChessManifest.slug)))
+  const explicitChessLaunchTarget =
+    hasLaunchIntent(input.userRequest) && !shouldUseChessBoardStateTool(input.userRequest)
+      ? (CHESS_RUNTIME_TARGETS.map((target) => {
+          const chessApp = platform.appsById.get(target.runtimeAppId)
+          if (!chessApp) {
+            return { target, score: -1 }
+          }
 
-  if (isExplicitChessLaunchRequest) {
-    const chessApp = platform.appsById.get(exampleInternalChessManifest.appId)
+          const comparableValues = [
+            normalizeComparable(target.appLabel),
+            normalizeComparable(chessApp.name),
+            normalizeComparable(chessApp.slug),
+          ].filter(Boolean)
+
+          const score = comparableValues.reduce((bestScore, value) => {
+            if (!normalizedRequest.includes(value)) {
+              return bestScore
+            }
+
+            return Math.max(bestScore, value.length)
+          }, -1)
+
+          return { target, score }
+        })
+          .filter((candidate) => candidate.score >= 0)
+          .sort((left, right) => right.score - left.score)[0]?.target ?? null)
+      : null
+
+  if (explicitChessLaunchTarget) {
+    const chessApp = platform.appsById.get(explicitChessLaunchTarget.runtimeAppId)
     const chessTool = chessApp?.currentVersion.manifest.toolDefinitions.find(
       (tool) => tool.name === 'chess.launch-game'
     )
@@ -2661,8 +2797,8 @@ export async function routeTutorMeAiAppRequest(
         conversationId: input.conversationId,
         userRequest: input.userRequest,
         source: 'route.explicit-chess-launch',
-        approvedAppId: CHESS_APPROVED_APP_ID,
-        runtimeAppId: exampleInternalChessManifest.appId,
+        approvedAppId: explicitChessLaunchTarget.approvedAppId,
+        runtimeAppId: explicitChessLaunchTarget.runtimeAppId,
         result: {
           kind: 'invoke-tool',
           message: buildLaunchMessage({
@@ -2780,7 +2916,7 @@ export async function routeTutorMeAiAppRequest(
         result: {
           kind: 'clarify',
           message: buildClarificationMessage(
-            'Which app would you like to open: Chess Tutor, Flashcards Coach, or Planner Connect?'
+            'Which app would you like to open: Chess Tutor, Chess.com, Flashcards Coach, or Planner Connect?'
           ),
         },
       })
