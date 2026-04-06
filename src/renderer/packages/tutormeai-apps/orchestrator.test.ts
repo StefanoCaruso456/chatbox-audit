@@ -1,4 +1,5 @@
 import {
+  exampleApprovedAppOpenToolSchema,
   exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
   exampleChessMakeMoveToolSchema,
@@ -44,7 +45,7 @@ describe('routeTutorMeAiAppRequest', () => {
     resetChessSessions()
     resetRuntimeTraceStore()
     mockEnqueueSidebarAppRuntimeCommand.mockReset()
-    uiStore.setState({ activeApprovedAppId: null })
+    uiStore.setState({ activeApprovedAppId: null, requestedApprovedAppId: null, approvedAppsModalOpen: false })
     mockEnqueueSidebarAppRuntimeCommand.mockResolvedValue({
       ok: true,
       command: {
@@ -213,12 +214,84 @@ describe('routeTutorMeAiAppRequest', () => {
     })
   })
 
+  it('opens approved apps from chat by matching the shared app catalog', async () => {
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.apps.1',
+      userId: 'user.apps.1',
+      userRequest: 'open flashcards',
+      requestMessageId: 'message.apps.1',
+      previousMessages: [createMessage('user', 'Hello')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe(
+      exampleApprovedAppOpenToolSchema.name
+    )
+    expect(uiStore.getState().requestedApprovedAppId).toBe('flashcards-coach')
+    expect(
+      result.message.contentParts.some((part) => part.type === 'text' && part.text.includes('Opening Flashcards Coach'))
+    ).toBe(true)
+  })
+
+  it('can open approved library apps like Miro from chat using the same sidebar flow', async () => {
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.apps.2',
+      userId: 'user.apps.2',
+      userRequest: 'launch Miro for me',
+      requestMessageId: 'message.apps.2',
+      previousMessages: [createMessage('user', 'Hello')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(uiStore.getState().requestedApprovedAppId).toBe('miro')
+    const toolPart = result.message.contentParts.find((part) => part.type === 'tool-call')
+    expect(toolPart && toolPart.type === 'tool-call' ? toolPart.toolName : null).toBe(
+      exampleApprovedAppOpenToolSchema.name
+    )
+  })
+
+  it('does not re-request an approved app that is already open in the sidebar', async () => {
+    uiStore.setState({ activeApprovedAppId: 'desmos', requestedApprovedAppId: null })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.apps.3',
+      userId: 'user.apps.3',
+      userRequest: 'open desmos',
+      requestMessageId: 'message.apps.3',
+      previousMessages: [createMessage('user', 'Hello')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(uiStore.getState().requestedApprovedAppId).toBeNull()
+    expect(
+      result.message.contentParts.some(
+        (part) => part.type === 'text' && part.text.includes('Desmos is already open in the right sidebar.')
+      )
+    ).toBe(true)
+  })
+
   it('opens the authenticated planner app in connect-required mode when auth is missing', async () => {
     const result = await routeTutorMeAiAppRequest({
       origin: 'http://localhost:1212',
       conversationId: 'conversation.3',
       userId: 'user.3',
-      userRequest: 'open planner for overdue work',
+      userRequest: 'check my planner for overdue work',
       requestMessageId: 'message.3',
       previousMessages: [createMessage('user', 'Hello')],
     })

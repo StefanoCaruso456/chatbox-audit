@@ -332,10 +332,49 @@ export const examplePlannerDashboardToolSchema: ToolSchema = ToolSchemaSchema.pa
   requiredPermissions: ['oauth:connect', 'tool:invoke'],
 })
 
+export const exampleApprovedAppOpenToolSchema: ToolSchema = ToolSchemaSchema.parse({
+  name: 'approved-app.open',
+  displayName: 'Open Approved App',
+  description: 'Open an approved TutorMeAI app from the shared K-12 app library in the right sidebar.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      appId: {
+        type: 'string',
+        description: 'The approved app id from the shared TutorMeAI app catalog.',
+      },
+    },
+    required: ['appId'],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      approvedAppId: { type: 'string' },
+      appName: { type: 'string' },
+      launchUrl: { type: 'string' },
+      surface: {
+        type: 'string',
+        enum: ['right-sidebar'],
+      },
+      status: {
+        type: 'string',
+        enum: ['requested', 'already-open'],
+      },
+    },
+    required: ['approvedAppId', 'appName', 'launchUrl', 'surface', 'status'],
+  },
+  authRequirement: 'platform-session',
+  timeoutMs: 10_000,
+  idempotent: false,
+  invocationMode: 'platform-proxy',
+  requiredPermissions: ['tool:invoke'],
+})
+
 export const exampleToolSchemas = [
   exampleChessLaunchToolSchema,
   exampleChessGetBoardStateToolSchema,
   exampleChessMakeMoveToolSchema,
   exampleFlashcardsStartToolSchema,
   examplePlannerDashboardToolSchema,
+  exampleApprovedAppOpenToolSchema,
 ]

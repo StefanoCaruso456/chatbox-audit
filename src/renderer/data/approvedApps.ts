@@ -889,6 +889,100 @@ export const APP_MILESTONE_ORDER = [
   'khan-academy-kids',
   'scratchjr',
 ] as const
+
+const APPROVED_APP_LAUNCH_ALIASES: Partial<Record<ApprovedApp['id'], string[]>> = {
+  classdojo: ['class dojo'],
+  splashlearn: ['splash learn'],
+  abcmouse: ['abc mouse'],
+  kahoot: ['kahoot'],
+  'pear-deck': ['peardeck', 'pear deck'],
+  scratchjr: ['scratch jr', 'scratch junior'],
+  'codespark-academy': ['codespark', 'code spark'],
+  'flashcards-coach': ['flashcards', 'flashcard coach'],
+  'planner-connect': ['planner', 'planner app'],
+}
+
+export type ApprovedAppLaunchResolution =
+  | {
+      kind: 'match'
+      app: ApprovedApp
+      matchedTerm: string
+    }
+  | {
+      kind: 'ambiguous'
+      apps: ApprovedApp[]
+    }
+
+function normalizeApprovedAppLookup(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+function buildSpacedNameVariant(name: string) {
+  return name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .trim()
+}
+
+function getApprovedAppLaunchTerms(app: ApprovedApp) {
+  const terms = new Set<string>()
+  const addTerm = (value: string | undefined) => {
+    if (!value) {
+      return
+    }
+
+    const normalized = normalizeApprovedAppLookup(value)
+    if (normalized.length >= 3) {
+      terms.add(normalized)
+    }
+  }
+
+  addTerm(app.name)
+  addTerm(buildSpacedNameVariant(app.name))
+  addTerm(app.id)
+  addTerm(app.id.replace(/-/g, ' '))
+
+  for (const alias of APPROVED_APP_LAUNCH_ALIASES[app.id] ?? []) {
+    addTerm(alias)
+  }
+
+  return [...terms]
+}
+
+function scoreApprovedAppLaunchTerm(normalizedRequest: string, requestTokens: Set<string>, term: string) {
+  if (!term) {
+    return 0
+  }
+
+  if (normalizedRequest === term) {
+    return 1000 + term.length
+  }
+
+  if (normalizedRequest.endsWith(term)) {
+    return 900 + term.length
+  }
+
+  if (normalizedRequest.includes(term)) {
+    return 850 + term.length
+  }
+
+  const termTokens = term.split(' ').filter(Boolean)
+  if (termTokens.length === 0) {
+    return 0
+  }
+
+  if (termTokens.every((token) => requestTokens.has(token))) {
+    return termTokens.length > 1 ? 760 + termTokens.length * 10 : 700 + term.length
+  }
+
+  return 0
+}
+
 export const approvedApps: ApprovedApp[] = [
   ...tutorMeAiApps,
   ...curatedApprovedAppCatalog.map((app) => {
@@ -924,4 +1018,52 @@ export function getApprovedAppById(appId: string) {
 
 export function getApprovedAppByRuntimeAppId(runtimeAppId: string) {
   return approvedAppsByRuntimeAppId.get(runtimeAppId)
+}
+
+export function resolveApprovedAppLaunchRequest(userRequest: string): ApprovedAppLaunchResolution | null {
+  const normalizedRequest = normalizeApprovedAppLookup(userRequest)
+  if (!normalizedRequest) {
+    return null
+  }
+
+  const requestTokens = new Set(normalizedRequest.split(' ').filter(Boolean))
+  const candidates = approvedApps
+    .map((app) => {
+      let bestScore = 0
+      let matchedTerm = ''
+
+      for (const term of getApprovedAppLaunchTerms(app)) {
+        const score = scoreApprovedAppLaunchTerm(normalizedRequest, requestTokens, term)
+        if (score > bestScore) {
+          bestScore = score
+          matchedTerm = term
+        }
+      }
+
+      return {
+        app,
+        matchedTerm,
+        score: bestScore,
+      }
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score || left.app.name.localeCompare(right.app.name))
+
+  if (candidates.length === 0) {
+    return null
+  }
+
+  const [first, second] = candidates
+  if (second && first.score - second.score <= 20 && second.score >= 850) {
+    return {
+      kind: 'ambiguous',
+      apps: [first.app, second.app],
+    }
+  }
+
+  return {
+    kind: 'match',
+    app: first.app,
+    matchedTerm: first.matchedTerm,
+  }
 }
