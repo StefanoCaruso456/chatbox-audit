@@ -747,9 +747,6 @@ const tutorMeAiApps: ApprovedApp[] = [
       authState: 'not-required',
       grantedPermissions: ['session:write', 'tool:invoke'],
       initialState: {
-        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-        turn: 'w',
-        moveCount: 0,
         mode: 'analysis',
         embedUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
         provider: 'chess.com',

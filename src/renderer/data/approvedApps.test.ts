@@ -25,9 +25,11 @@ describe('approvedApps', () => {
         appId: 'chess.com.workspace',
         sidebarMode: 'direct-iframe',
         initialState: {
-          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-          turn: 'w',
-          moveCount: 0,
+          diagramId: '10477955',
+          embedUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+          mode: 'analysis',
+          provider: 'chess.com',
+          vendorBoardSync: 'official-diagram-callback',
         },
       },
     })
