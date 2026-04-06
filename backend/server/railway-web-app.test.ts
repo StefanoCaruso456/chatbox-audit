@@ -1,6 +1,6 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { InMemoryAppAccessRepository } from '../app-access'
 import { PlatformAuthService } from '../auth'
@@ -413,6 +413,7 @@ describe('createRailwayWebApp', () => {
     const app = createRailwayWebApp({
       staticRootDir,
       repository,
+      now: () => '2026-04-05T05:00:00.000Z',
     })
 
     const studentsResponse = await app.handleRequest(
@@ -535,6 +536,7 @@ describe('createRailwayWebApp', () => {
       staticRootDir,
       repository,
       appAccessRepository,
+      now: () => '2026-04-05T05:00:00.000Z',
     })
 
     const requestResponse = await app.handleRequest(
@@ -718,6 +720,7 @@ describe('createRailwayWebApp', () => {
       staticRootDir,
       repository,
       appAccessRepository,
+      now: () => '2026-04-05T05:00:00.000Z',
     })
 
     const requestResponse = await app.handleRequest(
@@ -743,6 +746,101 @@ describe('createRailwayWebApp', () => {
       }
     }
     expect(requestBody.error.message).toContain('No assigned teacher or administrator')
+  })
+
+  it('proxies Chess.com diagram data and the emboard shell through the Railway backend', async () => {
+    const staticRootDir = await createStaticRoot()
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+
+      if (url === 'https://www.chess.com/callback/diagram/10477955') {
+        return new Response(
+          JSON.stringify({
+            id: 10477955,
+            toUserId: null,
+            clubId: null,
+            type: 'chessGame',
+            boardOptions: {
+              coordinates: 'inside',
+              flipBoard: false,
+              colorScheme: 'bases',
+              pieceStyle: 'neo_wood',
+            },
+            themeIds: {},
+            setup: [
+              {
+                pgn: '[Event "Example"]\n\n1. d4 Nf6 *',
+                nodeLimits: {
+                  focusNode: 0,
+                  beginNode: 0,
+                  endNode: 0,
+                },
+                tags: {
+                  white: 'White',
+                  black: 'Black',
+                  event: 'Example',
+                },
+                variant: 'Chess',
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          }
+        )
+      }
+
+      if (url === 'https://www.chess.com/emboard?id=10477955&_height=640') {
+        return new Response('<html><head></head><body>shell</body></html>', {
+          status: 200,
+          headers: {
+            'content-type': 'text/html; charset=utf-8',
+          },
+        })
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`)
+    })
+
+    const app = createRailwayWebApp({
+      staticRootDir,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    })
+
+    const diagramResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/chess-com/diagram/10477955', {
+        headers: {
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+      })
+    )
+
+    expect(diagramResponse.status).toBe(200)
+    expect(diagramResponse.headers.get('access-control-allow-origin')).toBe('https://chatbox-audit.vercel.app')
+    const diagramBody = (await diagramResponse.json()) as {
+      ok: true
+      data: {
+        id: number
+        setup: Array<{ pgn: string }>
+      }
+    }
+    expect(diagramBody.data.id).toBe(10477955)
+    expect(diagramBody.data.setup[0]?.pgn).toContain('1. d4 Nf6')
+
+    const shellResponse = await app.handleRequest(
+      new Request('https://chatbox-audit-production.up.railway.app/api/chess-com/emboard-shell/10477955', {
+        headers: {
+          origin: 'https://chatbox-audit.vercel.app',
+        },
+      })
+    )
+
+    expect(shellResponse.status).toBe(200)
+    expect(shellResponse.headers.get('access-control-allow-origin')).toBe('https://chatbox-audit.vercel.app')
+    expect(await shellResponse.text()).toContain('<body>shell</body>')
   })
 })
 

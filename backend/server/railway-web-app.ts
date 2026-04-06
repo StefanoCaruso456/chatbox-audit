@@ -4,40 +4,41 @@ import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { IdentifierSchema, RuntimeTraceSpanSchema } from '@shared/contracts/v1'
-import { OriginSchema, normalizeOrigin } from '@shared/contracts/v1/shared'
-import { TutorMeAIUserRoleSchema, type TutorMeAIUserRole } from '@shared/types/settings'
+import { normalizeOrigin, OriginSchema } from '@shared/contracts/v1/shared'
+import { type TutorMeAIUserRole, TutorMeAIUserRoleSchema } from '@shared/types/settings'
 import { z } from 'zod'
+import {
+  type AppAccessErrorCode,
+  type AppAccessRepository,
+  AppAccessService,
+  createRuntimeAppAccessRepository,
+} from '../app-access'
+import {
+  type AuthRepository,
+  createGoogleOAuthAdapter,
+  createHashedTokenCipher,
+  createRuntimeAuthRepository,
+  fetchGoogleUserProfile,
+  type GoogleUserProfile,
+  isTutorMeAIReviewerRole,
+  loadGoogleOAuthRuntimeConfig,
+  type OAuthAuthErrorCode,
+  OAuthAuthService,
+  type OAuthProviderConfig,
+  type PlatformAuthErrorCode,
+  PlatformAuthService,
+  readAssignedStudentIds,
+  sanitizeAssignedStudentIds,
+  toPublicOAuthConnectionRecord,
+  type UserRecord,
+} from '../auth'
+import { ChessComDiagramIdSchema, fetchChessComDiagram, fetchChessComEmboardShell } from '../chess-com'
+import { failureResult, toApiErrorBody } from '../errors'
 import {
   BraintrustTelemetryConfigError,
   ensureBraintrustRuntimeProject,
   exportRuntimeTraceSpansToBraintrust,
 } from '../observability/braintrust'
-import { failureResult, toApiErrorBody } from '../errors'
-import {
-  createRuntimeAuthRepository,
-  createGoogleOAuthAdapter,
-  createHashedTokenCipher,
-  isTutorMeAIReviewerRole,
-  OAuthAuthService,
-  PlatformAuthService,
-  readAssignedStudentIds,
-  sanitizeAssignedStudentIds,
-  fetchGoogleUserProfile,
-  loadGoogleOAuthRuntimeConfig,
-  toPublicOAuthConnectionRecord,
-  type AuthRepository,
-  type GoogleUserProfile,
-  type OAuthAuthErrorCode,
-  type OAuthProviderConfig,
-  type PlatformAuthErrorCode,
-  type UserRecord,
-} from '../auth'
-import {
-  AppAccessService,
-  createRuntimeAppAccessRepository,
-  type AppAccessErrorCode,
-  type AppAccessRepository,
-} from '../app-access'
 
 const DEFAULT_STATIC_ROOT_DIR = resolve(process.cwd(), 'release/app/dist/renderer')
 const DEFAULT_ALLOWED_ORIGINS = ['https://chatbox-audit.vercel.app', 'http://localhost:1212', 'http://localhost:3000']
@@ -56,6 +57,8 @@ const RUNTIME_TRACE_EXPORT_PATH = '/api/telemetry/runtime-traces'
 const APP_ACCESS_REQUESTS_PATH = '/api/app-access/requests'
 const APP_ACCESS_PENDING_REQUESTS_PATH = '/api/app-access/requests/pending'
 const APP_ACCESS_MY_REQUESTS_PATH = '/api/app-access/requests/mine'
+const CHESS_COM_DIAGRAM_PATH_PREFIX = '/api/chess-com/diagram/'
+const CHESS_COM_EMBOARD_SHELL_PATH_PREFIX = '/api/chess-com/emboard-shell/'
 const PLATFORM_GOOGLE_COOKIE_NAME = 'tutormeai_platform_google'
 
 const OAuthConnectionQuerySchema = z.object({
@@ -233,7 +236,8 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
         request.method === 'OPTIONS' &&
         (url.pathname.startsWith('/api/auth/') ||
           url.pathname.startsWith('/api/telemetry/') ||
-          url.pathname.startsWith('/api/app-access/'))
+          url.pathname.startsWith('/api/app-access/') ||
+          url.pathname.startsWith('/api/chess-com/'))
       ) {
         return withCors(request, new Response(null, { status: 204 }), env)
       }
@@ -309,6 +313,15 @@ export function createRailwayWebApp(options: RailwayWebAppOptions = {}): Railway
       if (url.pathname === RUNTIME_TRACE_EXPORT_PATH && request.method === 'POST') {
         return withCors(request, await handleExportRuntimeTelemetry(request, { env, fetchImpl }), env)
       }
+
+      if (url.pathname.startsWith(CHESS_COM_DIAGRAM_PATH_PREFIX) && request.method === 'GET') {
+        return withCors(request, await handleGetChessComDiagram(request, { fetchImpl }), env)
+      }
+
+      if (url.pathname.startsWith(CHESS_COM_EMBOARD_SHELL_PATH_PREFIX) && request.method === 'GET') {
+        return withCors(request, await handleGetChessComEmboardShell(request, { fetchImpl }), env)
+      }
+
       if (url.pathname === APP_ACCESS_REQUESTS_PATH && request.method === 'POST') {
         return withCors(
           request,
@@ -460,6 +473,86 @@ async function handleExportRuntimeTelemetry(
     }
 
     return jsonResponse(502, toApiErrorBody(failureResult('api', 'service-unavailable', 'Braintrust telemetry export failed.')))
+  }
+}
+
+async function handleGetChessComDiagram(
+  request: Request,
+  input: {
+    fetchImpl: typeof fetch
+  }
+): Promise<Response> {
+  const diagramId = extractPathSuffix(request, CHESS_COM_DIAGRAM_PATH_PREFIX)
+  const parsedDiagramId = ChessComDiagramIdSchema.safeParse(diagramId)
+  if (!parsedDiagramId.success) {
+    return jsonResponse(
+      400,
+      toApiErrorBody(failureResult('api', 'invalid-request', 'Chess.com diagram requests require a numeric diagram id.'))
+    )
+  }
+
+  try {
+    const diagram = await fetchChessComDiagram({
+      diagramId: parsedDiagramId.data,
+      fetchImpl: input.fetchImpl,
+    })
+
+    return jsonResponse(200, {
+      ok: true,
+      data: diagram,
+    })
+  } catch (error) {
+    return jsonResponse(
+      502,
+      toApiErrorBody(
+        failureResult(
+          'api',
+          'service-unavailable',
+          error instanceof Error ? error.message : 'Chess.com diagram lookup failed.'
+        )
+      )
+    )
+  }
+}
+
+async function handleGetChessComEmboardShell(
+  request: Request,
+  input: {
+    fetchImpl: typeof fetch
+  }
+): Promise<Response> {
+  const diagramId = extractPathSuffix(request, CHESS_COM_EMBOARD_SHELL_PATH_PREFIX)
+  const parsedDiagramId = ChessComDiagramIdSchema.safeParse(diagramId)
+  if (!parsedDiagramId.success) {
+    return jsonResponse(
+      400,
+      toApiErrorBody(
+        failureResult('api', 'invalid-request', 'Chess.com emboard shell requests require a numeric diagram id.')
+      )
+    )
+  }
+
+  try {
+    const html = await fetchChessComEmboardShell({
+      diagramId: parsedDiagramId.data,
+      fetchImpl: input.fetchImpl,
+    })
+
+    return new Response(html, {
+      status: 200,
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'text/html; charset=utf-8',
+      },
+    })
+  } catch (error) {
+    return new Response(error instanceof Error ? error.message : 'Chess.com emboard shell lookup failed.', {
+      status: 502,
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'text/plain; charset=utf-8',
+      },
+    })
   }
 }
 
@@ -1965,6 +2058,11 @@ function readCookie(cookieHeader: string | null, name: string) {
     .find((part) => part.startsWith(`${name}=`))
 
   return pair ? pair.slice(name.length + 1) : null
+}
+
+function extractPathSuffix(request: Request, prefix: string) {
+  const pathname = new URL(request.url).pathname
+  return pathname.startsWith(prefix) ? pathname.slice(prefix.length) : ''
 }
 
 function clearCookie(name: string) {

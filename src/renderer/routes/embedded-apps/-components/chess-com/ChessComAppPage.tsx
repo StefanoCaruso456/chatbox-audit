@@ -1,26 +1,12 @@
-import {
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Group,
-  Loader,
-  Paper,
-  Stack,
-  Text,
-  Textarea,
-  TextInput,
-  Title,
-  UnstyledButton,
-} from '@mantine/core'
-import type { CompletionSignal } from '@shared/contracts/v1'
+import { Alert, Badge, Box, Button, Group, Loader, Paper, Stack, Text, TextInput, Title } from '@mantine/core'
+import type { CompletionSignal, JsonObject } from '@shared/contracts/v1'
 import {
   exampleChessGetBoardStateToolSchema,
   exampleChessLaunchToolSchema,
   exampleChessMakeMoveToolSchema,
 } from '@shared/contracts/v1'
-import { Chess, type Square } from 'chess.js'
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Chess } from 'chess.js'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { postSidebarDirectIframeStateMessage } from '@/components/apps/sidebarDirectIframeState'
 import { getApprovedAppById } from '@/data/approvedApps'
 import {
@@ -29,61 +15,39 @@ import {
   normalizeLaunchUrl,
 } from '@/lib/approvedAppLaunchConfig'
 import { getApprovedAppLaunchOverride, persistApprovedAppLaunchOverride } from '@/lib/approvedAppLaunchOverrides'
-import {
-  activateChessSession,
-  applyChessSessionMove,
-  type ChessMode,
-  getChessSessionSnapshot,
-  initializeChessSession,
-  loadChessSessionPosition,
-  resetChessSession,
-  subscribeChessSession,
-} from '@/stores/chessSessionStore'
+import { applyRequestedChessMove } from '../chess/chessMove'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
-import { importChessComPosition } from './chessComPosition'
-
-type SelectionState = {
-  from: Square | null
-}
-
-function isSidebarPanelMode() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  return new URLSearchParams(window.location.search).get('chatbridge_panel') === '1'
-}
-
-function shouldShowVendorReferenceByDefault() {
-  return true
-}
+import { type ChessComDiagram, extractChessComDiagramId, patchChessComEmboardHtml } from './chessComOfficialViewer'
 
 const CHESS_COM_APP_ID = 'chess-com'
 const CHESS_COM_RUNTIME_APP_ID = 'chess.com.workspace'
 const DEFAULT_EMBED_URL = 'https://www.chess.com/emboard?id=10477955&_height=640'
-const CHESS_SYMBOL_FONT_STACK = '"Noto Sans Symbols 2", "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", serif'
+const VIEWER_READY_SOURCE = 'chatbridge-chesscom-viewer'
+const VIEWER_TIMEOUT_MS = 4_500
 
-const boardSquares = (['8', '7', '6', '5', '4', '3', '2', '1'] as const).flatMap((rank) =>
-  (['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const).map((file) => `${file}${rank}` as Square)
-)
+type ViewerMode = 'loading' | 'ready' | 'fallback'
+type DiagramLoadState = 'loading' | 'ready' | 'failed'
+type ChessMode = 'analysis' | 'review'
 
-const pieceGlyphs: Record<'w' | 'b', Record<string, string>> = {
-  w: {
-    p: '♙',
-    r: '♖',
-    n: '♘',
-    b: '♗',
-    q: '♕',
-    k: '♔',
-  },
-  b: {
-    p: '♟',
-    r: '♜',
-    n: '♞',
-    b: '♝',
-    q: '♛',
-    k: '♚',
-  },
+type ChessComBoardResult = {
+  appSessionId: string
+  fen: string
+  turn: 'white' | 'black'
+  moveCount: number
+  lastMove: string
+  legalMoveCount: number
+  legalMoves: string[]
+  candidateMoves: string[]
+  phase: 'opening' | 'middlegame' | 'endgame'
+  status: 'active' | 'game-over'
+  summary: string
+  moveExecutionAvailable: boolean
+  provider: 'chess.com'
+  diagramId: string
+  embedUrl: string
+  vendorBoardSync: 'official-diagram-callback'
+  lastUpdateSource: 'diagram-load' | 'manual-board-move'
+  mode?: ChessMode
 }
 
 function formatTurn(turn: 'w' | 'b') {
@@ -94,7 +58,7 @@ function formatResultTurn(turn: 'w' | 'b') {
   return turn === 'w' ? 'white' : 'black'
 }
 
-function inferChessPhase(moveCount: number) {
+function inferChessPhase(moveCount: number): ChessComBoardResult['phase'] {
   if (moveCount < 12) {
     return 'opening'
   }
@@ -106,21 +70,36 @@ function inferChessPhase(moveCount: number) {
   return 'endgame'
 }
 
-function buildBoardSummary(chess: Chess, embedUrl: string) {
-  const history = chess.history()
+function buildBoardSummary(input: {
+  chess: Chess
+  diagramId: string
+  embedUrl: string
+  tags?: Record<string, string | null>
+}) {
+  const history = input.chess.history()
   const recentMoves = history.slice(-6).join(', ') || 'No moves yet'
-  return `Mirrored Chess.com board FEN: ${chess.fen()}. ${formatTurn(chess.turn())} to move. Recent moves: ${recentMoves}. Reference embed: ${embedUrl}.`
+  const white = input.tags?.white ?? 'White'
+  const black = input.tags?.black ?? 'Black'
+
+  return `Chess.com board FEN: ${input.chess.fen()}. ${formatTurn(input.chess.turn())} to move. Game: ${white} vs ${black}. Recent moves: ${recentMoves}. Diagram ${input.diagramId}.`
 }
 
-function buildBoardStateResult(input: { appSessionId: string; chess: Chess; mode?: ChessMode; embedUrl: string }) {
+function buildBoardResult(input: {
+  appSessionId: string
+  chess: Chess
+  diagramId: string
+  embedUrl: string
+  lastUpdateSource: ChessComBoardResult['lastUpdateSource']
+  tags?: Record<string, string | null>
+  mode?: ChessMode
+}): ChessComBoardResult {
   const history = input.chess.history()
   const legalMoves = input.chess.moves()
-  const turn = formatResultTurn(input.chess.turn())
 
   return {
     appSessionId: input.appSessionId,
     fen: input.chess.fen(),
-    turn,
+    turn: formatResultTurn(input.chess.turn()),
     moveCount: history.length,
     lastMove: history.at(-1) ?? 'No moves yet',
     legalMoveCount: legalMoves.length,
@@ -128,28 +107,45 @@ function buildBoardStateResult(input: { appSessionId: string; chess: Chess; mode
     candidateMoves: legalMoves.slice(0, 6),
     phase: inferChessPhase(history.length),
     status: input.chess.isGameOver() ? 'game-over' : 'active',
-    summary: buildBoardSummary(input.chess, input.embedUrl),
+    summary: buildBoardSummary({
+      chess: input.chess,
+      diagramId: input.diagramId,
+      embedUrl: input.embedUrl,
+      tags: input.tags,
+    }),
     moveExecutionAvailable: true,
-    ...(input.mode ? { mode: input.mode } : {}),
     provider: 'chess.com',
-    vendorBoardSync: 'manual-import',
+    diagramId: input.diagramId,
     embedUrl: input.embedUrl,
+    vendorBoardSync: 'official-diagram-callback',
+    lastUpdateSource: input.lastUpdateSource,
+    ...(input.mode
+      ? {
+          mode: input.mode,
+        }
+      : {}),
   }
 }
 
-function buildBoardStateCompletionSignal(input: {
+function buildBoardCompletionSignal(input: {
   conversationId: string
   appSessionId: string
   toolCallId: string
   chess: Chess
-  mode?: ChessMode
+  diagramId: string
   embedUrl: string
+  lastUpdateSource: ChessComBoardResult['lastUpdateSource']
+  tags?: Record<string, string | null>
+  mode?: ChessMode
 }): CompletionSignal {
-  const result = buildBoardStateResult({
+  const result = buildBoardResult({
     appSessionId: input.appSessionId,
     chess: input.chess,
-    mode: input.mode,
+    diagramId: input.diagramId,
     embedUrl: input.embedUrl,
+    lastUpdateSource: input.lastUpdateSource,
+    tags: input.tags,
+    mode: input.mode,
   })
 
   return {
@@ -164,19 +160,21 @@ function buildBoardStateCompletionSignal(input: {
     completedAt: new Date().toISOString(),
     followUpContext: {
       summary:
-        'Use the mirrored Chess.com board state to explain the position, recommend the next move, or talk through the plan. The Chess.com iframe is a visual reference surface.',
+        'Use the official Chess.com board state to explain the position, recommend the next move, or continue the line.',
       userVisibleSummary: result.summary,
       recommendedPrompts: [
         'What is the best move from this position?',
         'Explain the plan from here.',
-        'Why is this position better for one side?',
+        'Why is this position good for one side?',
       ],
       stateDigest: {
         fen: result.fen,
         turn: result.turn,
         moveCount: result.moveCount,
         lastMove: result.lastMove,
+        diagramId: result.diagramId,
         provider: 'chess.com',
+        lastUpdateSource: result.lastUpdateSource,
       },
     },
   }
@@ -188,14 +186,19 @@ function buildMoveCompletionSignal(input: {
   toolCallId: string
   requestedMove: string
   chess: Chess
-  mode?: ChessMode
+  diagramId: string
   embedUrl: string
+  tags?: Record<string, string | null>
+  mode?: ChessMode
 }): CompletionSignal {
-  const boardState = buildBoardStateResult({
+  const result = buildBoardResult({
     appSessionId: input.appSessionId,
     chess: input.chess,
-    mode: input.mode,
+    diagramId: input.diagramId,
     embedUrl: input.embedUrl,
+    lastUpdateSource: 'manual-board-move',
+    tags: input.tags,
+    mode: input.mode,
   })
   const lastMove = input.chess.history().at(-1) ?? input.requestedMove
 
@@ -206,922 +209,604 @@ function buildMoveCompletionSignal(input: {
     appId: CHESS_COM_RUNTIME_APP_ID,
     toolCallId: input.toolCallId,
     status: 'succeeded',
-    resultSummary: `Moved ${lastMove} on the mirrored Chess.com board. ${boardState.turn === 'white' ? 'White' : 'Black'} to move.`,
+    resultSummary: `Move played: ${lastMove}. ${result.turn === 'white' ? 'White' : 'Black'} to move.`,
     result: {
-      ...boardState,
+      ...result,
       requestedMove: input.requestedMove,
       appliedMove: lastMove,
       explanation:
-        'This move was applied on the ChatBridge mirrored board so chat can reason over the position, even though the raw Chess.com iframe remains a reference-only surface.',
+        'ChatBridge applied this move to the official Chess.com diagram state and re-rendered the vendor board in the sidebar.',
     },
     completedAt: new Date().toISOString(),
     followUpContext: {
-      summary: 'Use the updated mirrored Chess.com board to recommend the best continuation or explain the position.',
-      userVisibleSummary: `Moved ${lastMove} on the mirrored board.`,
-      recommendedPrompts: ['What should the other side play now?', 'Explain the best continuation from here.'],
+      summary: 'Use the updated Chess.com board to recommend the best next move or explain the position.',
+      userVisibleSummary: `Move played: ${lastMove}.`,
+      recommendedPrompts: [
+        'What should I play next?',
+        'Why is this move strong?',
+        'Explain the new position for a beginner.',
+      ],
       stateDigest: {
-        fen: boardState.fen,
-        turn: boardState.turn,
-        moveCount: boardState.moveCount,
+        fen: result.fen,
+        turn: result.turn,
+        moveCount: result.moveCount,
         lastMove,
+        diagramId: result.diagramId,
         provider: 'chess.com',
+        lastUpdateSource: 'manual-board-move',
       },
     },
   }
 }
 
-function asChessMode(value: unknown): ChessMode | undefined {
-  return value === 'practice' || value === 'analysis' ? value : undefined
+function getRuntimeEmbedUrl(runtimeContext: ReturnType<typeof useEmbeddedAppBridge>['runtimeContext']) {
+  const embedUrl = runtimeContext?.initialState?.embedUrl
+  return typeof embedUrl === 'string' ? embedUrl : ''
 }
 
-function useSharedChessSessionSnapshot(conversationId: string | null, appSessionId: string | null) {
-  return useSyncExternalStore(
-    useCallback(
-      (listener) => {
-        if (!conversationId || !appSessionId) {
-          return () => {}
-        }
-
-        return subscribeChessSession(conversationId, appSessionId, listener)
-      },
-      [appSessionId, conversationId]
-    ),
-    useCallback(() => {
-      if (!conversationId || !appSessionId) {
-        return null
-      }
-
-      return getChessSessionSnapshot(conversationId, appSessionId)
-    }, [appSessionId, conversationId]),
-    () => null
-  )
-}
-
-function isLightSquare(square: Square) {
-  const file = square.charCodeAt(0) - 97
-  const rank = Number(square[1]) - 1
-  return (file + rank) % 2 === 0
-}
-
-function getSquareColor(square: Square) {
-  return isLightSquare(square) ? '#e7ecd9' : '#7d945b'
-}
-
-function getCoordinatePalette() {
+function buildStateDigest(result: ChessComBoardResult): JsonObject {
   return {
-    text: '#f8fafc',
-    background: 'rgba(15,23,42,0.96)',
-    border: 'rgba(226,232,240,0.24)',
-    shadow: '0 2px 6px rgba(2,6,23,0.32)',
+    fen: result.fen,
+    turn: result.turn === 'white' ? 'w' : 'b',
+    moveCount: result.moveCount,
+    lastMove: result.lastMove,
+    legalMoveCount: result.legalMoveCount,
+    candidateMoves: result.candidateMoves,
+    provider: result.provider,
+    diagramId: result.diagramId,
+    embedUrl: result.embedUrl,
+    vendorBoardSync: result.vendorBoardSync,
+    lastUpdateSource: result.lastUpdateSource,
   }
 }
 
-function getPiecePalette(color: 'w' | 'b') {
-  return color === 'w'
-    ? {
-        fill: '#f8fafc',
-        shadow: '0 1px 2px rgba(15,23,42,0.3)',
-        stroke: '0.8px rgba(15, 23, 42, 0.58)',
-      }
-    : {
-        fill: '#0f172a',
-        shadow: '0 1px 0 rgba(248,250,252,0.18), 0 2px 4px rgba(15,23,42,0.2)',
-        stroke: '0',
-      }
+function buildShellIframeTitle(diagramId: string) {
+  return `Chess.com diagram ${diagramId}`
+}
+
+function buildViewerKey(input: { diagramId: string; pgn: string; reloadNonce: number }) {
+  return `${input.diagramId}:${input.pgn.length}:${input.reloadNonce}:${input.pgn.slice(-24)}`
+}
+
+async function fetchJson<T>(input: string) {
+  const response = await fetch(input, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}.`)
+  }
+
+  return (await response.json()) as T
+}
+
+async function fetchText(input: string) {
+  const response = await fetch(input, {
+    credentials: 'same-origin',
+  })
+
+  if (!response.ok) {
+    throw new Error(`Request failed with status ${response.status}.`)
+  }
+
+  return response.text()
 }
 
 export function ChessComAppPage() {
-  const approvedApp = getApprovedAppById(CHESS_COM_APP_ID)
-  const defaultEmbedUrl = approvedApp?.integrationConfig?.defaultLaunchUrl ?? DEFAULT_EMBED_URL
+  const approvedApp = useMemo(() => getApprovedAppById(CHESS_COM_APP_ID), [])
   const { runtimeContext, invocationMessage, sendCompletion, sendError, sendState } =
     useEmbeddedAppBridge(CHESS_COM_RUNTIME_APP_ID)
+  const runtimeEmbedUrl = getRuntimeEmbedUrl(runtimeContext)
 
-  const [fallbackChess, setFallbackChess] = useState(() => new Chess())
-  const [selection, setSelection] = useState<SelectionState>({ from: null })
-  const [feedback, setFeedback] = useState<string | null>(null)
-  const [draftEmbedUrl, setDraftEmbedUrl] = useState(
-    () => getApprovedAppLaunchOverride(CHESS_COM_APP_ID) || defaultEmbedUrl
-  )
-  const [savedEmbedUrl, setSavedEmbedUrl] = useState(
-    () => getApprovedAppLaunchOverride(CHESS_COM_APP_ID) || defaultEmbedUrl
-  )
-  const [showVendorReference, setShowVendorReference] = useState(() => shouldShowVendorReferenceByDefault())
-  const [embedUrlError, setEmbedUrlError] = useState<string | null>(null)
-  const [importValue, setImportValue] = useState('')
-  const [isCompactSidebarLayout, setIsCompactSidebarLayout] = useState(
-    () => isSidebarPanelMode() || (typeof window !== 'undefined' && window.innerWidth <= 860)
-  )
-  const [vendorFrameState, setVendorFrameState] = useState<'idle' | 'loading' | 'ready' | 'blocked'>(() =>
-    shouldShowVendorReferenceByDefault() ? 'loading' : 'idle'
-  )
-  const handledToolCallIdsRef = useRef<Set<string>>(new Set())
+  const [savedEmbedUrl, setSavedEmbedUrl] = useState('')
+  const [draftEmbedUrl, setDraftEmbedUrl] = useState('')
+  const [launchConfigError, setLaunchConfigError] = useState<string | null>(null)
+  const [diagram, setDiagram] = useState<ChessComDiagram | null>(null)
+  const [shellHtml, setShellHtml] = useState('')
+  const [boardPgn, setBoardPgn] = useState('')
+  const [feedback, setFeedback] = useState('Loading the official Chess.com board…')
+  const [diagramLoadState, setDiagramLoadState] = useState<DiagramLoadState>('loading')
+  const [viewerMode, setViewerMode] = useState<ViewerMode>('loading')
+  const [reloadNonce, setReloadNonce] = useState(0)
+  const [lastUpdateSource, setLastUpdateSource] = useState<ChessComBoardResult['lastUpdateSource']>('diagram-load')
 
-  const sharedChessSnapshot = useSharedChessSessionSnapshot(
-    runtimeContext?.conversationId ?? null,
-    runtimeContext?.appSessionId ?? null
-  )
+  const fallbackIframeRef = useRef<HTMLIFrameElement | null>(null)
+  const lastHandledToolCallIdRef = useRef<string | null>(null)
+  const viewerTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
-    if (savedEmbedUrl) {
+    if (!approvedApp) {
       return
     }
 
-    const seededEmbedUrl =
-      typeof runtimeContext?.initialState?.embedUrl === 'string'
-        ? normalizeLaunchUrl({ id: CHESS_COM_APP_ID }, runtimeContext.initialState.embedUrl)
-        : ''
+    const savedValue = getApprovedAppLaunchOverride(approvedApp.id)
+    setSavedEmbedUrl(savedValue)
+    setDraftEmbedUrl(
+      savedValue || runtimeEmbedUrl || approvedApp.integrationConfig?.defaultLaunchUrl || DEFAULT_EMBED_URL
+    )
+    setLaunchConfigError(null)
+  }, [approvedApp, runtimeEmbedUrl])
 
-    if (!seededEmbedUrl) {
-      return
+  const resolvedEmbedUrl = useMemo(() => {
+    if (!approvedApp) {
+      return DEFAULT_EMBED_URL
     }
 
-    setSavedEmbedUrl(seededEmbedUrl)
-    setDraftEmbedUrl(seededEmbedUrl)
-  }, [runtimeContext?.initialState, savedEmbedUrl])
+    return (
+      normalizeLaunchUrl(approvedApp, savedEmbedUrl) ||
+      normalizeLaunchUrl(approvedApp, runtimeEmbedUrl) ||
+      approvedApp.integrationConfig?.defaultLaunchUrl ||
+      DEFAULT_EMBED_URL
+    )
+  }, [approvedApp, runtimeEmbedUrl, savedEmbedUrl])
+
+  const diagramId = useMemo(() => extractChessComDiagramId(resolvedEmbedUrl), [resolvedEmbedUrl])
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (!diagramId) {
+      setDiagram(null)
+      setShellHtml('')
+      setBoardPgn('')
+      setDiagramLoadState('failed')
+      setViewerMode('fallback')
+      setFeedback('Save a valid Chess.com emboard URL with an `id=` parameter to load the board.')
       return
     }
 
-    const syncLayoutMode = () => {
-      setIsCompactSidebarLayout(isSidebarPanelMode() || window.innerWidth <= 860)
-    }
+    let cancelled = false
+    setDiagramLoadState('loading')
+    setViewerMode('loading')
+    setFeedback('Loading the official Chess.com board…')
 
-    syncLayoutMode()
-    window.addEventListener('resize', syncLayoutMode)
+    void Promise.all([
+      fetchJson<{ ok: true; data: ChessComDiagram }>(`/api/chess-com/diagram/${diagramId}?reload=${reloadNonce}`),
+      fetchText(`/api/chess-com/emboard-shell/${diagramId}?reload=${reloadNonce}`),
+    ])
+      .then(([diagramResponse, upstreamShellHtml]) => {
+        if (cancelled) {
+          return
+        }
+
+        setDiagram(diagramResponse.data)
+        setShellHtml(upstreamShellHtml)
+        setBoardPgn(diagramResponse.data.setup[0]?.pgn ?? '')
+        setLastUpdateSource('diagram-load')
+        setDiagramLoadState('ready')
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return
+        }
+
+        setDiagram(null)
+        setShellHtml('')
+        setBoardPgn('')
+        setDiagramLoadState('failed')
+        setViewerMode('fallback')
+        setFeedback(error instanceof Error ? error.message : 'Failed to load the Chess.com diagram.')
+      })
 
     return () => {
-      window.removeEventListener('resize', syncLayoutMode)
+      cancelled = true
+    }
+  }, [diagramId, reloadNonce])
+
+  const chess = useMemo(() => {
+    if (!boardPgn) {
+      return null
+    }
+
+    const nextChess = new Chess()
+    try {
+      nextChess.loadPgn(boardPgn)
+      return nextChess
+    } catch {
+      return null
+    }
+  }, [boardPgn])
+
+  const boardResult = useMemo(() => {
+    if (!runtimeContext || !diagramId || !resolvedEmbedUrl || !diagram || !chess) {
+      return null
+    }
+
+    return buildBoardResult({
+      appSessionId: runtimeContext.appSessionId,
+      chess,
+      diagramId,
+      embedUrl: resolvedEmbedUrl,
+      lastUpdateSource,
+      tags: diagram.setup[0]?.tags,
+      mode: (runtimeContext.initialState?.mode as ChessMode | undefined) ?? 'analysis',
+    })
+  }, [chess, diagram, diagramId, lastUpdateSource, resolvedEmbedUrl, runtimeContext])
+
+  const viewerSrcDoc = useMemo(() => {
+    if (!diagram || !shellHtml || !boardPgn) {
+      return ''
+    }
+
+    return patchChessComEmboardHtml({
+      html: shellHtml,
+      diagram,
+      pgn: boardPgn,
+    })
+  }, [boardPgn, diagram, shellHtml])
+
+  const viewerKey = useMemo(() => {
+    if (!diagramId) {
+      return `chess-com-missing:${reloadNonce}`
+    }
+
+    return buildViewerKey({
+      diagramId,
+      pgn: boardPgn,
+      reloadNonce,
+    })
+  }, [boardPgn, diagramId, reloadNonce])
+
+  useEffect(() => {
+    if (!viewerSrcDoc) {
+      return
+    }
+
+    setViewerMode('loading')
+    if (viewerTimeoutRef.current !== null) {
+      window.clearTimeout(viewerTimeoutRef.current)
+    }
+
+    viewerTimeoutRef.current = window.setTimeout(() => {
+      setViewerMode((current) => (current === 'loading' ? 'fallback' : current))
+    }, VIEWER_TIMEOUT_MS)
+
+    return () => {
+      if (viewerTimeoutRef.current !== null) {
+        window.clearTimeout(viewerTimeoutRef.current)
+        viewerTimeoutRef.current = null
+      }
+    }
+  }, [viewerSrcDoc])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const payload = event.data
+      if (!payload || typeof payload !== 'object') {
+        return
+      }
+
+      const candidate = payload as Record<string, unknown>
+      if (candidate.source !== VIEWER_READY_SOURCE || typeof candidate.type !== 'string') {
+        return
+      }
+
+      if (candidate.type === 'viewer-ready') {
+        if (viewerTimeoutRef.current !== null) {
+          window.clearTimeout(viewerTimeoutRef.current)
+          viewerTimeoutRef.current = null
+        }
+        setViewerMode('ready')
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => {
+      window.removeEventListener('message', handleMessage)
     }
   }, [])
 
   useEffect(() => {
-    if (!runtimeContext) {
+    if (!boardResult) {
       return
     }
 
-    initializeChessSession({
-      conversationId: runtimeContext.conversationId,
-      appSessionId: runtimeContext.appSessionId,
-      fen: typeof runtimeContext.initialState?.fen === 'string' ? runtimeContext.initialState.fen : undefined,
-      moveCount:
-        typeof runtimeContext.initialState?.moveCount === 'number' ? runtimeContext.initialState.moveCount : undefined,
-      lastMove:
-        typeof runtimeContext.initialState?.lastMove === 'string' ? runtimeContext.initialState.lastMove : undefined,
-      mode: asChessMode(runtimeContext.initialState?.mode),
-      status: 'waiting-user',
+    const status = diagramLoadState === 'failed' ? 'failed' : viewerMode === 'loading' ? 'pending' : 'active'
+    sendState({
+      status,
+      summary:
+        viewerMode === 'fallback'
+          ? `${boardResult.summary} The official viewer fell back to the raw Chess.com embed while the data bridge stays connected.`
+          : boardResult.summary,
+      state: buildStateDigest(boardResult),
     })
-    setFeedback(null)
-  }, [runtimeContext])
 
-  const currentMode =
-    invocationMessage?.payload.toolName === exampleChessLaunchToolSchema.name
-      ? asChessMode(invocationMessage.payload.arguments.mode)
-      : asChessMode(runtimeContext?.initialState?.mode)
-  const embedUrl = savedEmbedUrl || defaultEmbedUrl
-  const vendorReferenceOrder = isCompactSidebarLayout ? 2 : 1
-  const mirroredBoardOrder = isCompactSidebarLayout ? 1 : 2
-  const vendorIframeScale = isCompactSidebarLayout ? 0.76 : 1
-  const vendorIframeHeight = isCompactSidebarLayout ? '12.5rem' : '20rem'
-  const vendorIframeWidth = isCompactSidebarLayout ? `calc(100% / ${vendorIframeScale})` : '100%'
-  const vendorScaledHeight = isCompactSidebarLayout
-    ? `calc(${vendorIframeHeight} / ${vendorIframeScale})`
-    : vendorIframeHeight
-
-  const chess = useMemo(
-    () => new Chess(sharedChessSnapshot?.fen ?? fallbackChess.fen()),
-    [fallbackChess, sharedChessSnapshot?.fen]
-  )
-
-  const boardStateResult = useMemo(
-    () =>
-      buildBoardStateResult({
-        appSessionId: runtimeContext?.appSessionId ?? 'app-session.preview.chess-com',
-        chess,
-        mode: currentMode,
-        embedUrl,
-      }),
-    [chess, currentMode, embedUrl, runtimeContext?.appSessionId]
-  )
-
-  const activeSidebarSnapshot = useMemo(
-    () => ({
-      status: chess.isGameOver() ? ('completed' as const) : ('active' as const),
-      summary: boardStateResult.summary,
-      state: {
-        ...boardStateResult,
-        vendorFrameState,
-        vendorBoardReadable: false,
-        vendorBoardControllable: false,
-        mirroredBoard: true,
-      },
-    }),
-    [boardStateResult, chess, vendorFrameState]
-  )
-
-  const publishSidebarSnapshot = useCallback(() => {
     postSidebarDirectIframeStateMessage({
       appId: CHESS_COM_RUNTIME_APP_ID,
-      status: activeSidebarSnapshot.status,
-      summary: activeSidebarSnapshot.summary,
-      state: activeSidebarSnapshot.state,
+      status,
+      summary:
+        viewerMode === 'fallback'
+          ? `${boardResult.summary} Using the raw Chess.com embed fallback.`
+          : boardResult.summary,
+      state: buildStateDigest(boardResult),
     })
-  }, [activeSidebarSnapshot])
+  }, [boardResult, diagramLoadState, sendState, viewerMode])
 
   useEffect(() => {
-    if (!runtimeContext) {
+    if (!invocationMessage || !runtimeContext || !diagramId || !resolvedEmbedUrl || !diagram || !boardPgn) {
       return
     }
 
-    sendState({
-      status: activeSidebarSnapshot.status,
-      summary: activeSidebarSnapshot.summary,
-      state: activeSidebarSnapshot.state,
-      progress: {
-        label: boardStateResult.moveCount === 0 ? 'Mirror board ready' : `Move ${boardStateResult.moveCount}`,
-        percent: boardStateResult.moveCount === 0 ? 8 : Math.min(96, 8 + boardStateResult.moveCount * 4),
-      },
-    })
-  }, [activeSidebarSnapshot, boardStateResult.moveCount, runtimeContext, sendState])
-
-  useEffect(() => {
-    publishSidebarSnapshot()
-
-    const replayTimers = [120, 480, 1500].map((delayMs) => window.setTimeout(publishSidebarSnapshot, delayMs))
-    return () => {
-      replayTimers.forEach((timer) => window.clearTimeout(timer))
-    }
-  }, [publishSidebarSnapshot])
-
-  useEffect(() => {
-    if (!invocationMessage || invocationMessage.payload.toolName !== exampleChessLaunchToolSchema.name) {
+    if (lastHandledToolCallIdRef.current === invocationMessage.payload.toolCallId) {
       return
     }
 
-    if (handledToolCallIdsRef.current.has(invocationMessage.payload.toolCallId)) {
+    lastHandledToolCallIdRef.current = invocationMessage.payload.toolCallId
+
+    const workingChess = new Chess()
+    try {
+      workingChess.loadPgn(boardPgn)
+    } catch {
+      sendError({
+        code: 'invalid-state',
+        message: 'Chess.com could not parse the current diagram state.',
+        recoverable: true,
+      })
       return
     }
 
-    if (!runtimeContext) {
-      return
-    }
+    const mode = (runtimeContext.initialState?.mode as ChessMode | undefined) ?? 'analysis'
 
-    handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
-    activateChessSession({
-      conversationId: runtimeContext.conversationId,
-      appSessionId: runtimeContext.appSessionId,
-      mode: asChessMode(invocationMessage.payload.arguments.mode) ?? 'analysis',
-      status: 'active',
-    })
-    setSelection({ from: null })
-    setFeedback(
-      'Chess.com workspace is ready. The reference embed is live and the mirrored board is connected to chat.'
-    )
-  }, [invocationMessage, runtimeContext])
-
-  useEffect(() => {
-    if (!invocationMessage || invocationMessage.payload.toolName !== exampleChessGetBoardStateToolSchema.name) {
-      return
-    }
-
-    if (handledToolCallIdsRef.current.has(invocationMessage.payload.toolCallId)) {
-      return
-    }
-
-    if (!runtimeContext) {
-      return
-    }
-
-    handledToolCallIdsRef.current.add(invocationMessage.payload.toolCallId)
-    sendCompletion(
-      buildBoardStateCompletionSignal({
+    if (invocationMessage.payload.toolName === exampleChessLaunchToolSchema.name) {
+      const completion = buildBoardCompletionSignal({
         conversationId: runtimeContext.conversationId,
         appSessionId: runtimeContext.appSessionId,
         toolCallId: invocationMessage.payload.toolCallId,
-        chess,
-        mode: currentMode,
-        embedUrl,
+        chess: workingChess,
+        diagramId,
+        embedUrl: resolvedEmbedUrl,
+        lastUpdateSource,
+        tags: diagram.setup[0]?.tags,
+        mode,
       })
-    )
-  }, [chess, currentMode, embedUrl, invocationMessage, runtimeContext, sendCompletion])
-
-  useEffect(() => {
-    if (!invocationMessage || invocationMessage.payload.toolName !== exampleChessMakeMoveToolSchema.name) {
+      setFeedback('Chess.com is ready. Ask for the best move, a board scan, or a line explanation.')
+      sendCompletion(completion)
       return
     }
 
-    const { toolCallId } = invocationMessage.payload
-    if (handledToolCallIdsRef.current.has(toolCallId)) {
-      return
-    }
-
-    const requestedMove =
-      typeof invocationMessage.payload.arguments.move === 'string'
-        ? invocationMessage.payload.arguments.move.trim()
-        : ''
-    const expectedFen =
-      typeof invocationMessage.payload.arguments.expectedFen === 'string'
-        ? invocationMessage.payload.arguments.expectedFen.trim()
-        : ''
-
-    if (!runtimeContext) {
-      setFeedback('The Chess.com workspace runtime is not connected yet.')
-      return
-    }
-
-    handledToolCallIdsRef.current.add(toolCallId)
-
-    if (!requestedMove) {
-      sendError({
-        code: 'chess.invalid-move-request',
-        message: 'A Chess.com workspace move request must include a move string.',
-        recoverable: true,
-        details: {
-          toolCallId,
-        },
-      })
-      return
-    }
-
-    const moveResult = applyChessSessionMove({
-      conversationId: runtimeContext.conversationId,
-      appSessionId: runtimeContext.appSessionId,
-      requestedMove,
-      expectedFen,
-      source: 'tool-move',
-    })
-
-    if (!moveResult.ok) {
-      sendError({
-        code: moveResult.code,
-        message: moveResult.message,
-        recoverable: true,
-        details: {
-          toolCallId,
-          requestedMove,
-        },
-      })
-      return
-    }
-
-    setSelection({ from: null })
-    setFeedback(
-      `Played ${moveResult.appliedMoveSan} on the mirrored board. ${formatTurn(moveResult.snapshot.turn)} to move.`
-    )
-    sendCompletion(
-      buildMoveCompletionSignal({
+    if (invocationMessage.payload.toolName === exampleChessGetBoardStateToolSchema.name) {
+      const completion = buildBoardCompletionSignal({
         conversationId: runtimeContext.conversationId,
         appSessionId: runtimeContext.appSessionId,
-        toolCallId,
-        requestedMove,
-        chess: new Chess(moveResult.snapshot.fen),
-        mode: currentMode,
-        embedUrl,
+        toolCallId: invocationMessage.payload.toolCallId,
+        chess: workingChess,
+        diagramId,
+        embedUrl: resolvedEmbedUrl,
+        lastUpdateSource,
+        tags: diagram.setup[0]?.tags,
+        mode,
       })
-    )
-  }, [currentMode, embedUrl, invocationMessage, runtimeContext, sendCompletion, sendError])
-
-  const pieces = useMemo(() => {
-    const board = chess.board()
-    const map = new Map<Square, { label: string; glyph: string; color: 'w' | 'b' }>()
-
-    board.forEach((rank, rankIndex) => {
-      rank.forEach((piece, fileIndex) => {
-        if (!piece) {
-          return
-        }
-
-        const square = `${String.fromCharCode(97 + fileIndex)}${8 - rankIndex}` as Square
-        map.set(square, {
-          label: `${piece.color === 'w' ? 'White' : 'Black'} ${piece.type.toUpperCase()}`,
-          glyph: pieceGlyphs[piece.color][piece.type] ?? piece.type.toUpperCase(),
-          color: piece.color,
-        })
-      })
-    })
-
-    return map
-  }, [chess])
-
-  const selectableMoves = useMemo(() => {
-    if (!selection.from) {
-      return []
+      setFeedback('Scanned the Chess.com board state for chat.')
+      sendCompletion(completion)
+      return
     }
 
-    return chess
-      .moves({ verbose: true })
-      .filter((move) => move.from === selection.from)
-      .map((move) => ({
-        square: move.to.toUpperCase(),
-        san: move.san,
-      }))
-  }, [chess, selection.from])
+    if (invocationMessage.payload.toolName === exampleChessMakeMoveToolSchema.name) {
+      const requestedMove = invocationMessage.payload.arguments?.move
+      if (typeof requestedMove !== 'string' || requestedMove.trim().length === 0) {
+        sendError({
+          code: 'invalid-request',
+          message: 'A Chess.com move request must include a move string.',
+          recoverable: true,
+        })
+        return
+      }
+
+      const appliedMove = applyRequestedChessMove(workingChess, requestedMove)
+      if (!appliedMove) {
+        sendError({
+          code: 'illegal-move',
+          message: `Chess.com could not apply "${requestedMove}" on the current board.`,
+          recoverable: true,
+          details: {
+            requestedMove,
+            fen: workingChess.fen(),
+          },
+        })
+        return
+      }
+
+      const nextPgn = workingChess.pgn({
+        maxWidth: 0,
+        newline: '\n',
+      })
+
+      setBoardPgn(nextPgn)
+      setLastUpdateSource('manual-board-move')
+      setFeedback(`Played ${appliedMove.san} on the Chess.com board.`)
+      setViewerMode('loading')
+
+      const completion = buildMoveCompletionSignal({
+        conversationId: runtimeContext.conversationId,
+        appSessionId: runtimeContext.appSessionId,
+        toolCallId: invocationMessage.payload.toolCallId,
+        requestedMove,
+        chess: workingChess,
+        diagramId,
+        embedUrl: resolvedEmbedUrl,
+        tags: diagram.setup[0]?.tags,
+        mode,
+      })
+      sendCompletion(completion)
+      return
+    }
+
+    sendError({
+      code: 'unsupported-tool',
+      message: `Chess.com does not support ${invocationMessage.payload.toolName} yet.`,
+      recoverable: true,
+    })
+  }, [
+    boardPgn,
+    diagram,
+    diagramId,
+    invocationMessage,
+    lastUpdateSource,
+    resolvedEmbedUrl,
+    runtimeContext,
+    sendCompletion,
+    sendError,
+  ])
 
   const handleSaveEmbedUrl = useCallback(() => {
-    const validationMessage = getLaunchUrlValidationMessage(
-      {
-        id: CHESS_COM_APP_ID,
-        name: approvedApp?.name ?? 'Chess.com',
-      },
-      draftEmbedUrl
-    )
-    if (validationMessage) {
-      setEmbedUrlError(validationMessage)
+    if (!approvedApp) {
       return
     }
 
-    const normalized = normalizeLaunchUrl({ id: CHESS_COM_APP_ID }, draftEmbedUrl) || defaultEmbedUrl
-    persistApprovedAppLaunchOverride(CHESS_COM_APP_ID, normalized)
+    const validationMessage = getLaunchUrlValidationMessage(approvedApp, draftEmbedUrl)
+    if (validationMessage) {
+      setLaunchConfigError(validationMessage)
+      return
+    }
+
+    const normalized = normalizeLaunchUrl(approvedApp, draftEmbedUrl)
+    persistApprovedAppLaunchOverride(approvedApp.id, normalized || null)
     setSavedEmbedUrl(normalized)
-    setDraftEmbedUrl(normalized)
-    setEmbedUrlError(null)
-    setVendorFrameState(showVendorReference ? 'loading' : 'idle')
-  }, [approvedApp?.name, defaultEmbedUrl, draftEmbedUrl, showVendorReference])
+    setDraftEmbedUrl(normalized || '')
+    setLaunchConfigError(null)
+    setReloadNonce((current) => current + 1)
+  }, [approvedApp, draftEmbedUrl])
 
   const handleResetEmbedUrl = useCallback(() => {
-    persistApprovedAppLaunchOverride(CHESS_COM_APP_ID, null)
-    setSavedEmbedUrl(defaultEmbedUrl)
-    setDraftEmbedUrl(defaultEmbedUrl)
-    setEmbedUrlError(null)
-    setVendorFrameState(showVendorReference ? 'loading' : 'idle')
-  }, [defaultEmbedUrl, showVendorReference])
-
-  const handleToggleVendorReference = useCallback(() => {
-    setShowVendorReference((current) => {
-      const next = !current
-      setVendorFrameState(next ? 'loading' : 'idle')
-      return next
-    })
-  }, [])
-
-  const handleImportPosition = useCallback(() => {
-    const imported = importChessComPosition(importValue)
-    if (!imported.ok) {
-      setFeedback(imported.error)
+    if (!approvedApp) {
       return
     }
 
-    if (runtimeContext) {
-      loadChessSessionPosition({
-        conversationId: runtimeContext.conversationId,
-        appSessionId: runtimeContext.appSessionId,
-        fen: imported.chess.fen(),
-        historySan: imported.historySan,
-        mode: 'analysis',
-        status: 'active',
-      })
-    } else {
-      setFallbackChess(imported.chess)
-    }
+    persistApprovedAppLaunchOverride(approvedApp.id, null)
+    setSavedEmbedUrl('')
+    setDraftEmbedUrl(approvedApp.integrationConfig?.defaultLaunchUrl || DEFAULT_EMBED_URL)
+    setLaunchConfigError(null)
+    setReloadNonce((current) => current + 1)
+  }, [approvedApp])
 
-    setSelection({ from: null })
-    setFeedback(
-      imported.source === 'fen'
-        ? 'Loaded the pasted FEN into the mirrored board.'
-        : `Imported ${imported.historySan.length} PGN moves into the mirrored board.`
-    )
-  }, [importValue, runtimeContext])
-
-  const handleResetMirrorBoard = useCallback(() => {
-    if (runtimeContext) {
-      resetChessSession({
-        conversationId: runtimeContext.conversationId,
-        appSessionId: runtimeContext.appSessionId,
-        mode: currentMode ?? 'analysis',
-        status: 'active',
-      })
-    } else {
-      setFallbackChess(new Chess())
-    }
-
-    setSelection({ from: null })
-    setFeedback('Reset the mirrored board to the starting position.')
-  }, [currentMode, runtimeContext])
-
-  const handleSquareClick = useCallback(
-    (square: Square) => {
-      const piece = chess.get(square)
-      if (!selection.from) {
-        if (!piece) {
-          setFeedback('Select a piece on the mirrored board first.')
-          return
-        }
-
-        if (piece.color !== chess.turn()) {
-          setFeedback(`It is ${formatTurn(chess.turn())}'s turn on the mirrored board.`)
-          return
-        }
-
-        setSelection({ from: square })
-        setFeedback(`Selected ${square.toUpperCase()} on the mirrored board. Choose a destination square.`)
-        return
-      }
-
-      if (runtimeContext) {
-        const moveResult = applyChessSessionMove({
-          conversationId: runtimeContext.conversationId,
-          appSessionId: runtimeContext.appSessionId,
-          requestedMove: `${selection.from}${square}`,
-          expectedFen: chess.fen(),
-          source: 'manual-board-move',
-        })
-        if (!moveResult.ok) {
-          setFeedback(
-            moveResult.code === 'chess.illegal-move'
-              ? `That mirrored move from ${selection.from.toUpperCase()} to ${square.toUpperCase()} is not legal.`
-              : moveResult.message
-          )
-          setSelection({ from: null })
-          return
-        }
-
-        setSelection({ from: null })
-        setFeedback(
-          `Played ${moveResult.appliedMoveSan} on the mirrored board. ${formatTurn(moveResult.snapshot.turn)} to move.`
-        )
-        return
-      }
-
-      const nextChess = new Chess(chess.fen())
-      const move = nextChess.move({ from: selection.from, to: square, promotion: 'q' })
-      if (!move) {
-        setFeedback(`That move from ${selection.from.toUpperCase()} to ${square.toUpperCase()} is not legal.`)
-        setSelection({ from: null })
-        return
-      }
-
-      setFallbackChess(nextChess)
-      setSelection({ from: null })
-      setFeedback(`Played ${move.san}. ${formatTurn(nextChess.turn())} to move.`)
-    },
-    [chess, runtimeContext, selection.from]
-  )
+  const handleRefresh = useCallback(() => {
+    setReloadNonce((current) => current + 1)
+  }, [])
 
   return (
     <Box
-      p="sm"
-      mih="100%"
-      c="#e5eefb"
+      h="100%"
       style={{
-        background: 'linear-gradient(180deg, #020617 0%, #0f172a 46%, #111827 100%)',
-        overflowX: 'hidden',
-        overflowY: 'auto',
+        background:
+          'radial-gradient(circle at top, rgba(59,130,246,0.18), transparent 28%), linear-gradient(180deg, #0f172a 0%, #111827 100%)',
       }}
     >
-      <Stack gap="sm">
-        <Group justify="space-between" align="flex-start">
-          <div>
-            <Title order={3} c="white">
-              Chess.com Workspace
-            </Title>
-            <Text size="sm" c="rgba(226,232,240,0.72)">
-              ChatBridge mirrored board with optional Chess.com reference board
-            </Text>
-          </div>
-          <Badge color={chess.isGameOver() ? 'teal' : 'blue'} variant="light">
-            {chess.isGameOver() ? 'Game Over' : `${formatTurn(chess.turn())} to move`}
+      <Stack gap="md" h="100%" p="lg">
+        <Group gap="xs" wrap="wrap">
+          <Badge radius="xl" variant="light" color="green">
+            Official Chess.com viewer
           </Badge>
+          <Badge radius="xl" variant="light" color="blue">
+            Tool-connected wrapper
+          </Badge>
+          {viewerMode === 'fallback' ? (
+            <Badge radius="xl" variant="light" color="yellow">
+              Raw embed fallback
+            </Badge>
+          ) : null}
         </Group>
 
-        <Alert color="blue" variant="light">
-          {isCompactSidebarLayout
-            ? 'The mirrored ChatBridge board stays on top in the sidebar so you can play and coach without the Chess.com embed taking over the whole panel.'
-            : 'The mirrored ChatBridge board is the live surface for chat memory, move execution, and board analysis. Chess.com stays as an optional visual reference board.'}
-        </Alert>
+        <Stack gap={4}>
+          <Title order={2} c="white">
+            Chess.com
+          </Title>
+          <Text c="rgba(255,255,255,0.76)">
+            ChatBridge keeps the official Chess.com board visible while discovering tools from Chess.com diagram data.
+          </Text>
+        </Stack>
 
-        {feedback ? (
-          <Alert color="indigo" variant="light">
+        {diagramLoadState === 'loading' ? (
+          <Paper
+            radius="xl"
+            p="xl"
+            style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+          >
+            <Group gap="sm">
+              <Loader size="sm" color="var(--chatbox-tint-brand)" />
+              <Text c="rgba(255,255,255,0.8)">Loading the official Chess.com diagram and emboard shell…</Text>
+            </Group>
+          </Paper>
+        ) : null}
+
+        {diagramLoadState === 'failed' ? (
+          <Alert color="red" radius="xl" title="Chess.com failed to load">
             {feedback}
           </Alert>
         ) : null}
 
         <Paper
-          withBorder
           radius="xl"
-          p="sm"
-          shadow="sm"
-          style={{
-            order: mirroredBoardOrder,
-            background: 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.86) 100%)',
-            borderColor: 'rgba(148, 163, 184, 0.22)',
-          }}
+          p="md"
+          style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
         >
-          <Stack gap="sm">
-            <Group justify="space-between" align="center">
-              <div>
-                <Text size="sm" fw={700} c="white">
-                  Mirrored analysis board
-                </Text>
-                <Text size="xs" c="rgba(226,232,240,0.7)">
-                  Chat-visible state with move execution and board memory
-                </Text>
-              </div>
-              <Badge variant="light" color="violet">
-                {currentMode ?? 'analysis'}
-              </Badge>
-            </Group>
-            <Box
-              data-testid="chess-com-board-grid"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(8, minmax(0, 1fr))',
-                gap: '4px',
-                aspectRatio: '1 / 1',
-                width: '100%',
-              }}
-            >
-              {boardSquares.map((square) => {
-                const isSelected = selection.from === square
-                const piece = pieces.get(square)
-                const coordinatePalette = getCoordinatePalette()
-                const piecePalette = piece ? getPiecePalette(piece.color) : null
-
-                return (
-                  <UnstyledButton
-                    key={square}
-                    type="button"
-                    onClick={() => handleSquareClick(square)}
-                    data-testid={`chess-com-square-${square}`}
-                    aria-label={
-                      piece ? `${piece.label} on ${square.toUpperCase()}` : `Empty square ${square.toUpperCase()}`
-                    }
-                    style={{
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '100%',
-                      aspectRatio: '1 / 1',
-                      borderRadius: '12px',
-                      border: isSelected ? '2px solid rgba(96, 165, 250, 0.98)' : '1px solid rgba(15, 23, 42, 0.18)',
-                      background: isSelected ? '#bfdbfe' : getSquareColor(square),
-                      boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.18)' : 'none',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <Text
-                      component="span"
-                      style={{
-                        fontFamily: CHESS_SYMBOL_FONT_STACK,
-                        fontSize: 'clamp(1.42rem, 3.15vw, 2.08rem)',
-                        fontWeight: 700,
-                        lineHeight: 1,
-                        color: piecePalette?.fill ?? '#0f172a',
-                        textShadow: piecePalette?.shadow,
-                        WebkitTextStroke: piecePalette?.stroke,
-                      }}
-                    >
-                      {piece?.glyph ?? ''}
-                    </Text>
-                    <Text
-                      component="span"
-                      size="11px"
-                      fw={700}
-                      style={{
-                        position: 'absolute',
-                        right: 6,
-                        bottom: 5,
-                        color: coordinatePalette.text,
-                        background: coordinatePalette.background,
-                        border: `1px solid ${coordinatePalette.border}`,
-                        boxShadow: coordinatePalette.shadow,
-                        borderRadius: 999,
-                        padding: '2px 6px',
-                        lineHeight: 1.1,
-                        letterSpacing: '0.03em',
-                      }}
-                    >
-                      {square.toUpperCase()}
-                    </Text>
-                  </UnstyledButton>
-                )
-              })}
-            </Box>
-          </Stack>
-        </Paper>
-
-        <Paper
-          withBorder
-          radius="xl"
-          p="sm"
-          style={{
-            order: 3,
-            background: 'rgba(15, 23, 42, 0.64)',
-            borderColor: 'rgba(148, 163, 184, 0.18)',
-          }}
-        >
-          <Stack gap={6}>
+          <Stack gap="xs">
             <Text size="sm" fw={600} c="white">
-              Chat-ready board state
+              Live board
             </Text>
-            <Text size="sm" c="rgba(226,232,240,0.72)">
-              Ask the chat to analyze this position, suggest a move, or explain what changed on the mirrored board. Move
-              execution only affects the mirrored board, not the raw Chess.com iframe.
+            <Text size="sm" c="rgba(255,255,255,0.72)">
+              {feedback}
             </Text>
-            <Text size="xs" c="rgba(148,163,184,0.9)">
-              FEN: {boardStateResult.fen}
-            </Text>
-            {selection.from ? (
-              <Text size="xs" c="rgba(148,163,184,0.9)">
-                Selected {selection.from.toUpperCase()}. Click a destination square to move on the mirrored board.
-              </Text>
-            ) : null}
-            {selectableMoves.length > 0 ? (
-              <Text size="xs" c="rgba(148,163,184,0.9)">
-                Legal destinations: {selectableMoves.map((move) => move.square).join(', ')}
-              </Text>
-            ) : null}
           </Stack>
         </Paper>
 
-        <Paper
-          withBorder
-          radius="xl"
-          p="sm"
-          style={{
-            order: 4,
-            background: 'rgba(15, 23, 42, 0.64)',
-            borderColor: 'rgba(148, 163, 184, 0.18)',
-          }}
+        <Box
+          className="relative min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0b1120]"
+          data-testid="chess-com-official-viewer"
         >
-          <Stack gap="sm">
-            <Text size="sm" fw={700} c="white">
-              Import a position into the mirrored board
-            </Text>
-            <Text size="sm" c="rgba(226,232,240,0.72)">
-              Paste a FEN or PGN from Chess.com. Chat will analyze and manipulate the mirrored board state from there.
-            </Text>
-            <Textarea
-              autosize
-              minRows={4}
-              value={importValue}
-              onChange={(event) => setImportValue(event.currentTarget.value)}
-              placeholder="Paste FEN or PGN here"
+          {viewerMode !== 'fallback' && viewerSrcDoc ? (
+            <iframe
+              key={viewerKey}
+              title={buildShellIframeTitle(diagramId ?? 'unknown')}
+              srcDoc={viewerSrcDoc}
+              className="h-full w-full border-0 bg-white"
+              sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+              allow="clipboard-read; clipboard-write; fullscreen"
             />
-            <Group gap="xs">
-              <Button size="xs" onClick={handleImportPosition}>
-                Import position
-              </Button>
-              <Button size="xs" variant="subtle" color="gray" onClick={handleResetMirrorBoard}>
-                Reset mirrored board
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
+          ) : null}
+
+          {viewerMode === 'fallback' ? (
+            <iframe
+              ref={fallbackIframeRef}
+              title="Chess.com raw emboard"
+              src={resolvedEmbedUrl}
+              className="h-full w-full border-0 bg-white"
+              sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+              allow="clipboard-read; clipboard-write; fullscreen"
+              referrerPolicy={approvedApp ? getPreviewReferrerPolicy(approvedApp) : 'strict-origin-when-cross-origin'}
+            />
+          ) : null}
+        </Box>
 
         <Paper
-          withBorder
           radius="xl"
-          p="sm"
-          style={{
-            order: vendorReferenceOrder,
-            background: 'rgba(15, 23, 42, 0.74)',
-            borderColor: 'rgba(148, 163, 184, 0.18)',
-          }}
+          p="lg"
+          style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
         >
           <Stack gap="sm">
-            <Group justify="space-between" align="center">
-              <div>
-                <Text size="sm" fw={700} c="white">
-                  Chess.com reference board
-                </Text>
-                <Text size="xs" c="rgba(226,232,240,0.7)">
-                  {isCompactSidebarLayout
-                    ? 'Compact live Chess.com preview inside the sidebar'
-                    : 'Optional vendor board for visual comparison only'}
-                </Text>
-              </div>
-              <Badge
-                variant="light"
-                color={
-                  !showVendorReference || vendorFrameState === 'idle'
-                    ? 'gray'
-                    : vendorFrameState === 'ready'
-                      ? 'green'
-                      : vendorFrameState === 'blocked'
-                        ? 'red'
-                        : 'blue'
-                }
-              >
-                {!showVendorReference || vendorFrameState === 'idle'
-                  ? 'Reference hidden'
-                  : vendorFrameState === 'ready'
-                    ? 'Embed ready'
-                    : vendorFrameState === 'blocked'
-                      ? 'Embed blocked'
-                      : 'Loading embed'}
-              </Badge>
-            </Group>
-
-            <Text size="sm" c="rgba(226,232,240,0.72)">
-              {isCompactSidebarLayout
-                ? 'This keeps the third-party Chess.com UI visible in the sidebar, but the mirrored board remains the reliable surface for chat-driven play.'
-                : 'This vendor iframe is less reliable than the mirrored ChatBridge board. Use it as a reference surface, not the primary board for chat-driven play.'}
-            </Text>
-
-            <Group gap="xs">
-              <Button
-                size="xs"
-                variant={showVendorReference ? 'light' : 'filled'}
-                onClick={handleToggleVendorReference}
-              >
-                {showVendorReference ? 'Hide reference board' : 'Show reference board'}
-              </Button>
-            </Group>
-
-            {showVendorReference ? (
-              <>
-                <Box
-                  className="relative overflow-hidden rounded-[1rem] border border-white/10 bg-[#0b1120]"
-                  style={{
-                    height: vendorIframeHeight,
-                  }}
-                >
-                  <iframe
-                    src={embedUrl}
-                    title="Chess.com reference board"
-                    sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
-                    referrerPolicy={getPreviewReferrerPolicy({ id: CHESS_COM_APP_ID })}
-                    onLoad={() => setVendorFrameState('ready')}
-                    onError={() => setVendorFrameState('blocked')}
-                    style={{
-                      width: vendorIframeWidth,
-                      height: vendorScaledHeight,
-                      transform: `scale(${vendorIframeScale})`,
-                      transformOrigin: 'top left',
-                      border: '0',
-                      background: '#ffffff',
-                    }}
-                  />
-                  {vendorFrameState !== 'ready' ? (
-                    <Box
-                      className="absolute inset-0 flex items-center justify-center px-4"
-                      style={{
-                        zIndex: 1,
-                        background:
-                          vendorFrameState === 'blocked'
-                            ? 'linear-gradient(180deg, rgba(127,29,29,0.22) 0%, rgba(11,17,32,0.94) 100%)'
-                            : 'linear-gradient(180deg, rgba(15,23,42,0.78) 0%, rgba(11,17,32,0.94) 100%)',
-                        backdropFilter: 'blur(3px)',
-                      }}
-                    >
-                      <Stack gap="xs" align="center" maw={360}>
-                        {vendorFrameState === 'loading' ? <Loader size="sm" color="blue" /> : null}
-                        <Text size="sm" fw={700} c="white" ta="center">
-                          {vendorFrameState === 'blocked'
-                            ? 'Chess.com embed unavailable'
-                            : 'Loading Chess.com reference board'}
-                        </Text>
-                        <Text size="xs" c="rgba(226,232,240,0.78)" ta="center">
-                          {vendorFrameState === 'blocked'
-                            ? 'The vendor board did not finish loading in this browser context. The mirrored ChatBridge board above still works for chat-driven moves and analysis.'
-                            : 'The vendor board can take a moment to appear. The mirrored ChatBridge board above remains the source of truth for chat memory and move execution.'}
-                        </Text>
-                      </Stack>
-                    </Box>
-                  ) : null}
-                </Box>
-                {vendorFrameState === 'blocked' ? (
-                  <Text size="xs" c="rgba(248,113,113,0.88)">
-                    Chess.com blocked this embed URL. Save a valid Chess.com `emboard` URL to keep the reference board
-                    visible.
-                  </Text>
-                ) : null}
-              </>
-            ) : null}
-          </Stack>
-        </Paper>
-
-        <Paper
-          withBorder
-          radius="xl"
-          p="sm"
-          style={{
-            order: 5,
-            background: 'rgba(15, 23, 42, 0.64)',
-            borderColor: 'rgba(148, 163, 184, 0.18)',
-          }}
-        >
-          <Stack gap="sm">
-            <Text size="sm" fw={700} c="white">
-              Reference board configuration
+            <Title order={4} c="white">
+              Launch configuration
+            </Title>
+            <Text size="sm" c="rgba(255,255,255,0.72)">
+              Save a Chess.com emboard URL here. ChatBridge uses the diagram id from that URL to load the official
+              vendor board and discover board-state tooling.
             </Text>
             <TextInput
               label={approvedApp?.integrationConfig?.launchUrlLabel ?? 'Chess.com emboard URL'}
               placeholder={approvedApp?.integrationConfig?.launchUrlPlaceholder ?? DEFAULT_EMBED_URL}
               value={draftEmbedUrl}
               onChange={(event) => setDraftEmbedUrl(event.currentTarget.value)}
-              error={embedUrlError}
+              error={launchConfigError}
             />
             <Group gap="xs">
-              <Button size="xs" onClick={handleSaveEmbedUrl}>
-                Save embed URL
-              </Button>
-              <Button size="xs" variant="subtle" color="gray" onClick={handleResetEmbedUrl}>
+              <Button onClick={handleSaveEmbedUrl}>Save launch URL</Button>
+              <Button variant="subtle" color="gray" onClick={handleResetEmbedUrl}>
                 Reset
               </Button>
+              <Button variant="light" color="blue" onClick={handleRefresh}>
+                Refresh board
+              </Button>
             </Group>
+            <Text size="sm" c="rgba(255,255,255,0.68)">
+              Active source: <code>{resolvedEmbedUrl}</code>
+            </Text>
           </Stack>
         </Paper>
       </Stack>
