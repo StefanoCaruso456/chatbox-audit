@@ -748,7 +748,7 @@ describe('createRailwayWebApp', () => {
     expect(requestBody.error.message).toContain('No assigned teacher or administrator')
   })
 
-  it('proxies Chess.com diagram data and the emboard shell through the Railway backend', async () => {
+  it('proxies Chess.com diagram data, emboard shell, and rendered viewer through the Railway backend', async () => {
     const staticRootDir = await createStaticRoot()
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString()
@@ -794,12 +794,15 @@ describe('createRailwayWebApp', () => {
       }
 
       if (url === 'https://www.chess.com/emboard?id=10477955&_height=640') {
-        return new Response('<html><head></head><body>shell</body></html>', {
-          status: 200,
-          headers: {
-            'content-type': 'text/html; charset=utf-8',
-          },
-        })
+        return new Response(
+          '<html><head></head><body><div id="chess_com_diagram_2_10477955" class="chessDiagramDiv" align="center"></div>shell</body></html>',
+          {
+            status: 200,
+            headers: {
+              'content-type': 'text/html; charset=utf-8',
+            },
+          }
+        )
       }
 
       throw new Error(`Unexpected fetch URL: ${url}`)
@@ -840,7 +843,28 @@ describe('createRailwayWebApp', () => {
 
     expect(shellResponse.status).toBe(200)
     expect(shellResponse.headers.get('access-control-allow-origin')).toBe('https://chatbox-audit.vercel.app')
-    expect(await shellResponse.text()).toContain('<body>shell</body>')
+    const shellHtml = await shellResponse.text()
+    expect(shellHtml).toContain('class="chessDiagramDiv"')
+    expect(shellHtml).toContain('shell')
+
+    const viewerResponse = await app.handleRequest(
+      new Request(
+        'https://chatbox-audit-production.up.railway.app/api/chess-com/viewer/10477955?pgn=%5BEvent%20%22Example%22%5D%0A%0A1.%20e4%20e5%202.%20Nf3%20Nc6%20*',
+        {
+          headers: {
+            origin: 'https://chatbox-audit.vercel.app',
+          },
+        }
+      )
+    )
+
+    expect(viewerResponse.status).toBe(200)
+    expect(viewerResponse.headers.get('access-control-allow-origin')).toBe('https://chatbox-audit.vercel.app')
+    const viewerHtml = await viewerResponse.text()
+    expect(viewerHtml).toContain('<base href="https://www.chess.com/">')
+    expect(viewerHtml).toContain('chatbridge-chesscom-viewer')
+    expect(viewerHtml).toContain('&-pgnbody:')
+    expect(viewerHtml).toContain('1. e4 e5 2. Nf3 Nc6 *')
   })
 })
 

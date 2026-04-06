@@ -234,7 +234,11 @@ export default function ApprovedAppCoachController({ sessionId, session }: Appro
     const lastUpdateSource =
       typeof observedStateDigest?.lastUpdateSource === 'string' ? observedStateDigest.lastUpdateSource : null
 
-    if (!fen || moveCount === null || moveCount === 0 || lastUpdateSource !== 'manual-board-move') {
+    const isSupportedObservedSource =
+      lastUpdateSource === 'manual-board-move' ||
+      (activeChessObservedStateEvent.approvedAppId === 'chess-com' && lastUpdateSource === 'diagram-load')
+
+    if (!fen || moveCount === null || moveCount === 0 || !isSupportedObservedSource) {
       return
     }
 

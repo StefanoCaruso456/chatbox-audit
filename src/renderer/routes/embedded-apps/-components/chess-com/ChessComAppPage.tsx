@@ -18,7 +18,7 @@ import { getApprovedAppLaunchOverride, persistApprovedAppLaunchOverride } from '
 import { resolveTutorMeAIBackendOrigin } from '@/packages/tutormeai-auth/client'
 import { applyRequestedChessMove } from '../chess/chessMove'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
-import { type ChessComDiagram, extractChessComDiagramId, patchChessComEmboardHtml } from './chessComOfficialViewer'
+import { type ChessComDiagram, extractChessComDiagramId } from './chessComOfficialViewer'
 
 const CHESS_COM_APP_ID = 'chess-com'
 const CHESS_COM_RUNTIME_APP_ID = 'chess.com.workspace'
@@ -265,12 +265,19 @@ function buildShellIframeTitle(diagramId: string) {
   return `Chess.com diagram ${diagramId}`
 }
 
-function buildViewerKey(input: { diagramId: string; pgn: string; reloadNonce: number }) {
-  return `${input.diagramId}:${input.pgn.length}:${input.reloadNonce}:${input.pgn.slice(-24)}`
+function buildViewerKey(input: { diagramId: string; pgn: string; reloadNonce: number; viewerKind: string }) {
+  return `${input.viewerKind}:${input.diagramId}:${input.pgn.length}:${input.reloadNonce}:${input.pgn.slice(-24)}`
 }
 
 function buildChessComApiUrl(pathname: string, backendOrigin: string) {
   return new URL(pathname, backendOrigin).toString()
+}
+
+function buildChessComViewerUrl(input: { backendOrigin: string; diagramId: string; pgn: string; reloadNonce: number }) {
+  const url = new URL(`/api/chess-com/viewer/${input.diagramId}`, input.backendOrigin)
+  url.searchParams.set('reload', String(input.reloadNonce))
+  url.searchParams.set('pgn', input.pgn)
+  return url.toString()
 }
 
 async function fetchJson<T>(input: string) {
@@ -294,18 +301,6 @@ async function fetchJson<T>(input: string) {
   }
 }
 
-async function fetchText(input: string) {
-  const response = await fetch(input, {
-    mode: 'cors',
-  })
-
-  if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}.`)
-  }
-
-  return response.text()
-}
-
 export function ChessComAppPage() {
   const approvedApp = useMemo(() => getApprovedAppById(CHESS_COM_APP_ID), [])
   const backendOrigin = useMemo(() => resolveTutorMeAIBackendOrigin(), [])
@@ -317,7 +312,6 @@ export function ChessComAppPage() {
   const [draftEmbedUrl, setDraftEmbedUrl] = useState('')
   const [launchConfigError, setLaunchConfigError] = useState<string | null>(null)
   const [diagram, setDiagram] = useState<ChessComDiagram | null>(null)
-  const [shellHtml, setShellHtml] = useState('')
   const [boardPgn, setBoardPgn] = useState('')
   const [feedback, setFeedback] = useState('Loading the official Chess.com board…')
   const [diagramLoadState, setDiagramLoadState] = useState<DiagramLoadState>('loading')
@@ -325,7 +319,6 @@ export function ChessComAppPage() {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [lastUpdateSource, setLastUpdateSource] = useState<ChessComBoardResult['lastUpdateSource']>('diagram-load')
 
-  const fallbackIframeRef = useRef<HTMLIFrameElement | null>(null)
   const lastHandledToolCallIdRef = useRef<string | null>(null)
   const viewerTimeoutRef = useRef<number | null>(null)
 
@@ -360,7 +353,6 @@ export function ChessComAppPage() {
   useEffect(() => {
     if (!diagramId) {
       setDiagram(null)
-      setShellHtml('')
       setBoardPgn('')
       setDiagramLoadState('failed')
       setViewerMode('fallback')
@@ -370,25 +362,21 @@ export function ChessComAppPage() {
 
     let cancelled = false
     setDiagramLoadState('loading')
-    setViewerMode('loading')
     setFeedback('Loading the official Chess.com board…')
 
-    void Promise.all([
-      fetchJson<{ ok: true; data: ChessComDiagram }>(
-        buildChessComApiUrl(`/api/chess-com/diagram/${diagramId}?reload=${reloadNonce}`, backendOrigin)
-      ),
-      fetchText(buildChessComApiUrl(`/api/chess-com/emboard-shell/${diagramId}?reload=${reloadNonce}`, backendOrigin)),
-    ])
-      .then(([diagramResponse, upstreamShellHtml]) => {
+    void fetchJson<{ ok: true; data: ChessComDiagram }>(
+      buildChessComApiUrl(`/api/chess-com/diagram/${diagramId}?reload=${reloadNonce}`, backendOrigin)
+    )
+      .then((diagramResponse) => {
         if (cancelled) {
           return
         }
 
         setDiagram(diagramResponse.data)
-        setShellHtml(upstreamShellHtml)
         setBoardPgn(diagramResponse.data.setup[0]?.pgn ?? '')
         setLastUpdateSource('diagram-load')
         setDiagramLoadState('ready')
+        setFeedback('Chess.com is ready. Ask for the best move, a board scan, or a line explanation.')
       })
       .catch((error: unknown) => {
         if (cancelled) {
@@ -396,10 +384,8 @@ export function ChessComAppPage() {
         }
 
         setDiagram(null)
-        setShellHtml('')
         setBoardPgn('')
         setDiagramLoadState('failed')
-        setViewerMode('fallback')
         setFeedback(error instanceof Error ? error.message : 'Failed to load the Chess.com diagram.')
       })
 
@@ -438,32 +424,39 @@ export function ChessComAppPage() {
     })
   }, [chess, diagram, diagramId, lastUpdateSource, resolvedEmbedUrl, runtimeContext])
 
-  const viewerSrcDoc = useMemo(() => {
-    if (!diagram || !shellHtml || !boardPgn) {
+  const diagramPgn = diagram?.setup[0]?.pgn ?? ''
+  const usesPatchedViewer = Boolean(diagramId && boardPgn && diagramPgn && boardPgn.trim() !== diagramPgn.trim())
+  const patchedViewerUrl = useMemo(() => {
+    if (!diagramId || !boardPgn) {
       return ''
     }
 
-    return patchChessComEmboardHtml({
-      html: shellHtml,
-      diagram,
+    return buildChessComViewerUrl({
+      backendOrigin,
+      diagramId,
       pgn: boardPgn,
+      reloadNonce,
     })
-  }, [boardPgn, diagram, shellHtml])
+  }, [backendOrigin, boardPgn, diagramId, reloadNonce])
+
+  const activeViewerKind = usesPatchedViewer && viewerMode !== 'fallback' ? 'patched' : 'raw'
+  const activeViewerUrl = activeViewerKind === 'patched' ? patchedViewerUrl : resolvedEmbedUrl
 
   const viewerKey = useMemo(() => {
     if (!diagramId) {
-      return `chess-com-missing:${reloadNonce}`
+      return `chess-com-missing:${reloadNonce}:${activeViewerKind}`
     }
 
     return buildViewerKey({
       diagramId,
       pgn: boardPgn,
       reloadNonce,
+      viewerKind: activeViewerKind,
     })
-  }, [boardPgn, diagramId, reloadNonce])
+  }, [activeViewerKind, boardPgn, diagramId, reloadNonce])
 
   useEffect(() => {
-    if (!viewerSrcDoc) {
+    if (!usesPatchedViewer || viewerMode === 'fallback' || !activeViewerUrl) {
       return
     }
 
@@ -472,9 +465,11 @@ export function ChessComAppPage() {
       window.clearTimeout(viewerTimeoutRef.current)
     }
 
-    viewerTimeoutRef.current = window.setTimeout(() => {
-      setViewerMode((current) => (current === 'loading' ? 'fallback' : current))
-    }, VIEWER_TIMEOUT_MS)
+    if (usesPatchedViewer) {
+      viewerTimeoutRef.current = window.setTimeout(() => {
+        setViewerMode((current) => (current === 'loading' ? 'fallback' : current))
+      }, VIEWER_TIMEOUT_MS)
+    }
 
     return () => {
       if (viewerTimeoutRef.current !== null) {
@@ -482,7 +477,7 @@ export function ChessComAppPage() {
         viewerTimeoutRef.current = null
       }
     }
-  }, [viewerSrcDoc])
+  }, [activeViewerUrl, usesPatchedViewer, viewerMode])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -510,6 +505,22 @@ export function ChessComAppPage() {
       window.removeEventListener('message', handleMessage)
     }
   }, [])
+
+  const handleViewerLoad = useCallback(() => {
+    if (usesPatchedViewer && viewerMode !== 'fallback') {
+      return
+    }
+
+    if (viewerTimeoutRef.current !== null) {
+      window.clearTimeout(viewerTimeoutRef.current)
+      viewerTimeoutRef.current = null
+    }
+    setViewerMode('ready')
+  }, [usesPatchedViewer, viewerMode])
+
+  const handleViewerError = useCallback(() => {
+    setViewerMode((current) => (usesPatchedViewer && current !== 'fallback' ? 'fallback' : 'ready'))
+  }, [usesPatchedViewer])
 
   useEffect(() => {
     if (!boardResult) {
@@ -741,126 +752,130 @@ export function ChessComAppPage() {
           'radial-gradient(circle at top, rgba(59,130,246,0.18), transparent 28%), linear-gradient(180deg, #0f172a 0%, #111827 100%)',
       }}
     >
-      <Stack gap="md" h="100%" p="lg">
-        <Group gap="xs" wrap="wrap">
-          <Badge radius="xl" variant="light" color="green">
-            Official Chess.com viewer
-          </Badge>
-          <Badge radius="xl" variant="light" color="blue">
-            Tool-connected wrapper
-          </Badge>
-          {viewerMode === 'fallback' ? (
-            <Badge radius="xl" variant="light" color="yellow">
-              Raw embed fallback
-            </Badge>
-          ) : null}
-        </Group>
-
-        <Stack gap={4}>
-          <Title order={2} c="white">
-            Chess.com
-          </Title>
-          <Text c="rgba(255,255,255,0.76)">
-            ChatBridge keeps the official Chess.com board visible while discovering tools from Chess.com diagram data.
-          </Text>
-        </Stack>
-
-        {diagramLoadState === 'loading' ? (
-          <Paper
-            radius="xl"
-            p="xl"
-            style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
-          >
-            <Group gap="sm">
-              <Loader size="sm" color="var(--chatbox-tint-brand)" />
-              <Text c="rgba(255,255,255,0.8)">Loading the official Chess.com diagram and emboard shell…</Text>
+      <Stack gap="md" h="100%" p="lg" className="min-h-0">
+        <Box className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <Stack gap="md" pb="md">
+            <Group gap="xs" wrap="wrap">
+              <Badge radius="xl" variant="light" color="green">
+                Official Chess.com viewer
+              </Badge>
+              <Badge radius="xl" variant="light" color="blue">
+                Tool-connected wrapper
+              </Badge>
+              {usesPatchedViewer ? (
+                <Badge radius="xl" variant="light" color="violet">
+                  Synced move replay
+                </Badge>
+              ) : null}
+              {viewerMode === 'fallback' ? (
+                <Badge radius="xl" variant="light" color="yellow">
+                  Raw embed fallback
+                </Badge>
+              ) : null}
             </Group>
-          </Paper>
-        ) : null}
 
-        {diagramLoadState === 'failed' ? (
-          <Alert color="red" radius="xl" title="Chess.com failed to load">
-            {feedback}
-          </Alert>
-        ) : null}
+            <Stack gap={4}>
+              <Title order={2} c="white">
+                Chess.com
+              </Title>
+              <Text c="rgba(255,255,255,0.76)">
+                ChatBridge keeps the official Chess.com board visible while discovering tools from Chess.com diagram
+                data.
+              </Text>
+            </Stack>
 
-        <Paper
-          radius="xl"
-          p="md"
-          style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
-        >
-          <Stack gap="xs">
-            <Text size="sm" fw={600} c="white">
-              Live board
-            </Text>
-            <Text size="sm" c="rgba(255,255,255,0.72)">
-              {feedback}
-            </Text>
+            {diagramLoadState === 'loading' ? (
+              <Paper
+                radius="xl"
+                p="xl"
+                style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+              >
+                <Group gap="sm">
+                  <Loader size="sm" color="var(--chatbox-tint-brand)" />
+                  <Text c="rgba(255,255,255,0.8)">Loading the official Chess.com diagram data…</Text>
+                </Group>
+              </Paper>
+            ) : null}
+
+            {diagramLoadState === 'failed' ? (
+              <Alert color="red" radius="xl" title="Chess.com failed to load">
+                {feedback}
+              </Alert>
+            ) : null}
+
+            <Paper
+              radius="xl"
+              p="md"
+              style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              <Stack gap="xs">
+                <Text size="sm" fw={600} c="white">
+                  Live board
+                </Text>
+                <Text size="sm" c="rgba(255,255,255,0.72)">
+                  {feedback}
+                </Text>
+              </Stack>
+            </Paper>
+
+            <Box
+              className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0b1120]"
+              data-testid="chess-com-official-viewer"
+              style={{
+                minHeight: 'clamp(420px, 62vh, 720px)',
+                height: 'clamp(420px, 62vh, 720px)',
+                flexShrink: 0,
+              }}
+            >
+              <iframe
+                key={viewerKey}
+                title={buildShellIframeTitle(diagramId ?? 'unknown')}
+                src={activeViewerUrl}
+                className="h-full w-full border-0 bg-white"
+                sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+                allow="clipboard-read; clipboard-write; fullscreen"
+                referrerPolicy={approvedApp ? getPreviewReferrerPolicy(approvedApp) : 'strict-origin-when-cross-origin'}
+                onLoad={handleViewerLoad}
+                onError={handleViewerError}
+              />
+            </Box>
+
+            <Paper
+              radius="xl"
+              p="lg"
+              style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              <Stack gap="sm">
+                <Title order={4} c="white">
+                  Launch configuration
+                </Title>
+                <Text size="sm" c="rgba(255,255,255,0.72)">
+                  Save a Chess.com emboard URL here. ChatBridge uses the diagram id from that URL to load the official
+                  vendor board and discover board-state tooling.
+                </Text>
+                <TextInput
+                  label={approvedApp?.integrationConfig?.launchUrlLabel ?? 'Chess.com emboard URL'}
+                  placeholder={approvedApp?.integrationConfig?.launchUrlPlaceholder ?? DEFAULT_EMBED_URL}
+                  value={draftEmbedUrl}
+                  onChange={(event) => setDraftEmbedUrl(event.currentTarget.value)}
+                  error={launchConfigError}
+                />
+                <Group gap="xs">
+                  <Button onClick={handleSaveEmbedUrl}>Save launch URL</Button>
+                  <Button variant="subtle" color="gray" onClick={handleResetEmbedUrl}>
+                    Reset
+                  </Button>
+                  <Button variant="light" color="blue" onClick={handleRefresh}>
+                    Refresh board
+                  </Button>
+                </Group>
+                <Text size="sm" c="rgba(255,255,255,0.68)">
+                  Active source: <code>{resolvedEmbedUrl}</code>
+                </Text>
+              </Stack>
+            </Paper>
           </Stack>
-        </Paper>
-
-        <Box
-          className="relative min-h-0 flex-1 overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0b1120]"
-          data-testid="chess-com-official-viewer"
-        >
-          {viewerMode !== 'fallback' && viewerSrcDoc ? (
-            <iframe
-              key={viewerKey}
-              title={buildShellIframeTitle(diagramId ?? 'unknown')}
-              srcDoc={viewerSrcDoc}
-              className="h-full w-full border-0 bg-white"
-              sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
-              allow="clipboard-read; clipboard-write; fullscreen"
-            />
-          ) : null}
-
-          {viewerMode === 'fallback' ? (
-            <iframe
-              ref={fallbackIframeRef}
-              title="Chess.com raw emboard"
-              src={resolvedEmbedUrl}
-              className="h-full w-full border-0 bg-white"
-              sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
-              allow="clipboard-read; clipboard-write; fullscreen"
-              referrerPolicy={approvedApp ? getPreviewReferrerPolicy(approvedApp) : 'strict-origin-when-cross-origin'}
-            />
-          ) : null}
         </Box>
-
-        <Paper
-          radius="xl"
-          p="lg"
-          style={{ background: 'rgba(15,23,42,0.55)', border: '1px solid rgba(255,255,255,0.12)' }}
-        >
-          <Stack gap="sm">
-            <Title order={4} c="white">
-              Launch configuration
-            </Title>
-            <Text size="sm" c="rgba(255,255,255,0.72)">
-              Save a Chess.com emboard URL here. ChatBridge uses the diagram id from that URL to load the official
-              vendor board and discover board-state tooling.
-            </Text>
-            <TextInput
-              label={approvedApp?.integrationConfig?.launchUrlLabel ?? 'Chess.com emboard URL'}
-              placeholder={approvedApp?.integrationConfig?.launchUrlPlaceholder ?? DEFAULT_EMBED_URL}
-              value={draftEmbedUrl}
-              onChange={(event) => setDraftEmbedUrl(event.currentTarget.value)}
-              error={launchConfigError}
-            />
-            <Group gap="xs">
-              <Button onClick={handleSaveEmbedUrl}>Save launch URL</Button>
-              <Button variant="subtle" color="gray" onClick={handleResetEmbedUrl}>
-                Reset
-              </Button>
-              <Button variant="light" color="blue" onClick={handleRefresh}>
-                Refresh board
-              </Button>
-            </Group>
-            <Text size="sm" c="rgba(255,255,255,0.68)">
-              Active source: <code>{resolvedEmbedUrl}</code>
-            </Text>
-          </Stack>
-        </Paper>
       </Stack>
     </Box>
   )

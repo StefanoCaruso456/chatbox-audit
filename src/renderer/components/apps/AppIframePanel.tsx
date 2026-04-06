@@ -63,7 +63,7 @@ function toJsonObject(value: unknown): JsonObject | undefined {
   return undefined
 }
 
-function getChessObservedBoardStateKey(stateDigest: JsonObject | undefined) {
+function getChessObservedBoardStateKey(approvedAppId: string, stateDigest: JsonObject | undefined) {
   if (!stateDigest) {
     return null
   }
@@ -72,7 +72,10 @@ function getChessObservedBoardStateKey(stateDigest: JsonObject | undefined) {
   const moveCount = typeof stateDigest.moveCount === 'number' ? stateDigest.moveCount : null
   const lastUpdateSource = typeof stateDigest.lastUpdateSource === 'string' ? stateDigest.lastUpdateSource : null
 
-  if (!fen || moveCount === null || lastUpdateSource !== 'manual-board-move') {
+  const isSupportedSource =
+    lastUpdateSource === 'manual-board-move' || (approvedAppId === 'chess-com' && lastUpdateSource === 'diagram-load')
+
+  if (!fen || moveCount === null || !isSupportedSource) {
     return null
   }
 
@@ -267,7 +270,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
   const [launchSessionKey] = useState(() => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [loadState, setLoadState] = useState<AppLoadState>('loading')
-  const [sidebarCommandVersion, setSidebarCommandVersion] = useState(0)
+  const [, setSidebarCommandVersion] = useState(0)
   const runtimeAppId = app.runtimeBridge?.appId ?? app.id
 
   const iframeInstanceKey = `${app.id}:${reloadNonce}`
@@ -383,7 +386,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         return
       }
 
-      const observedStateKey = getChessObservedBoardStateKey(input.latestStateDigest)
+      const observedStateKey = getChessObservedBoardStateKey(app.id, input.latestStateDigest)
       if (!observedStateKey || publishedObservedStateKeyRef.current === observedStateKey) {
         return
       }
@@ -539,7 +542,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       errorMessage: embeddedRuntime.completion?.errorMessage,
       traceSource: 'runtime.bootstrap.effect',
     })
-  }, [app.experience, app.name, currentSessionId, embeddedRuntime, runtimeAppId, syncSidebarRuntimeSnapshot])
+  }, [app.experience, app.name, currentSessionId, embeddedRuntime, syncSidebarRuntimeSnapshot])
 
   useEffect(() => {
     if (app.experience !== 'tutormeai-runtime' || !currentSessionId || !embeddedRuntime) {
@@ -841,7 +844,7 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
           : null
       const errorMessage =
         command.toolName === 'chess.make-move'
-          ? 'Chess Tutor did not confirm the latest move before the timeout expired.'
+          ? `${app.name} did not confirm the latest move before the timeout expired.`
           : `${app.name} did not confirm ${command.toolName} before the timeout expired.`
 
       syncSidebarRuntimeSnapshot({
@@ -889,7 +892,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
         }
 
         clearLoadTimeout()
-        setLoadState(resolveVisibleLoadState(iframeRef.current, event.data.payload.status === 'failed' ? 'blocked' : 'ready'))
+        setLoadState(
+          resolveVisibleLoadState(iframeRef.current, event.data.payload.status === 'failed' ? 'blocked' : 'ready')
+        )
         syncSidebarRuntimeSnapshot({
           status: event.data.payload.status,
           summary: event.data.payload.summary,
@@ -924,7 +929,9 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       clearLoadTimeout()
 
       if (message.type === 'app.state') {
-        setLoadState(resolveVisibleLoadState(iframeRef.current, message.payload.status === 'failed' ? 'blocked' : 'ready'))
+        setLoadState(
+          resolveVisibleLoadState(iframeRef.current, message.payload.status === 'failed' ? 'blocked' : 'ready')
+        )
         syncSidebarRuntimeSnapshot({
           status: message.payload.status,
           summary: message.payload.summary,
@@ -1000,11 +1007,13 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
       window.removeEventListener('message', handleMessage)
     }
   }, [
+    app.experience,
     app.id,
     app.runtimeBridge?.appId,
     clearLoadTimeout,
     clearDirectCommandReplayTimers,
     clearRuntimeReplayTimers,
+    currentSessionId,
     embeddedRuntime,
     syncSidebarRuntimeSnapshot,
     usesDirectRuntimeBridge,
@@ -1057,7 +1066,6 @@ function AppIframeSurface({ app }: { app: ApprovedApp }) {
     pendingSidebarRuntimeCommand,
     postDirectRuntimeCommand,
     scheduleDirectRuntimeCommandReplay,
-    sidebarCommandVersion,
     usesDirectRuntimeBridge,
   ])
 
