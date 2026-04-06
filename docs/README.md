@@ -14,6 +14,7 @@ This repository now has two documentation layers:
 ## Product And Strategy
 
 - [What We Built](./what-we-built.md)
+- [Analytics Platform](./analytics-platform.md)
 - [Architecture](./architecture.md)
 - [App Integration Matrix](./app-integration-matrix.md)
 - [Deployment Readiness](./deployment-readiness.md)
@@ -49,7 +50,7 @@ This repository now has two documentation layers:
 ## Suggested Reading By Audience
 
 - Product or investor overview:
-  [What We Built](./what-we-built.md), [Apps SDK](./sdk/README.md), [Architecture](./architecture.md)
+  [What We Built](./what-we-built.md), [Analytics Platform](./analytics-platform.md), [Apps SDK](./sdk/README.md), [Architecture](./architecture.md)
 - Engineering onboarding:
   [TutorMeAI Setup Guide](./tutormeai-setup-guide.md), [Architecture](./architecture.md), [State Model](./state-model.md)
 - Partner or external app developer:

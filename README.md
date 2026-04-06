@@ -75,6 +75,7 @@ If you are new to this repo, start here:
 
 - [What We Built](./docs/what-we-built.md): concise before/after report, feature inventory, implementation map, and product packaging view
 - [Docs Index](./docs/README.md): documentation by audience and topic
+- [Analytics Platform](./docs/analytics-platform.md): role-based reporting for teachers, parents, admins, and district buyers
 - [Apps SDK](./docs/sdk/README.md): the reusable app-platform SDK and cloud-plugin packaging model
 - [UI Cleanup](./docs/ui-cleanup.md): what changed in the UX and how the interface was simplified
 - [Architecture](./docs/architecture.md): system responsibilities, trust boundaries, and target deployment model
