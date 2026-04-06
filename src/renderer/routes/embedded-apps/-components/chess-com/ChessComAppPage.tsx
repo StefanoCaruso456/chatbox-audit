@@ -29,6 +29,7 @@ const VIEWER_TIMEOUT_MS = 4_500
 type ViewerMode = 'loading' | 'ready' | 'fallback'
 type DiagramLoadState = 'loading' | 'ready' | 'failed'
 type ChessMode = 'analysis' | 'review'
+type VisibleViewerKind = 'raw' | 'patched'
 
 type ChessComBoardResult = {
   appSessionId: string
@@ -69,6 +70,35 @@ function inferChessPhase(moveCount: number): ChessComBoardResult['phase'] {
   }
 
   return 'endgame'
+}
+
+function buildChessMoveExplanation(moveSan: string) {
+  if (moveSan.includes('#')) {
+    return 'finishes the game'
+  }
+
+  if (moveSan.includes('+')) {
+    return 'forces the opponent to respond to check'
+  }
+
+  if (moveSan === 'O-O' || moveSan === 'O-O-O') {
+    return 'improves king safety'
+  }
+
+  const normalized = moveSan.toLowerCase()
+  if (normalized === 'e4' || normalized === 'd4' || normalized === 'e5' || normalized === 'd5') {
+    return 'claims the center and opens lines for the pieces behind it'
+  }
+
+  if (normalized === 'nf3' || normalized === 'nc3' || normalized === 'nf6' || normalized === 'nc6') {
+    return 'develops a knight toward the center while keeping options flexible'
+  }
+
+  if (moveSan.includes('x')) {
+    return 'wins material or improves the balance on the board'
+  }
+
+  return 'improves the position without creating unnecessary risk'
 }
 
 function buildBoardSummary(input: {
@@ -215,8 +245,7 @@ function buildMoveCompletionSignal(input: {
       ...result,
       requestedMove: input.requestedMove,
       appliedMove: lastMove,
-      explanation:
-        'ChatBridge applied this move to the official Chess.com diagram state and re-rendered the vendor board in the sidebar.',
+      explanation: buildChessMoveExplanation(lastMove),
     },
     completedAt: new Date().toISOString(),
     followUpContext: {
@@ -316,6 +345,7 @@ export function ChessComAppPage() {
   const [feedback, setFeedback] = useState('Loading the official Chess.com board…')
   const [diagramLoadState, setDiagramLoadState] = useState<DiagramLoadState>('loading')
   const [viewerMode, setViewerMode] = useState<ViewerMode>('loading')
+  const [visibleViewerKind, setVisibleViewerKind] = useState<VisibleViewerKind>('raw')
   const [reloadNonce, setReloadNonce] = useState(0)
   const [lastUpdateSource, setLastUpdateSource] = useState<ChessComBoardResult['lastUpdateSource']>('diagram-load')
 
@@ -439,7 +469,10 @@ export function ChessComAppPage() {
     })
   }, [backendOrigin, boardPgn, diagramId, reloadNonce])
 
-  const activeViewerKind = usesPatchedViewer && viewerMode !== 'fallback' ? 'patched' : 'raw'
+  const shouldPreloadPatchedViewer =
+    usesPatchedViewer && visibleViewerKind === 'raw' && viewerMode !== 'fallback' && Boolean(patchedViewerUrl)
+  const activeViewerKind: VisibleViewerKind =
+    usesPatchedViewer && visibleViewerKind === 'patched' && viewerMode !== 'fallback' ? 'patched' : 'raw'
   const activeViewerUrl = activeViewerKind === 'patched' ? patchedViewerUrl : resolvedEmbedUrl
 
   const viewerKey = useMemo(() => {
@@ -456,20 +489,25 @@ export function ChessComAppPage() {
   }, [activeViewerKind, boardPgn, diagramId, reloadNonce])
 
   useEffect(() => {
-    if (!usesPatchedViewer || viewerMode === 'fallback' || !activeViewerUrl) {
+    if (!usesPatchedViewer || !patchedViewerUrl) {
+      if (viewerTimeoutRef.current !== null) {
+        window.clearTimeout(viewerTimeoutRef.current)
+        viewerTimeoutRef.current = null
+      }
+      setVisibleViewerKind('raw')
       return
     }
 
+    setVisibleViewerKind('raw')
     setViewerMode('loading')
+
     if (viewerTimeoutRef.current !== null) {
       window.clearTimeout(viewerTimeoutRef.current)
     }
 
-    if (usesPatchedViewer) {
-      viewerTimeoutRef.current = window.setTimeout(() => {
-        setViewerMode((current) => (current === 'loading' ? 'fallback' : current))
-      }, VIEWER_TIMEOUT_MS)
-    }
+    viewerTimeoutRef.current = window.setTimeout(() => {
+      setViewerMode((current) => (current === 'loading' ? 'fallback' : current))
+    }, VIEWER_TIMEOUT_MS)
 
     return () => {
       if (viewerTimeoutRef.current !== null) {
@@ -477,7 +515,7 @@ export function ChessComAppPage() {
         viewerTimeoutRef.current = null
       }
     }
-  }, [activeViewerUrl, usesPatchedViewer, viewerMode])
+  }, [patchedViewerUrl, usesPatchedViewer])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -496,6 +534,7 @@ export function ChessComAppPage() {
           window.clearTimeout(viewerTimeoutRef.current)
           viewerTimeoutRef.current = null
         }
+        setVisibleViewerKind('patched')
         setViewerMode('ready')
       }
     }
@@ -519,6 +558,7 @@ export function ChessComAppPage() {
   }, [usesPatchedViewer, viewerMode])
 
   const handleViewerError = useCallback(() => {
+    setVisibleViewerKind('raw')
     setViewerMode((current) => (usesPatchedViewer && current !== 'fallback' ? 'fallback' : 'ready'))
   }, [usesPatchedViewer])
 
@@ -527,13 +567,17 @@ export function ChessComAppPage() {
       return
     }
 
-    const status = diagramLoadState === 'failed' ? 'failed' : viewerMode === 'loading' ? 'pending' : 'active'
+    const status = diagramLoadState === 'failed' ? 'failed' : 'active'
+    const syncingNote =
+      usesPatchedViewer && viewerMode === 'loading'
+        ? ' The updated Chess.com viewer is syncing while the board state stays available to chat.'
+        : ''
     sendState({
       status,
       summary:
         viewerMode === 'fallback'
           ? `${boardResult.summary} The official viewer fell back to the raw Chess.com embed while the data bridge stays connected.`
-          : boardResult.summary,
+          : `${boardResult.summary}${syncingNote}`,
       state: buildStateDigest(boardResult),
     })
 
@@ -543,10 +587,10 @@ export function ChessComAppPage() {
       summary:
         viewerMode === 'fallback'
           ? `${boardResult.summary} Using the raw Chess.com embed fallback.`
-          : boardResult.summary,
+          : `${boardResult.summary}${syncingNote}`,
       state: buildStateDigest(boardResult),
     })
-  }, [boardResult, diagramLoadState, sendState, viewerMode])
+  }, [boardResult, diagramLoadState, sendState, usesPatchedViewer, viewerMode])
 
   useEffect(() => {
     if (!invocationMessage || !runtimeContext) {
@@ -670,7 +714,8 @@ export function ChessComAppPage() {
 
       setBoardPgn(nextPgn)
       setLastUpdateSource('manual-board-move')
-      setFeedback(`Played ${appliedMove.san} on the Chess.com board.`)
+      setVisibleViewerKind('raw')
+      setFeedback(`Played ${appliedMove.san} on the Chess.com board. Syncing the updated viewer…`)
       setViewerMode('loading')
 
       const completion = buildMoveCompletionSignal({
@@ -838,6 +883,20 @@ export function ChessComAppPage() {
                 onLoad={handleViewerLoad}
                 onError={handleViewerError}
               />
+              {shouldPreloadPatchedViewer ? (
+                <iframe
+                  key={`preload:${patchedViewerUrl}`}
+                  title={`${buildShellIframeTitle(diagramId ?? 'unknown')} preload`}
+                  src={patchedViewerUrl}
+                  className="pointer-events-none absolute left-[-9999px] top-[-9999px] h-[1px] w-[1px] border-0 opacity-0"
+                  sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+                  allow="clipboard-read; clipboard-write; fullscreen"
+                  referrerPolicy={
+                    approvedApp ? getPreviewReferrerPolicy(approvedApp) : 'strict-origin-when-cross-origin'
+                  }
+                  onError={handleViewerError}
+                />
+              ) : null}
             </Box>
 
             <Paper
