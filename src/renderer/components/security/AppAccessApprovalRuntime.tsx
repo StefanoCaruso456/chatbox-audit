@@ -94,14 +94,8 @@ export default function AppAccessApprovalRuntime() {
         if (cancelled) {
           return
         }
-        setStudentSubmittingAppId(null)
         clearApprovedAppOpenRequest(app.id)
         setAppAccessError(submitError instanceof Error ? submitError.message : String(submitError))
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setStudentSubmittingAppId(null)
-        }
       })
 
     return () => {
@@ -248,12 +242,22 @@ export default function AppAccessApprovalRuntime() {
   const studentSubmittingRequiresApproval = requiresTeacherApproval(
     studentSubmittingAppId ? getApprovedAppById(studentSubmittingAppId) : undefined
   )
+  const studentApprovalErrorVisible =
+    Boolean(error) && !studentRequest && Boolean(studentSubmittingAppId) && studentSubmittingRequiresApproval
+  const studentApprovalModalOpen =
+    (Boolean(studentRequest) && studentRequestRequiresApproval) ||
+    (Boolean(studentSubmittingAppId) && studentSubmittingRequiresApproval)
+  const canDismissStudentModal = studentRequest?.status === 'declined' || studentApprovalErrorVisible
   const studentWaitingTitle = useMemo(() => {
-    if (!studentRequestRequiresApproval && !studentSubmittingRequiresApproval) {
+    if (!studentApprovalModalOpen) {
       return ''
     }
     if (studentRequest?.status === 'declined') {
       return `${studentRequest.appName} was declined`
+    }
+    if (studentApprovalErrorVisible && studentSubmittingAppId) {
+      const app = getApprovedAppById(studentSubmittingAppId)
+      return app ? `Unable to request ${app.name}` : 'Unable to request app approval'
     }
     if (studentRequest) {
       return `Waiting for teacher approval`
@@ -263,23 +267,24 @@ export default function AppAccessApprovalRuntime() {
       return app ? `Requesting ${app.name}` : 'Requesting app approval'
     }
     return ''
-  }, [studentRequest, studentRequestRequiresApproval, studentSubmittingAppId, studentSubmittingRequiresApproval])
+  }, [studentApprovalErrorVisible, studentApprovalModalOpen, studentRequest, studentSubmittingAppId])
 
   return (
     <>
       <Modal
-        opened={
-          (Boolean(studentRequest) && studentRequestRequiresApproval) ||
-          (Boolean(studentSubmittingAppId) && studentSubmittingRequiresApproval)
-        }
+        opened={studentApprovalModalOpen}
         onClose={() => {
           if (studentRequest?.status === 'declined') {
             setStudentRequest(null)
           }
+          if (studentApprovalErrorVisible) {
+            setStudentSubmittingAppId(null)
+            setAppAccessError(null)
+          }
         }}
-        withCloseButton={studentRequest?.status === 'declined'}
-        closeOnClickOutside={studentRequest?.status === 'declined'}
-        closeOnEscape={studentRequest?.status === 'declined'}
+        withCloseButton={canDismissStudentModal}
+        closeOnClickOutside={canDismissStudentModal}
+        closeOnEscape={canDismissStudentModal}
         centered
         size="md"
         title={studentWaitingTitle}
@@ -287,7 +292,7 @@ export default function AppAccessApprovalRuntime() {
         <Stack gap="md">
           {error ? <Alert color="red">{error}</Alert> : null}
 
-          {studentSubmittingAppId ? (
+          {studentSubmittingAppId && !studentApprovalErrorVisible ? (
             <Group>
               <Loader size="sm" />
               <Text size="sm">Sending your app request to the teacher approval queue…</Text>
@@ -312,6 +317,13 @@ export default function AppAccessApprovalRuntime() {
             <Text size="sm" c="dimmed">
               Keep this window open. As soon as a teacher approves the request, the modal will disappear and the app
               will open automatically.
+            </Text>
+          ) : null}
+
+          {studentApprovalErrorVisible ? (
+            <Text size="sm" c="dimmed">
+              This student account cannot request approval yet. Close this dialog, then make sure a teacher or
+              administrator is assigned to the student before trying again.
             </Text>
           ) : null}
         </Stack>

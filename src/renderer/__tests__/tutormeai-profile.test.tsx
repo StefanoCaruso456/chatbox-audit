@@ -134,8 +134,67 @@ describe('TutorMeAI profile settings', () => {
     expect(tutorMeAIAuthStore.getState().user).toBeNull()
   })
 
+  it('clears the local session immediately before the backend logout request finishes', async () => {
+    let resolveLogout: (() => void) | null = null
+    logoutTutorMeAIPlatformSession.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveLogout = resolve
+      })
+    )
+
+    settingsStore.setState({
+      tutorMeAIProfile: {
+        name: 'Stefano Carusos',
+        email: 'stefanocaruso456@gmail.com',
+        role: 'student',
+      },
+    })
+    tutorMeAIAuthStore.setState({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        userId: 'user.google.demo',
+        email: 'stefanocaruso456@gmail.com',
+        username: 'stefanocaruso456',
+        displayName: 'Stefano Carusos',
+        role: 'teacher',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T04:59:43.916Z',
+        students: [],
+      },
+      status: 'authenticated',
+      error: null,
+      hasHydrated: true,
+    })
+
+    render(
+      <MantineProvider>
+        <RouteComponent />
+      </MantineProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
+
+    expect(closeSettings).toHaveBeenCalled()
+    expect(tutorMeAIAuthStore.getState().status).toBe('required')
+    expect(tutorMeAIAuthStore.getState().accessToken).toBeNull()
+    expect(tutorMeAIAuthStore.getState().user).toBeNull()
+
+    await waitFor(() => {
+      expect(logoutTutorMeAIPlatformSession).toHaveBeenCalledWith({
+        backendOrigin: 'https://chatbox-audit-production.up.railway.app',
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      })
+    })
+
+    resolveLogout?.()
+  })
+
   it('still clears the local session and closes settings when the backend logout selector is stale', async () => {
-    logoutTutorMeAIPlatformSession.mockRejectedValueOnce(new Error('No platform session matched the supplied selector.'))
+    logoutTutorMeAIPlatformSession.mockRejectedValueOnce(
+      new Error('No platform session matched the supplied selector.')
+    )
 
     settingsStore.setState({
       tutorMeAIProfile: {

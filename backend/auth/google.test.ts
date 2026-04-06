@@ -21,7 +21,7 @@ describe('loadGoogleOAuthRuntimeConfig', () => {
     expect(config?.provider.defaultScopes).toContain('https://www.googleapis.com/auth/classroom.courses.readonly')
     expect(config?.provider.extraAuthorizationParameters).toMatchObject({
       access_type: 'offline',
-      prompt: 'consent',
+      prompt: 'consent select_account',
     })
   })
 })

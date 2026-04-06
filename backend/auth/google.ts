@@ -56,7 +56,7 @@ export function loadGoogleOAuthRuntimeConfig(
       extraAuthorizationParameters: {
         access_type: 'offline',
         include_granted_scopes: 'true',
-        prompt: 'consent',
+        prompt: 'consent select_account',
       },
     },
   }

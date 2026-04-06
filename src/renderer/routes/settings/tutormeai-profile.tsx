@@ -7,8 +7,8 @@ import { useTutorMeAIStudentDirectory } from '@/hooks/useTutorMeAIStudentDirecto
 import { closeSettings } from '@/modals/Settings'
 import {
   deriveTutorMeAIUsernameCandidate,
-  isTutorMeAIReviewerRole,
   isTutorMeAIProfileComplete,
+  isTutorMeAIReviewerRole,
   logoutTutorMeAIPlatformSession,
   resolveTutorMeAIBackendOrigin,
   updateTutorMeAIPlatformProfile,
@@ -82,19 +82,23 @@ export function RouteComponent() {
     tutorMeAIProfile.role,
   ])
 
-  const handleLogout = async () => {
-    try {
-      await logoutTutorMeAIPlatformSession({
-        backendOrigin: resolveTutorMeAIBackendOrigin(),
-        accessToken,
-        refreshToken,
+  const handleLogout = () => {
+    const backendOrigin = resolveTutorMeAIBackendOrigin()
+    const accessTokenToRevoke = accessToken
+    const refreshTokenToRevoke = refreshToken
+
+    clearSession()
+    closeSettings()
+
+    void Promise.resolve(
+      logoutTutorMeAIPlatformSession({
+        backendOrigin,
+        accessToken: accessTokenToRevoke,
+        refreshToken: refreshTokenToRevoke,
       })
-    } catch (error) {
-      console.warn('TutorMeAI logout request failed; clearing local auth state anyway.', error)
-    } finally {
-      clearSession()
-      closeSettings()
-    }
+    ).catch((error) => {
+      console.warn('TutorMeAI logout request failed after local sign-out.', error)
+    })
   }
 
   const handleSaveProfile = async () => {
@@ -140,7 +144,9 @@ export function RouteComponent() {
       <Stack gap="xxs">
         <Title order={5}>{t('TutorMeAI Profile')}</Title>
         <Text c="chatbox-tertiary" maw={560}>
-          {t('TutorMeAI identity comes from Google sign-in. Name, username, and role are saved on the platform profile.')}
+          {t(
+            'TutorMeAI identity comes from Google sign-in. Name, username, and role are saved on the platform profile.'
+          )}
         </Text>
       </Stack>
 
@@ -150,7 +156,9 @@ export function RouteComponent() {
             <Stack gap={4} flex={1}>
               <Text fw={600}>{t('Signed in to TutorMeAI')}</Text>
               <Text>{signedInName}</Text>
-              <Text size="sm" c="chatbox-tertiary">{signedInEmail}</Text>
+              <Text size="sm" c="chatbox-tertiary">
+                {signedInEmail}
+              </Text>
               <Text size="sm" c="chatbox-tertiary">
                 {t('Current role')}: {platformUser?.role ?? role}
               </Text>
@@ -185,12 +193,7 @@ export function RouteComponent() {
           onChange={(event) => setDisplayName(event.currentTarget.value)}
         />
 
-        <TextInput
-          label={t('Email')}
-          type="email"
-          value={platformUser?.email ?? tutorMeAIProfile.email}
-          readOnly
-        />
+        <TextInput label={t('Email')} type="email" value={platformUser?.email ?? tutorMeAIProfile.email} readOnly />
 
         <TextInput
           label={t('Username')}
@@ -223,8 +226,8 @@ export function RouteComponent() {
 
             {!studentDirectory.loading && studentOptions.length === 0 ? (
               <Alert color="yellow" variant="light">
-                No TutorMeAI student profiles are registered yet. Student accounts need to finish onboarding before
-                you can assign them.
+                No TutorMeAI student profiles are registered yet. Student accounts need to finish onboarding before you
+                can assign them.
               </Alert>
             ) : null}
 

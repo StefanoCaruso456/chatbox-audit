@@ -210,6 +210,46 @@ describe('AppAccessApprovalRuntime', () => {
     expect(screen.queryByText(/waiting for teacher approval/i)).toBeNull()
   })
 
+  it('keeps the approval modal visible when the student request cannot be routed to a reviewer', async () => {
+    submitTutorMeAIAppAccessRequest.mockRejectedValueOnce(
+      new Error(
+        'No assigned teacher or administrator can approve this app yet. Ask your teacher to add you to their student list.'
+      )
+    )
+
+    tutorMeAIAuthStore.setState({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        userId: 'student.user',
+        email: 'student@example.com',
+        username: 'student.demo',
+        displayName: 'Student Demo',
+        role: 'student',
+        pictureUrl: null,
+        onboardingCompletedAt: '2026-04-05T05:00:00.000Z',
+        students: [],
+      },
+      status: 'authenticated',
+      error: null,
+      hasHydrated: true,
+    })
+    uiStore.setState({
+      requestedApprovedAppId: 'chess-tutor',
+    })
+
+    render(
+      <MantineProvider>
+        <AppAccessApprovalRuntime />
+      </MantineProvider>
+    )
+
+    expect(await screen.findByText(/no assigned teacher or administrator/i)).toBeTruthy()
+    expect(uiStore.getState().activeApprovedAppId).toBeNull()
+    expect(uiStore.getState().requestedApprovedAppId).toBeNull()
+    expect(appAccessStore.getState().studentSubmittingAppId).toBe('chess-tutor')
+  })
+
   it('shows a teacher popup and lets the teacher approve the pending student request', async () => {
     listTutorMeAIPendingAppAccessRequests.mockResolvedValueOnce([
       {
