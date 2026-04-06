@@ -2,6 +2,7 @@ import NiceModal from '@ebay/nice-modal-react'
 import { ActionIcon, Box, Collapse, Flex, Image, NavLink, Stack, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import SwipeableDrawer from '@mui/material/SwipeableDrawer'
 import {
+  IconChartBar,
   IconChevronDown,
   IconChevronRight,
   IconCirclePlus,
@@ -330,6 +331,23 @@ export default function Sidebar() {
 
         <Stack gap={0} px="xs" pb="xs">
           <Divider className="cb-neumo-divider" />
+          <NavLink
+            c="chatbox-secondary"
+            className="rounded"
+            label="Analytics"
+            leftSection={<ScalableIcon icon={IconChartBar} size={20} />}
+            active={currentPath === '/analytics'}
+            onClick={() => {
+              navigate({
+                to: '/analytics',
+              })
+              if (isSmallScreen) {
+                setShowSidebar(false)
+              }
+            }}
+            variant="light"
+            p="xs"
+          />
           <NavLink
             c="chatbox-secondary"
             className="rounded"
