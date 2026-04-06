@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { approvedApps, getApprovedAppById } from './approvedApps'
+import { approvedApps, getApprovedAppById, resolveApprovedAppLaunchRequest } from './approvedApps'
 
 describe('approvedApps', () => {
   it('includes the TutorMeAI runtime apps in the shared library', () => {
@@ -111,6 +111,29 @@ describe('approvedApps', () => {
       expect(app.integrationConfig?.setupChecklist?.length).toBeGreaterThan(0)
       expect(app.integrationConfig?.samplePrompts?.length).toBeGreaterThan(0)
       expect(app.vendorUrl).toBeTruthy()
+    })
+  })
+
+  it('resolves chat app-open requests against the shared approved app catalog', () => {
+    expect(resolveApprovedAppLaunchRequest('open flashcards')).toMatchObject({
+      kind: 'match',
+      app: {
+        id: 'flashcards-coach',
+      },
+    })
+
+    expect(resolveApprovedAppLaunchRequest('can you launch class dojo for me?')).toMatchObject({
+      kind: 'match',
+      app: {
+        id: 'classdojo',
+      },
+    })
+
+    expect(resolveApprovedAppLaunchRequest('show me pear deck')).toMatchObject({
+      kind: 'match',
+      app: {
+        id: 'pear-deck',
+      },
     })
   })
 })

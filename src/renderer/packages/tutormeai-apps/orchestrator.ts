@@ -1,6 +1,7 @@
 import {
   type AppManifest,
   type AppSessionAuthState,
+  exampleApprovedAppOpenToolSchema,
   type ChessCoachActionClientData,
   ChessCoachActionClientDataSchema,
   type ConversationAppContext,
@@ -19,6 +20,7 @@ import { createMessage, type Message, type MessageEmbeddedAppPart } from '@share
 import { Chess } from 'chess.js'
 import { v4 as uuidv4 } from 'uuid'
 import { applyRequestedChessMove, extractRequestedChessMove } from '@/routes/embedded-apps/-components/chess/chessMove'
+import { resolveApprovedAppLaunchRequest } from '@/data/approvedApps'
 import {
   getChessSessionHistory,
   getChessSessionSnapshot,
@@ -2333,6 +2335,62 @@ function buildLaunchCopy(appName: string, authState: AppSessionAuthState) {
   return `Launching ${appName} in the right sidebar.`
 }
 
+function hasApprovedAppOpenIntent(userRequest: string) {
+  const normalized = normalizeComparable(userRequest)
+  const launchKeywords = [
+    'open',
+    'launch',
+    'load',
+    'show',
+    'use',
+    'bring up',
+    'pull up',
+    'switch to',
+    'connect',
+  ]
+
+  return launchKeywords.some((keyword) => normalized.includes(keyword))
+}
+
+function buildApprovedAppOpenMessage(input: {
+  approvedAppId: string
+  appName: string
+  launchUrl: string
+  status: 'requested' | 'already-open'
+}) {
+  const text =
+    input.status === 'already-open'
+      ? `${input.appName} is already open in the right sidebar.`
+      : `Opening ${input.appName} in the right sidebar.`
+
+  const message = createMessage('assistant', text)
+  message.contentParts = [
+    {
+      type: 'tool-call',
+      state: 'result',
+      toolCallId: `tool-call.approved-app.open.${uuidv4()}`,
+      toolName: exampleApprovedAppOpenToolSchema.name,
+      args: {
+        appId: input.approvedAppId,
+      },
+      result: {
+        approvedAppId: input.approvedAppId,
+        appName: input.appName,
+        launchUrl: input.launchUrl,
+        surface: 'right-sidebar',
+        status: input.status,
+      },
+    },
+    {
+      type: 'text',
+      text,
+    },
+  ]
+  message.generating = false
+  message.status = []
+  return message
+}
+
 function buildChessLaunchCopy(result: ChessBoardStateToolResult, appLabel = 'Chess Tutor') {
   const recommendedMove = result.recommendedMove ?? 'd4'
   const reason = result.recommendationReason ?? 'claims the center and gets your pieces into the game'
@@ -2856,6 +2914,49 @@ export async function routeTutorMeAiAppRequest(
     }
   }
 
+  const approvedAppLaunchResolution = hasApprovedAppOpenIntent(input.userRequest)
+    ? resolveApprovedAppLaunchRequest(input.userRequest)
+    : null
+
+  if (approvedAppLaunchResolution?.kind === 'ambiguous') {
+    const appOptions = approvedAppLaunchResolution.apps.map((app) => app.name).join(' or ')
+    return finalizeTutorMeAiInterceptionResult({
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      source: 'route.approved-app-open.ambiguous',
+      result: {
+        kind: 'clarify',
+        message: buildClarificationMessage(`Which app would you like to open: ${appOptions}?`),
+      },
+    })
+  }
+
+  if (approvedAppLaunchResolution?.kind === 'match') {
+    const activeApprovedAppId = uiStore.getState().activeApprovedAppId
+    const launchStatus = activeApprovedAppId === approvedAppLaunchResolution.app.id ? 'already-open' : 'requested'
+
+    if (launchStatus === 'requested') {
+      uiStore.getState().openApprovedApp(approvedAppLaunchResolution.app.id)
+    }
+
+    return finalizeTutorMeAiInterceptionResult({
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      source: 'route.approved-app-open',
+      approvedAppId: approvedAppLaunchResolution.app.id,
+      runtimeAppId: approvedAppLaunchResolution.app.runtimeBridge?.appId,
+      result: {
+        kind: 'invoke-tool',
+        message: buildApprovedAppOpenMessage({
+          approvedAppId: approvedAppLaunchResolution.app.id,
+          appName: approvedAppLaunchResolution.app.name,
+          launchUrl: approvedAppLaunchResolution.app.launchUrl,
+          status: launchStatus,
+        }),
+      },
+    })
+  }
+
   const appOAuthStates = deriveAppOAuthStates(input.previousMessages)
 
   const discoveryResult = await platform.discovery.discoverAvailableTools({
@@ -2958,7 +3059,7 @@ export async function routeTutorMeAiAppRequest(
         result: {
           kind: 'clarify',
           message: buildClarificationMessage(
-            'Which app would you like to open: Chess Tutor, Chess.com, Flashcards Coach, or Planner Connect?'
+            'Which app would you like to open from the TutorMeAI app library? For example: Chess Tutor, Flashcards Coach, Planner Connect, Desmos, Padlet, or Miro.'
           ),
         },
       })
