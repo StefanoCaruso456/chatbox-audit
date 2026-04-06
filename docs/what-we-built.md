@@ -104,9 +104,12 @@ This fork adds a more defensible governance layer:
 
 The product now also points toward a measurable learning and workflow platform:
 
-- analytics route for activity, prompts, time-in-app, and assignment signals
+- explicit analytics views for teachers and parents around activity, prompts, time-in-app, and assignment signals
+- role and data foundations that support school-admin and district-level reporting as the next extension
 - runtime observability and Braintrust export
 - a clearer story around usage, outcomes, and product health
+
+For the full role-based breakdown, see [Analytics Platform](./analytics-platform.md).
 
 ## UI Cleanup And Experience Improvements
 
