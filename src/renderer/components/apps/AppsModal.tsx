@@ -1,85 +1,37 @@
 import { Badge, Button, Modal, ScrollArea, Stack, Text, Title } from '@mantine/core'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { APP_MILESTONE_ORDER, approvedApps } from '@/data/approvedApps'
-import { useUIStore } from '@/stores/uiStore'
-import { APP_CATEGORY_OPTIONS, type AppCategory, type GradeRange, gradeRangeMeta, isMultiLevelApp } from '@/types/apps'
+import { useChatBridgeAppsSdk, useChatBridgeAppsSdkState } from '@/packages/apps-sdk'
+import type { AppCategory, GradeRange } from '@/types/apps'
 import AppCard from './AppCard'
 import AppFilters from './AppFilters'
 import AppSearch from './AppSearch'
-
-function matchesGradeFilter(app: (typeof approvedApps)[number], gradeRange: GradeRange | 'all') {
-  if (gradeRange === 'all') {
-    return true
-  }
-
-  if (gradeRange === 'Multi-level') {
-    return isMultiLevelApp(app)
-  }
-
-  return app.gradeRanges.includes(gradeRange)
-}
-const milestoneOrderIndex = new Map(APP_MILESTONE_ORDER.map((appId, index) => [appId, index]))
 export default function AppsModal() {
   const { t } = useTranslation()
-  const approvedAppsModalOpen = useUIStore((state) => state.approvedAppsModalOpen)
-  const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
-  const openApprovedApp = useUIStore((state) => state.openApprovedApp)
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
+  const appsSdk = useChatBridgeAppsSdk()
+  const approvedAppsModalOpen = useChatBridgeAppsSdkState((state) => state.isLibraryOpen)
+  const activeApprovedAppId = useChatBridgeAppsSdkState((state) => state.activeAppId)
 
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<AppCategory | 'all'>('all')
   const [gradeRange, setGradeRange] = useState<GradeRange | 'all'>('all')
 
   const deferredSearch = useDeferredValue(search)
-  const normalizedSearch = deferredSearch.trim().toLowerCase()
   const hasActiveFilters = category !== 'all' || gradeRange !== 'all' || search.trim().length > 0
 
   const filteredApps = useMemo(() => {
-    return approvedApps
-      .filter((app) => {
-        const matchesSearch =
-          !normalizedSearch ||
-          app.name.toLowerCase().includes(normalizedSearch) ||
-          app.shortSummary.toLowerCase().includes(normalizedSearch) ||
-          app.category.toLowerCase().includes(normalizedSearch) ||
-          app.gradeRanges.some((range) => {
-            const meta = gradeRangeMeta[range]
-            return (
-              range.toLowerCase().includes(normalizedSearch) ||
-              meta.label.toLowerCase().includes(normalizedSearch) ||
-              meta.description.toLowerCase().includes(normalizedSearch)
-            )
-          }) ||
-          app.tags.some((tag) => tag.toLowerCase().includes(normalizedSearch))
-
-        const matchesCategory = category === 'all' || app.category === category
-        return matchesSearch && matchesCategory && matchesGradeFilter(app, gradeRange)
-      })
-      .sort((left, right) => {
-        const leftIsActive = left.id === activeApprovedAppId ? 1 : 0
-        const rightIsActive = right.id === activeApprovedAppId ? 1 : 0
-        if (leftIsActive !== rightIsActive) {
-          return rightIsActive - leftIsActive
-        }
-
-        const leftMilestoneIndex = milestoneOrderIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER
-        const rightMilestoneIndex = milestoneOrderIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER
-        if (leftMilestoneIndex !== rightMilestoneIndex) {
-          return leftMilestoneIndex - rightMilestoneIndex
-        }
-        const categoryDelta = APP_CATEGORY_OPTIONS.indexOf(left.category) - APP_CATEGORY_OPTIONS.indexOf(right.category)
-        if (categoryDelta !== 0) {
-          return categoryDelta
-        }
-        return left.name.localeCompare(right.name)
-      })
-  }, [activeApprovedAppId, category, gradeRange, normalizedSearch])
+    return appsSdk.queryApps({
+      search: deferredSearch,
+      category,
+      gradeRange,
+      activeAppId: activeApprovedAppId,
+    })
+  }, [activeApprovedAppId, appsSdk, category, deferredSearch, gradeRange])
 
   return (
     <Modal
       opened={approvedAppsModalOpen}
-      onClose={() => setApprovedAppsModalOpen(false)}
+      onClose={() => appsSdk.closeLibrary()}
       title={
         <Stack gap={4}>
           <Title order={3} fz="xl">
@@ -121,7 +73,7 @@ export default function AppsModal() {
               {t('Curated for K-12')}
             </Badge>
             <Text size="sm" c="chatbox-tertiary">
-              {t('{{count}} apps in one library', { count: approvedApps.length })}
+              {t('{{count}} apps in one library', { count: appsSdk.catalog.apps.length })}
             </Text>
           </div>
         </div>
@@ -149,7 +101,7 @@ export default function AppsModal() {
                 app={app}
                 isActive={app.id === activeApprovedAppId}
                 onOpen={(appId) => {
-                  openApprovedApp(appId)
+                  appsSdk.openApp(appId)
                 }}
               />
             ))}

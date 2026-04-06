@@ -1,10 +1,9 @@
 import { Flex, Text, Tooltip, UnstyledButton } from '@mantine/core'
 import { IconLayoutGrid } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
-import { getApprovedAppById } from '@/data/approvedApps'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { cn } from '@/lib/utils'
-import { useUIStore } from '@/stores/uiStore'
+import { useChatBridgeActiveApp, useChatBridgeAppsSdk } from '@/packages/apps-sdk'
 import { ScalableIcon } from '../common/ScalableIcon'
 
 type AppsTriggerProps = {
@@ -14,9 +13,8 @@ type AppsTriggerProps = {
 export default function AppsTrigger({ className }: AppsTriggerProps) {
   const { t } = useTranslation()
   const isSmallScreen = useIsSmallScreen()
-  const activeApprovedAppId = useUIStore((state) => state.activeApprovedAppId)
-  const setApprovedAppsModalOpen = useUIStore((state) => state.setApprovedAppsModalOpen)
-  const activeApp = activeApprovedAppId ? getApprovedAppById(activeApprovedAppId) : undefined
+  const appsSdk = useChatBridgeAppsSdk()
+  const activeApp = useChatBridgeActiveApp()
 
   return (
     <Tooltip
@@ -30,7 +28,7 @@ export default function AppsTrigger({ className }: AppsTriggerProps) {
     >
       <UnstyledButton
         type="button"
-        onClick={() => setApprovedAppsModalOpen(true)}
+        onClick={() => appsSdk.openLibrary()}
         aria-label={activeApp ? `${t('Apps')} · ${activeApp.name}` : t('Apps')}
         aria-haspopup="dialog"
         className={className}
