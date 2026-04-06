@@ -706,7 +706,7 @@ const tutorMeAiApps: ApprovedApp[] = [
     name: 'Chess.com',
     icon: '/icons/apps/chess-com.png',
     shortSummary:
-      'A ChatBridge wrapper app that keeps the real Chess.com board visible while exposing mirrored board state and tool hooks back to chat.',
+      'A ChatBridge-controlled Chess.com wrapper that keeps the official Chess.com diagram viewer in the sidebar while exposing board-state tools back to chat.',
     category: 'Study, Assessment & Engagement',
     gradeRanges: ['6-8', '9-12'],
     launchUrl: '/embedded-apps/chess-com',
@@ -724,18 +724,18 @@ const tutorMeAiApps: ApprovedApp[] = [
       helpUrl: 'https://www.chess.com/',
       helpLabel: 'Chess.com',
       capabilities: [
-        'Live Chess.com board inside the sidebar',
-        'Mirrored board state that chat can analyze',
-        'Move execution on the ChatBridge mirror board',
+        'Official Chess.com diagram viewer inside the sidebar',
+        'Board state sourced from Chess.com diagram data',
+        'Chat-driven move execution on the wrapped Chess.com board',
         'Configurable Chess.com emboard launch URL',
       ],
       samplePrompts: [
         'Open Chess.com beside chat and explain the position.',
         'Load Chess.com in the sidebar and tell me the best move.',
-        'Keep Chess.com open while we coach the mirrored board state.',
+        'Keep Chess.com open while we coach the official board state.',
       ],
       statusNote:
-        'The visible board is the real Chess.com emboard. Chat state, move execution, and follow-up analysis run through the ChatBridge wrapper and mirrored board state.',
+        'The visible board is rendered through a ChatBridge-controlled Chess.com wrapper. Chat state, move execution, and follow-up analysis run through official Chess.com diagram data.',
     },
     loadingFallback: {
       title: 'Chess.com needs an embeddable board URL',
@@ -753,7 +753,8 @@ const tutorMeAiApps: ApprovedApp[] = [
         mode: 'analysis',
         embedUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
         provider: 'chess.com',
-        vendorBoardSync: 'manual-import',
+        diagramId: '10477955',
+        vendorBoardSync: 'official-diagram-callback',
       },
       availableTools: [
         exampleChessLaunchToolSchema,

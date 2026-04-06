@@ -124,12 +124,12 @@ const exampleChessComWrapperManifest: AppManifest = parseAppManifest({
   appId: CHESS_COM_RUNTIME_APP_ID,
   slug: 'chess-com',
   name: 'Chess.com',
-  shortDescription: 'A ChatBridge wrapper app that keeps a live Chess.com board visible beside chat.',
+  shortDescription: 'A ChatBridge wrapper app that keeps the official Chess.com board visible beside chat.',
   description:
-    'A ChatBridge-controlled Chess.com wrapper that keeps the vendor board visible while exposing mirrored board state and chess tools back to the conversation.',
+    'A ChatBridge-controlled Chess.com wrapper that keeps the official vendor board visible while exposing Chess.com diagram state and chess tools back to the conversation.',
   safetyMetadata: {
     ...exampleInternalChessManifest.safetyMetadata,
-    notes: 'Approved wrapper app that embeds Chess.com visually and exposes mirrored board state to chat.',
+    notes: 'Approved wrapper app that embeds Chess.com visually and exposes official diagram state to chat.',
   },
 })
 
