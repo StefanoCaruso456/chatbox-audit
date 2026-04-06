@@ -15,6 +15,7 @@ import {
   normalizeLaunchUrl,
 } from '@/lib/approvedAppLaunchConfig'
 import { getApprovedAppLaunchOverride, persistApprovedAppLaunchOverride } from '@/lib/approvedAppLaunchOverrides'
+import { resolveTutorMeAIBackendOrigin } from '@/packages/tutormeai-auth/client'
 import { applyRequestedChessMove } from '../chess/chessMove'
 import { useEmbeddedAppBridge } from '../useEmbeddedAppBridge'
 import { type ChessComDiagram, extractChessComDiagramId, patchChessComEmboardHtml } from './chessComOfficialViewer'
@@ -268,21 +269,34 @@ function buildViewerKey(input: { diagramId: string; pgn: string; reloadNonce: nu
   return `${input.diagramId}:${input.pgn.length}:${input.reloadNonce}:${input.pgn.slice(-24)}`
 }
 
+function buildChessComApiUrl(pathname: string, backendOrigin: string) {
+  return new URL(pathname, backendOrigin).toString()
+}
+
 async function fetchJson<T>(input: string) {
   const response = await fetch(input, {
-    credentials: 'same-origin',
+    mode: 'cors',
   })
 
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}.`)
   }
 
-  return (await response.json()) as T
+  const body = await response.text()
+  try {
+    return JSON.parse(body) as T
+  } catch {
+    if (body.trim().startsWith('<')) {
+      throw new Error('Chess.com data endpoint returned HTML instead of JSON. Check the TutorMeAI backend origin.')
+    }
+
+    throw new Error('Chess.com data endpoint returned invalid JSON.')
+  }
 }
 
 async function fetchText(input: string) {
   const response = await fetch(input, {
-    credentials: 'same-origin',
+    mode: 'cors',
   })
 
   if (!response.ok) {
@@ -294,6 +308,7 @@ async function fetchText(input: string) {
 
 export function ChessComAppPage() {
   const approvedApp = useMemo(() => getApprovedAppById(CHESS_COM_APP_ID), [])
+  const backendOrigin = useMemo(() => resolveTutorMeAIBackendOrigin(), [])
   const { runtimeContext, invocationMessage, sendCompletion, sendError, sendState } =
     useEmbeddedAppBridge(CHESS_COM_RUNTIME_APP_ID)
   const runtimeEmbedUrl = getRuntimeEmbedUrl(runtimeContext)
@@ -359,8 +374,10 @@ export function ChessComAppPage() {
     setFeedback('Loading the official Chess.com board…')
 
     void Promise.all([
-      fetchJson<{ ok: true; data: ChessComDiagram }>(`/api/chess-com/diagram/${diagramId}?reload=${reloadNonce}`),
-      fetchText(`/api/chess-com/emboard-shell/${diagramId}?reload=${reloadNonce}`),
+      fetchJson<{ ok: true; data: ChessComDiagram }>(
+        buildChessComApiUrl(`/api/chess-com/diagram/${diagramId}?reload=${reloadNonce}`, backendOrigin)
+      ),
+      fetchText(buildChessComApiUrl(`/api/chess-com/emboard-shell/${diagramId}?reload=${reloadNonce}`, backendOrigin)),
     ])
       .then(([diagramResponse, upstreamShellHtml]) => {
         if (cancelled) {
@@ -389,7 +406,7 @@ export function ChessComAppPage() {
     return () => {
       cancelled = true
     }
-  }, [diagramId, reloadNonce])
+  }, [backendOrigin, diagramId, reloadNonce])
 
   const chess = useMemo(() => {
     if (!boardPgn) {
@@ -521,7 +538,31 @@ export function ChessComAppPage() {
   }, [boardResult, diagramLoadState, sendState, viewerMode])
 
   useEffect(() => {
-    if (!invocationMessage || !runtimeContext || !diagramId || !resolvedEmbedUrl || !diagram || !boardPgn) {
+    if (!invocationMessage || !runtimeContext) {
+      return
+    }
+
+    if (diagramLoadState === 'failed') {
+      if (lastHandledToolCallIdRef.current === invocationMessage.payload.toolCallId) {
+        return
+      }
+
+      lastHandledToolCallIdRef.current = invocationMessage.payload.toolCallId
+      sendError({
+        code: 'load-failed',
+        message:
+          'Chess.com board data is unavailable. Refresh the board or save a working emboard URL before asking for analysis or moves.',
+        recoverable: true,
+        details: {
+          toolCallId: invocationMessage.payload.toolCallId,
+          ...(diagramId ? { diagramId } : {}),
+          ...(resolvedEmbedUrl ? { embedUrl: resolvedEmbedUrl } : {}),
+        },
+      })
+      return
+    }
+
+    if (!diagramId || !resolvedEmbedUrl || !diagram || !boardPgn) {
       return
     }
 
@@ -539,6 +580,9 @@ export function ChessComAppPage() {
         code: 'invalid-state',
         message: 'Chess.com could not parse the current diagram state.',
         recoverable: true,
+        details: {
+          toolCallId: invocationMessage.payload.toolCallId,
+        },
       })
       return
     }
@@ -586,6 +630,9 @@ export function ChessComAppPage() {
           code: 'invalid-request',
           message: 'A Chess.com move request must include a move string.',
           recoverable: true,
+          details: {
+            toolCallId: invocationMessage.payload.toolCallId,
+          },
         })
         return
       }
@@ -597,6 +644,7 @@ export function ChessComAppPage() {
           message: `Chess.com could not apply "${requestedMove}" on the current board.`,
           recoverable: true,
           details: {
+            toolCallId: invocationMessage.payload.toolCallId,
             requestedMove,
             fen: workingChess.fen(),
           },
@@ -633,9 +681,13 @@ export function ChessComAppPage() {
       code: 'unsupported-tool',
       message: `Chess.com does not support ${invocationMessage.payload.toolName} yet.`,
       recoverable: true,
+      details: {
+        toolCallId: invocationMessage.payload.toolCallId,
+      },
     })
   }, [
     boardPgn,
+    diagramLoadState,
     diagram,
     diagramId,
     invocationMessage,
