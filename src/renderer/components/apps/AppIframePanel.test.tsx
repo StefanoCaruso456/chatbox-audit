@@ -235,14 +235,14 @@ describe('AppIframePanel', () => {
     expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })
 
-  it('opens Chess.com as a governed partner-embed workspace in the sidebar', () => {
+  it('opens Chess.com as a governed direct iframe wrapper in the sidebar', () => {
     uiStore.setState({ activeApprovedAppId: 'chess-com' })
 
     renderPanel(<AppIframePanel />)
 
     const iframe = screen.getByTitle('Chess.com app panel') as HTMLIFrameElement
     expect(iframe.getAttribute('src')).toMatch(
-      /^http:\/\/localhost:3000\/embedded-apps\/catalog\/chess-com\?chatbridge_panel=1&chatbridge_launch=.+$/
+      /^http:\/\/localhost:3000\/embedded-apps\/chess-com\?chatbridge_panel=1&chatbridge_launch=.+$/
     )
     expect(screen.queryByTestId('embedded-app-host')).toBeNull()
   })

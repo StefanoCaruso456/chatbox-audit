@@ -311,45 +311,6 @@ function buildIntegrationConfig(app: ApprovedApp): NonNullable<ApprovedApp['inte
 
 const curatedApprovedAppCatalog: ApprovedApp[] = [
   {
-    id: 'chess-com',
-    name: 'Chess.com',
-    icon: '/icons/apps/chess-com.png',
-    shortSummary:
-      'An embedded Chess.com board surface for studying and replaying Chess.com positions inside the sidebar.',
-    category: 'Study, Assessment & Engagement',
-    gradeRanges: ['6-8', '9-12'],
-    launchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
-    launchMode: 'iframe',
-    integrationMode: 'partner-embed',
-    isApproved: true,
-    tags: ['chess', 'strategy', 'board-review', 'partner-embed'],
-    vendorUrl: 'https://www.chess.com/play/computer',
-    integrationConfig: {
-      defaultLaunchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
-      configurableLaunchUrl: true,
-      launchUrlLabel: 'Chess.com emboard URL',
-      launchUrlPlaceholder: 'https://www.chess.com/emboard?id=10477955&_height=640',
-      helpUrl: 'https://www.chess.com/',
-      helpLabel: 'Chess.com',
-      capabilities: [
-        'Embedded Chess.com board surface',
-        'Replay and study positions inside the sidebar',
-        'Configurable Chess.com emboard launch URL',
-      ],
-      samplePrompts: [
-        'Open Chess.com in the sidebar.',
-        'Load a Chess.com embedded board beside chat.',
-        'Keep the Chess.com board open while we talk through the position.',
-      ],
-      statusNote:
-        'Chess.com is configured through its embeddable board surface. The full Chess.com play/computer product blocks third-party iframe embedding, so this workspace uses emboard URLs instead.',
-    },
-    loadingFallback: {
-      title: 'Chess.com needs an embeddable board URL',
-      body: 'Chess.com blocks its main play and analysis pages in third-party iframes. Use a Chess.com emboard URL here for the supported embedded board experience.',
-    },
-  },
-  {
     id: 'google-classroom',
     name: 'Google Classroom',
     icon: '/icons/apps/google-classroom.png',
@@ -740,6 +701,72 @@ const curatedApprovedAppCatalog: ApprovedApp[] = [
 ]
 
 const tutorMeAiApps: ApprovedApp[] = [
+  {
+    id: 'chess-com',
+    name: 'Chess.com',
+    icon: '/icons/apps/chess-com.png',
+    shortSummary:
+      'A ChatBridge wrapper app that keeps the real Chess.com board visible while exposing mirrored board state and tool hooks back to chat.',
+    category: 'Study, Assessment & Engagement',
+    gradeRanges: ['6-8', '9-12'],
+    launchUrl: '/embedded-apps/chess-com',
+    launchMode: 'iframe',
+    integrationMode: 'runtime',
+    isApproved: true,
+    tags: ['tutormeai', 'chess', 'partner-embed', 'wrapper-app', 'analysis'],
+    vendorUrl: 'https://www.chess.com/play/computer',
+    experience: 'tutormeai-runtime',
+    integrationConfig: {
+      defaultLaunchUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      configurableLaunchUrl: true,
+      launchUrlLabel: 'Chess.com emboard URL',
+      launchUrlPlaceholder: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      helpUrl: 'https://www.chess.com/',
+      helpLabel: 'Chess.com',
+      capabilities: [
+        'Live Chess.com board inside the sidebar',
+        'Mirrored board state that chat can analyze',
+        'Move execution on the ChatBridge mirror board',
+        'Configurable Chess.com emboard launch URL',
+      ],
+      samplePrompts: [
+        'Open Chess.com beside chat and explain the position.',
+        'Load Chess.com in the sidebar and tell me the best move.',
+        'Keep Chess.com open while we coach the mirrored board state.',
+      ],
+      statusNote:
+        'The visible board is the real Chess.com emboard. Chat state, move execution, and follow-up analysis run through the ChatBridge wrapper and mirrored board state.',
+    },
+    loadingFallback: {
+      title: 'Chess.com needs an embeddable board URL',
+      body: 'Chess.com blocks its main play and analysis pages in third-party iframes. Save a Chess.com emboard URL here so the visible board and the chat-aware wrapper stay in sync.',
+    },
+    runtimeBridge: {
+      appId: 'chess.com.workspace',
+      sidebarMode: 'direct-iframe',
+      authState: 'not-required',
+      grantedPermissions: ['session:write', 'tool:invoke'],
+      initialState: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+        mode: 'analysis',
+        embedUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+        provider: 'chess.com',
+        vendorBoardSync: 'manual-import',
+      },
+      availableTools: [
+        exampleChessLaunchToolSchema,
+        exampleChessGetBoardStateToolSchema,
+        exampleChessMakeMoveToolSchema,
+      ],
+      pendingInvocation: {
+        toolName: exampleChessLaunchToolSchema.name,
+        arguments: { mode: 'analysis' },
+        timeoutMs: exampleChessLaunchToolSchema.timeoutMs,
+      },
+    },
+  },
   {
     id: 'chess-tutor',
     name: 'Chess Tutor',

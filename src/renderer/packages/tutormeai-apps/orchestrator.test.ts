@@ -160,6 +160,30 @@ describe('routeTutorMeAiAppRequest', () => {
     })
   })
 
+  it('launches Chess.com as a wrapper runtime for explicit Chess.com requests', async () => {
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.chess-com.launch',
+      userId: 'user.chess-com.launch',
+      userRequest: 'open Chess.com',
+      requestMessageId: 'message.chess-com.launch',
+      previousMessages: [createMessage('user', 'Hello')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(
+      result.message.contentParts.some((part) => part.type === 'embedded-app' && part.appId === 'chess.com.workspace')
+    ).toBe(true)
+    const textParts = result.message.contentParts.filter(
+      (part): part is Extract<(typeof result.message.contentParts)[number], { type: 'text' }> => part.type === 'text'
+    )
+    expect(textParts.some((part) => part.text.includes('Chess.com is on the board'))).toBe(true)
+  })
+
   it('launches flashcards for explicit study requests', async () => {
     const result = await routeTutorMeAiAppRequest({
       origin: 'http://localhost:1212',
@@ -1393,7 +1417,7 @@ describe('routeTutorMeAiAppRequest', () => {
       status: 'active',
     })
 
-    mockEnqueueSidebarAppRuntimeCommand.mockImplementationOnce(async (command) => {
+    mockEnqueueSidebarAppRuntimeCommand.mockImplementationOnce((command) => {
       const incomingCommand = command as {
         hostSessionId: string
         runtimeAppId: string
@@ -1417,7 +1441,7 @@ describe('routeTutorMeAiAppRequest', () => {
       }
     })
 
-    mockEnqueueSidebarAppRuntimeCommand.mockImplementationOnce(async (command) => {
+    mockEnqueueSidebarAppRuntimeCommand.mockImplementationOnce((command) => {
       const incomingCommand = command as {
         hostSessionId: string
         runtimeAppId: string
@@ -1620,6 +1644,97 @@ describe('routeTutorMeAiAppRequest', () => {
       turn: 'black',
     })
     expect(textPart && textPart.type === 'text' ? textPart.text : '').toContain('Move played: d4')
+  })
+
+  it('routes live Chess.com sidebar moves through the Chess.com wrapper runtime', async () => {
+    mockEnqueueSidebarAppRuntimeCommand.mockResolvedValueOnce({
+      ok: true,
+      command: {
+        hostSessionId: 'conversation.sidebar.chess-com',
+        runtimeAppId: 'chess.com.workspace',
+        appSessionId: 'app-session.sidebar.chess-com',
+        toolCallId: 'tool-call.chess.make-move.chess-com',
+        toolName: 'chess.make-move',
+        arguments: {
+          move: 'd4',
+          expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        },
+        createdAt: '2026-04-04T05:25:00.000Z',
+      },
+      completion: {
+        version: 'v1',
+        conversationId: 'conversation.sidebar.chess-com',
+        appSessionId: 'app-session.sidebar.chess-com',
+        appId: 'chess.com.workspace',
+        toolCallId: 'tool-call.chess.make-move.chess-com',
+        status: 'succeeded',
+        resultSummary: 'Move played: d4. Black to move.',
+        result: {
+          appSessionId: 'app-session.sidebar.chess-com',
+          requestedMove: 'd4',
+          appliedMove: 'd4',
+          fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+          turn: 'black',
+          moveCount: 1,
+          lastMove: 'd4',
+          legalMoveCount: 20,
+          candidateMoves: ['d5', 'e5'],
+          summary: 'Move played: d4. Black to move.',
+          explanation: 'It claims central space and opens lines for your pieces.',
+          moveExecutionAvailable: true,
+        },
+        completedAt: '2026-04-04T05:25:02.000Z',
+        followUpContext: {
+          summary: 'Use the updated live chess board to recommend the best next move from this position.',
+        },
+      },
+    })
+
+    upsertSidebarAppRuntimeSnapshot({
+      hostSessionId: 'conversation.sidebar.chess-com',
+      approvedAppId: 'chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      appSessionId: 'app-session.sidebar.chess-com',
+      conversationId: 'conversation.sidebar.chess-com',
+      expectedOrigin: 'http://localhost:1212',
+      sourceUrl: 'http://localhost:1212/embedded-apps/chess-com?chatbridge_panel=1',
+      authState: 'connected',
+      availableToolNames: ['chess.launch-game', 'chess.get-board-state', 'chess.make-move'],
+      status: 'active',
+      summary: 'Mirrored Chess.com board FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1. White to move.',
+      latestStateDigest: {
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        turn: 'w',
+        moveCount: 0,
+        provider: 'chess.com',
+        embedUrl: 'https://www.chess.com/emboard?id=10477955&_height=640',
+      },
+      updatedAt: '2026-04-04T05:25:00.000Z',
+    })
+
+    const result = await routeTutorMeAiAppRequest({
+      origin: 'http://localhost:1212',
+      conversationId: 'conversation.sidebar.chess-com',
+      userId: 'user.sidebar.chess-com',
+      userRequest: 'play d4 on chess.com',
+      requestMessageId: 'message.sidebar.chess-com',
+      previousMessages: [createMessage('user', 'hello')],
+    })
+
+    expect(result.kind).toBe('invoke-tool')
+    if (result.kind !== 'invoke-tool') {
+      return
+    }
+
+    expect(mockEnqueueSidebarAppRuntimeCommand).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueSidebarAppRuntimeCommand.mock.calls[0]?.[0]).toMatchObject({
+      hostSessionId: 'conversation.sidebar.chess-com',
+      runtimeAppId: 'chess.com.workspace',
+      arguments: {
+        move: 'd4',
+        expectedFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      },
+    })
   })
 
   it('returns a chess clarification for invalid natural-language coordinate moves instead of misparsing them', async () => {
